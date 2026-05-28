@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rnaseq-flow — Citations</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #ffffff; --ink: #1e293b; --muted: #64748b;
+    --line: #e2e8f0; --accent: #2e75b6; --accent-dark: #1f4e79;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+  .brand { margin: 0 0 20px; }
+  .brand svg { height: 58px; width: auto; display: block; }
+  header {
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+    color: #fff; border-radius: 16px; padding: 30px 34px; margin-bottom: 26px;
+    box-shadow: 0 6px 22px rgba(31,78,121,.22);
+  }
+  header h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -.5px; }
+  header p { margin: 0; opacity: .92; font-size: 15px; max-width: 820px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px 26px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(15,23,42,.05);
+  }
+  .card h2 {
+    margin: 0 0 4px; font-size: 19px; color: var(--accent-dark);
+    border-bottom: 2px solid var(--accent); padding-bottom: 8px;
+  }
+  .card h3 {
+    margin: 22px 0 10px; font-size: 14px; font-weight: 700;
+    color: var(--accent-dark); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .card h3:first-of-type { margin-top: 14px; }
+  .card .sub { color: var(--muted); font-size: 13.5px; margin: 6px 0 14px; }
+  .card p { font-size: 14px; margin: 0 0 10px; }
+  .tool {
+    margin: 0 0 13px; padding: 2px 0 2px 14px;
+    border-left: 3px solid var(--accent);
+  }
+  .tool:last-child { margin-bottom: 2px; }
+  .tool-name { font-weight: 700; color: var(--ink); font-size: 14.5px; }
+  .tool-name .role { color: var(--muted); font-weight: 400; }
+  .cite { font-size: 12.8px; color: #475569; margin-top: 3px; }
+  .cite.sub-cite { margin-top: 5px; padding-left: 14px; border-left: 2px solid var(--line); }
+  .cite a { color: var(--accent); text-decoration: none; }
+  .cite a:hover { text-decoration: underline; }
+  .methods {
+    background: #f8fafc; border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13.3px; color: #334155;
+  }
+  .methods p { font-size: 13.3px; margin: 0; }
+  code {
+    background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 12.5px;
+  }
+  a { color: var(--accent); }
+  footer { color: var(--muted); font-size: 12.5px; text-align: center; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 128" role="img" aria-label="rnaseq-flow">
+      <line x1="32" y1="36" x2="120" y2="36" stroke="#c2255c" stroke-width="9.5" stroke-linecap="round"/>
+      <line x1="32" y1="55" x2="150" y2="55" stroke="#1c7ed6" stroke-width="9.5" stroke-linecap="round"/>
+      <line x1="32" y1="74" x2="104" y2="74" stroke="#7048e8" stroke-width="9.5" stroke-linecap="round"/>
+      <line x1="32" y1="93" x2="134" y2="93" stroke="#f08c00" stroke-width="9.5" stroke-linecap="round"/>
+      <circle cx="150" cy="55" r="7.6" fill="#ffffff" stroke="#1c7ed6" stroke-width="3.6"/>
+      <circle cx="134" cy="93" r="7.6" fill="#ffffff" stroke="#f08c00" stroke-width="3.6"/>
+      <text x="184" y="74" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="56" font-weight="800">
+        <tspan fill="#1f4e79">rnaseq</tspan><tspan fill="#2e75b6">-flow</tspan>
+      </text>
+      <text x="187" y="103" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" letter-spacing="3" fill="#64748b">BULK RNA-SEQ PIPELINE</text>
+    </svg>
+  </div>
+
+  <header>
+    <h1>rnaseq-flow &mdash; Citations</h1>
+    <p>Every tool used by the rnaseq-flow pipeline, with the publication to cite.
+       Bibliographic details were verified against PubMed. A ready-to-paste
+       methods paragraph for manuscripts follows the reference list.</p>
+  </header>
+
+  <div class="card">
+    <h2>How to cite</h2>
+    <div class="sub">Read this before copying references into a manuscript.</div>
+    <p>Cite only the tools that actually ran for your analysis &mdash; which tools
+       run depends on <code>--aligner</code> and the optional flags you set. The
+       exact version of every tool used in a run is recorded in
+       <code>pipeline_info/software_versions.yml</code>.</p>
+  </div>
+
+  <div class="card">
+    <h2>Tool citations</h2>
+    <div class="sub">Grouped by pipeline stage. Each entry links to the article DOI.</div>
+
+    <h3>Workflow engine</h3>
+    <div class="tool">
+      <div class="tool-name">Nextflow <span class="role">&mdash; workflow engine</span></div>
+      <div class="cite">Di Tommaso P, Chatzou M, Floden EW, Barja PP, Palumbo E, Notredame C. Nextflow enables reproducible computational workflows. Nat Biotechnol. 2017;35(4):316-319. <a href="https://doi.org/10.1038/nbt.3820" target="_blank" rel="noopener">doi:10.1038/nbt.3820</a></div>
+    </div>
+
+    <h3>Read QC &amp; trimming</h3>
+    <div class="tool">
+      <div class="tool-name">FastQC <span class="role">&mdash; raw-read quality control</span></div>
+      <div class="cite">Andrews S. FastQC: A Quality Control Tool for High Throughput Sequence Data. Babraham Bioinformatics; 2010. <a href="https://www.bioinformatics.babraham.ac.uk/projects/fastqc/" target="_blank" rel="noopener">bioinformatics.babraham.ac.uk/projects/fastqc</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">fastp <span class="role">&mdash; adapter &amp; quality trimming</span></div>
+      <div class="cite">Chen S, Zhou Y, Chen Y, Gu J. fastp: an ultra-fast all-in-one FASTQ preprocessor. Bioinformatics. 2018;34(17):i884-i890. <a href="https://doi.org/10.1093/bioinformatics/bty560" target="_blank" rel="noopener">doi:10.1093/bioinformatics/bty560</a></div>
+    </div>
+
+    <h3>Alignment &amp; quantification</h3>
+    <div class="tool">
+      <div class="tool-name">STAR <span class="role">&mdash; splice-aware genome alignment</span></div>
+      <div class="cite">Dobin A, Davis CA, Schlesinger F, Drenkow J, Zaleski C, Jha S, Batut P, Chaisson M, Gingeras TR. STAR: ultrafast universal RNA-seq aligner. Bioinformatics. 2013;29(1):15-21. <a href="https://doi.org/10.1093/bioinformatics/bts635" target="_blank" rel="noopener">doi:10.1093/bioinformatics/bts635</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">HISAT2 <span class="role">&mdash; graph-based genome alignment</span></div>
+      <div class="cite">Kim D, Paggi JM, Park C, Bennett C, Salzberg SL. Graph-based genome alignment and genotyping with HISAT2 and HISAT-genotype. Nat Biotechnol. 2019;37(8):907-915. <a href="https://doi.org/10.1038/s41587-019-0201-4" target="_blank" rel="noopener">doi:10.1038/s41587-019-0201-4</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">Salmon <span class="role">&mdash; bias-aware transcript quantification</span></div>
+      <div class="cite">Patro R, Duggal G, Love MI, Irizarry RA, Kingsford C. Salmon provides fast and bias-aware quantification of transcript expression. Nat Methods. 2017;14(4):417-419. <a href="https://doi.org/10.1038/nmeth.4197" target="_blank" rel="noopener">doi:10.1038/nmeth.4197</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">kallisto <span class="role">&mdash; pseudoalignment transcript quantification</span></div>
+      <div class="cite">Bray NL, Pimentel H, Melsted P, Pachter L. Near-optimal probabilistic RNA-seq quantification. Nat Biotechnol. 2016;34(5):525-527. <a href="https://doi.org/10.1038/nbt.3519" target="_blank" rel="noopener">doi:10.1038/nbt.3519</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">SAMtools <span class="role">&mdash; BAM sorting &amp; indexing</span></div>
+      <div class="cite">Danecek P, Bonfield JK, Liddle J, Marshall J, Ohan V, Pollard MO, Whitwham A, Keane T, McCarthy SA, Davies RM, Li H. Twelve years of SAMtools and BCFtools. GigaScience. 2021;10(2):giab008. <a href="https://doi.org/10.1093/gigascience/giab008" target="_blank" rel="noopener">doi:10.1093/gigascience/giab008</a></div>
+    </div>
+
+    <h3>Post-alignment QC &amp; coverage</h3>
+    <div class="tool">
+      <div class="tool-name">RSeQC <span class="role">&mdash; strandedness &amp; alignment QC</span></div>
+      <div class="cite">Wang L, Wang S, Li W. RSeQC: quality control of RNA-seq experiments. Bioinformatics. 2012;28(16):2184-2185. <a href="https://doi.org/10.1093/bioinformatics/bts356" target="_blank" rel="noopener">doi:10.1093/bioinformatics/bts356</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">deepTools <span class="role">&mdash; CPM-normalised coverage tracks</span></div>
+      <div class="cite">Ramírez F, Ryan DP, Grüning B, Bhardwaj V, Kilpert F, Richter AS, Heyne S, Dündar F, Manke T. deepTools2: a next generation web server for deep-sequencing data analysis. Nucleic Acids Res. 2016;44(W1):W160-W165. <a href="https://doi.org/10.1093/nar/gkw257" target="_blank" rel="noopener">doi:10.1093/nar/gkw257</a></div>
+    </div>
+
+    <h3>Gene quantification &amp; differential expression</h3>
+    <div class="tool">
+      <div class="tool-name">featureCounts <span class="role">&mdash; gene-level &amp; exon-level read counting</span></div>
+      <div class="cite">Liao Y, Smyth GK, Shi W. featureCounts: an efficient general purpose program for assigning sequence reads to genomic features. Bioinformatics. 2014;30(7):923-930. <a href="https://doi.org/10.1093/bioinformatics/btt656" target="_blank" rel="noopener">doi:10.1093/bioinformatics/btt656</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">tximport <span class="role">&mdash; transcript-to-gene summarisation</span></div>
+      <div class="cite">Soneson C, Love MI, Robinson MD. Differential analyses for RNA-seq: transcript-level estimates improve gene-level inferences. F1000Research. 2015;4:1521. <a href="https://doi.org/10.12688/f1000research.7563.2" target="_blank" rel="noopener">doi:10.12688/f1000research.7563.2</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">DESeq2 <span class="role">&mdash; differential gene expression</span></div>
+      <div class="cite">Love MI, Huber W, Anders S. Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2. Genome Biol. 2014;15(12):550. <a href="https://doi.org/10.1186/s13059-014-0550-8" target="_blank" rel="noopener">doi:10.1186/s13059-014-0550-8</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">apeglm <span class="role">&mdash; log2 fold-change shrinkage for the DESeq2 contrasts (lfcShrink)</span></div>
+      <div class="cite">Zhu A, Ibrahim JG, Love MI. Heavy-tailed prior distributions for sequence count data: removing the noise and preserving large differences. Bioinformatics. 2019;35(12):2084-2092. <a href="https://doi.org/10.1093/bioinformatics/bty895" target="_blank" rel="noopener">doi:10.1093/bioinformatics/bty895</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">edgeR <span class="role">&mdash; differential gene expression &amp; diffSpliceDGE</span></div>
+      <div class="cite">Robinson MD, McCarthy DJ, Smyth GK. edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. Bioinformatics. 2010;26(1):139-140. <a href="https://doi.org/10.1093/bioinformatics/btp616" target="_blank" rel="noopener">doi:10.1093/bioinformatics/btp616</a></div>
+    </div>
+
+    <h3>Alternative splicing, isoforms &amp; fusions</h3>
+    <div class="tool">
+      <div class="tool-name">rMATS <span class="role">&mdash; event-based differential splicing</span></div>
+      <div class="cite">Shen S, Park JW, Lu ZX, Lin L, Henry MD, Wu YN, Zhou Q, Xing Y. rMATS: robust and flexible detection of differential alternative splicing from replicate RNA-Seq data. Proc Natl Acad Sci USA. 2014;111(51):E5593-E5601. <a href="https://doi.org/10.1073/pnas.1419161111" target="_blank" rel="noopener">doi:10.1073/pnas.1419161111</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">STAR-Fusion <span class="role">&mdash; gene-fusion detection</span></div>
+      <div class="cite">Haas BJ, Dobin A, Li B, Stransky N, Pochet N, Regev A. Accuracy assessment of fusion transcript detection via read-mapping and de novo fusion transcript assembly-based methods. Genome Biol. 2019;20(1):213. <a href="https://doi.org/10.1186/s13059-019-1842-9" target="_blank" rel="noopener">doi:10.1186/s13059-019-1842-9</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">IsoformSwitchAnalyzeR <span class="role">&mdash; transcript isoform-switch analysis</span></div>
+      <div class="cite">Vitting-Seerup K, Sandelin A. IsoformSwitchAnalyzeR: analysis of changes in genome-wide patterns of alternative splicing and its functional consequences. Bioinformatics. 2019;35(21):4469-4471. <a href="https://doi.org/10.1093/bioinformatics/btz247" target="_blank" rel="noopener">doi:10.1093/bioinformatics/btz247</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">DEXSeq <span class="role">&mdash; differential transcript usage (<code>--dtu</code>)</span></div>
+      <div class="cite">Anders S, Reyes A, Huber W. Detecting differential usage of exons from RNA-seq data. Genome Res. 2012;22(10):2008-2017. <a href="https://doi.org/10.1101/gr.133744.111" target="_blank" rel="noopener">doi:10.1101/gr.133744.111</a></div>
+    </div>
+
+    <h3>Functional enrichment</h3>
+    <div class="tool">
+      <div class="tool-name">fgsea <span class="role">&mdash; fast gene-set enrichment analysis (GSEA)</span></div>
+      <div class="cite">Korotkevich G, Sukhov V, Budin N, Shpak B, Artyomov MN, Sergushichev A. Fast gene set enrichment analysis. bioRxiv. 2021. <a href="https://doi.org/10.1101/060012" target="_blank" rel="noopener">doi:10.1101/060012</a></div>
+      <div class="cite sub-cite">fgsea implements the GSEA method: Subramanian A, Tamayo P, Mootha VK, Mukherjee S, Ebert BL, Gillette MA, Paulovich A, Pomeroy SL, Golub TR, Lander ES, Mesirov JP. Gene set enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. Proc Natl Acad Sci USA. 2005;102(43):15545-15550. <a href="https://doi.org/10.1073/pnas.0506580102" target="_blank" rel="noopener">doi:10.1073/pnas.0506580102</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">g:Profiler <span class="role">&mdash; GO &amp; pathway over-representation</span></div>
+      <div class="cite">Raudvere U, Kolberg L, Kuzmin I, Arak T, Adler P, Peterson H, Vilo J. g:Profiler: a web server for functional enrichment analysis and conversions of gene lists (2019 update). Nucleic Acids Res. 2019;47(W1):W191-W198. <a href="https://doi.org/10.1093/nar/gkz369" target="_blank" rel="noopener">doi:10.1093/nar/gkz369</a></div>
+    </div>
+
+    <h3>Reporting</h3>
+    <div class="tool">
+      <div class="tool-name">MultiQC <span class="role">&mdash; aggregated QC report</span></div>
+      <div class="cite">Ewels P, Magnusson M, Lundin S, Käller M. MultiQC: summarize analysis results for multiple tools and samples in a single report. Bioinformatics. 2016;32(19):3047-3048. <a href="https://doi.org/10.1093/bioinformatics/btw354" target="_blank" rel="noopener">doi:10.1093/bioinformatics/btw354</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">Quarto <span class="role">&mdash; rendered HTML analysis report</span></div>
+      <div class="cite">Allaire JJ, Teague C, Scheidegger C, Xie Y, Dervieux C. Quarto. <a href="https://doi.org/10.5281/zenodo.5960048" target="_blank" rel="noopener">doi:10.5281/zenodo.5960048</a> &mdash; <a href="https://quarto.org" target="_blank" rel="noopener">quarto.org</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">plotly <span class="role">&mdash; interactive volcano plots in the analysis report</span></div>
+      <div class="cite">Sievert C. Interactive Web-Based Data Visualization with R, plotly, and shiny. Chapman and Hall/CRC; 2020. ISBN 9781138331457 &mdash; <a href="https://plotly-r.com" target="_blank" rel="noopener">plotly-r.com</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">DT <span class="role">&mdash; searchable result tables in the analysis report</span></div>
+      <div class="cite">Xie Y, Cheng J, Tan X. DT: A Wrapper of the JavaScript Library 'DataTables'. &mdash; <a href="https://CRAN.R-project.org/package=DT" target="_blank" rel="noopener">CRAN.R-project.org/package=DT</a></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Reference data &amp; software environment</h2>
+    <div class="sub">Data sources and the packaging/container stack the pipeline runs on.</div>
+
+    <h3>Reference data</h3>
+    <div class="tool">
+      <div class="tool-name">Ensembl <span class="role">&mdash; genome FASTA &amp; GTF annotation</span></div>
+      <div class="cite">Cite the Ensembl release you used; the most recent reference is: Dyer SC, Austine-Orimoloye O, Azov AG, et al. Ensembl 2025. Nucleic Acids Res. 2025;53(D1):D948-D957. <a href="https://doi.org/10.1093/nar/gkae1071" target="_blank" rel="noopener">doi:10.1093/nar/gkae1071</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">MSigDB <span class="role">&mdash; Hallmark / C2 / C5 gene sets for GSEA</span></div>
+      <div class="cite">Liberzon A, Birger C, Thorvaldsdóttir H, Ghandi M, Mesirov JP, Tamayo P. The Molecular Signatures Database (MSigDB) hallmark gene set collection. Cell Syst. 2015;1(6):417-425. <a href="https://doi.org/10.1016/j.cels.2015.12.004" target="_blank" rel="noopener">doi:10.1016/j.cels.2015.12.004</a></div>
+    </div>
+
+    <h3>Software packaging &amp; containers</h3>
+    <div class="tool">
+      <div class="tool-name">Bioconda <span class="role">&mdash; package distribution</span></div>
+      <div class="cite">Grüning B, Dale R, Sjödin A, Chapman BA, Rowe J, Tomkins-Tinch CH, Valieris R, Köster J. Bioconda: sustainable and comprehensive software distribution for the life sciences. Nat Methods. 2018;15(7):475-476. <a href="https://doi.org/10.1038/s41592-018-0046-7" target="_blank" rel="noopener">doi:10.1038/s41592-018-0046-7</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">BioContainers <span class="role">&mdash; containerised tool images</span></div>
+      <div class="cite">da Veiga Leprevost F, Grüning BA, Alves Aflitos S, et al. BioContainers: an open-source and community-driven framework for software standardization. Bioinformatics. 2017;33(16):2580-2582. <a href="https://doi.org/10.1093/bioinformatics/btx192" target="_blank" rel="noopener">doi:10.1093/bioinformatics/btx192</a></div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">Docker <span class="role">&mdash; container runtime</span></div>
+      <div class="cite">Merkel D. Docker: lightweight Linux containers for consistent development and deployment. Linux Journal. 2014;2014(239):2.</div>
+    </div>
+    <div class="tool">
+      <div class="tool-name">Singularity / Apptainer <span class="role">&mdash; HPC container runtime</span></div>
+      <div class="cite">Kurtzer GM, Sochat V, Bauer MW. Singularity: Scientific containers for mobility of compute. PLoS ONE. 2017;12(5):e0177459. <a href="https://doi.org/10.1371/journal.pone.0177459" target="_blank" rel="noopener">doi:10.1371/journal.pone.0177459</a></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Methods paragraph</h2>
+    <div class="sub">A template for a manuscript Methods section. Edit it to match the
+       run you performed &mdash; delete the stages you did not use, and fill in the
+       bracketed tool <strong>versions</strong> from
+       <code>pipeline_info/software_versions.yml</code>.</div>
+    <div class="methods">
+      <p>RNA-seq data were processed with the rnaseq-flow pipeline (v1.1.0),
+      implemented in Nextflow (Di Tommaso et al., 2017); each step ran in a
+      Bioconda-based (Grüning et al., 2018) container (BioContainers; da Veiga
+      Leprevost et al., 2017). Raw reads were assessed with FastQC v[&hellip;]
+      (Andrews, 2010) and adapter/quality trimmed with fastp v[&hellip;] (Chen et
+      al., 2018). Trimmed reads were aligned to the [genome/transcriptome] with
+      [STAR v[&hellip;] (Dobin et al., 2013) | HISAT2 v[&hellip;] (Kim et al., 2019)
+      | Salmon v[&hellip;] (Patro et al., 2017) | kallisto v[&hellip;] (Bray et al.,
+      2016)]. [For the genome aligners, alignments were sorted and indexed with
+      SAMtools v[&hellip;] (Danecek et al., 2021); library strandedness, read
+      distribution and gene-body coverage were assessed with RSeQC v[&hellip;]
+      (Wang et al., 2012), and CPM-normalised coverage tracks were generated with
+      deepTools v[&hellip;] (Ramírez et al., 2016).] Gene-level counts were
+      obtained with featureCounts v[&hellip;] (Liao et al., 2014) [or summarised
+      from transcript-level estimates with tximport v[&hellip;] (Soneson et al.,
+      2015)]. Differential expression was tested with DESeq2 v[&hellip;] (Love et
+      al., 2014), with log2 fold-change shrinkage via apeglm (Zhu et al., 2019),
+      and edgeR v[&hellip;] (Robinson et al., 2010). [Differential
+      alternative splicing was assessed with rMATS v[&hellip;] (Shen et al., 2014)
+      and edgeR diffSpliceDGE (Robinson et al., 2010); differential transcript
+      usage was tested with DEXSeq v[&hellip;] (Anders et al., 2012); isoform
+      switches were identified with IsoformSwitchAnalyzeR v[&hellip;]
+      (Vitting-Seerup &amp; Sandelin, 2019); gene fusions were called with
+      STAR-Fusion v[&hellip;] (Haas et al., 2019).] Functional enrichment used
+      gene-set enrichment analysis via fgsea v[&hellip;] (Korotkevich et al.,
+      2021; Subramanian et al., 2005) and over-representation analysis with
+      g:Profiler (Raudvere et al., 2019). Quality-control metrics across all
+      steps were aggregated with MultiQC v[&hellip;] (Ewels et al., 2016).
+      Reference genome and annotation were obtained from Ensembl [release &hellip;]
+      (Dyer et al., 2025) [and gene sets from MSigDB (Liberzon et al., 2015)].</p>
+    </div>
+  </div>
+
+  <footer>rnaseq-flow &mdash; tool citations &bull; see CITATIONS.md, README.md and overview.html</footer>
+
+</div>
+</body>
+</html>

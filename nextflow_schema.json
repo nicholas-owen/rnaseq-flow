@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rnaseq-flow/rnaseq-flow/main/nextflow_schema.json",
+  "title": "rnaseq-flow pipeline parameters",
+  "description": "A modular bulk RNA-seq analysis pipeline (Nextflow DSL2).",
+  "type": "object",
+  "$defs": {
+    "input_output_options": {
+      "title": "Input/output options",
+      "type": "object",
+      "description": "Pipeline input data and where results are written.",
+      "properties": {
+        "input": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Path to the CSV samplesheet (columns: sample,R1,R2,condition)."
+        },
+        "outdir": {
+          "type": "string",
+          "format": "directory-path",
+          "default": "results",
+          "description": "Directory where pipeline results are published."
+        },
+        "publish_dir_mode": {
+          "type": "string",
+          "default": "copy",
+          "enum": ["copy", "symlink", "rellink", "link", "copyNoFollow", "move"],
+          "description": "Method used to publish files into the output directory."
+        },
+        "tracedir": {
+          "type": "string",
+          "description": "Directory for execution reports, timeline and trace (defaults to <outdir>/pipeline_info)."
+        },
+        "stop_at": {
+          "type": "string",
+          "enum": ["preQC", "postQC", "DE", "GSEA"],
+          "description": "Stop the pipeline after a given stage."
+        }
+      }
+    },
+    "alignment_quantification_options": {
+      "title": "Alignment and quantification",
+      "type": "object",
+      "description": "Choice of aligner and library strandedness.",
+      "properties": {
+        "aligner": {
+          "type": "string",
+          "default": "star",
+          "enum": ["star", "hisat2", "salmon", "kallisto"],
+          "description": "Read aligner / quantifier to use (one per run)."
+        },
+        "strandedness": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "unstranded", "forward", "reverse"],
+          "description": "Library strandedness; 'auto' infers it per-sample from RSeQC."
+        }
+      }
+    },
+    "reference_genome_options": {
+      "title": "Reference genome options",
+      "type": "object",
+      "description": "Reference files and pre-built aligner indices.",
+      "properties": {
+        "fasta": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Genome FASTA reference file."
+        },
+        "gtf": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Gene annotation in GTF format (may be gzipped). Required for most analyses."
+        },
+        "transcript_fasta": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Transcript FASTA - used for Salmon/Kallisto index building and IsoformSwitchAnalyzeR."
+        },
+        "star_index": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "Path to a pre-built STAR index directory."
+        },
+        "hisat2_index": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "Path to a pre-built HISAT2 index directory."
+        },
+        "salmon_index": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "Path to a pre-built Salmon index directory."
+        },
+        "kallisto_index": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Path to a pre-built Kallisto index file."
+        },
+        "gmt": {
+          "type": "string",
+          "format": "file-path",
+          "description": "GMT gene-set file used by GSEA."
+        },
+        "organism": {
+          "type": "string",
+          "default": "hsapiens",
+          "description": "Organism ID for gProfiler and MSigDB (e.g. hsapiens, mmusculus)."
+        }
+      }
+    },
+    "analysis_options": {
+      "title": "Analysis options",
+      "type": "object",
+      "description": "Optional downstream analyses.",
+      "properties": {
+        "read_length": {
+          "type": "integer",
+          "default": 100,
+          "description": "Read length passed to rMATS."
+        },
+        "ctat_lib": {
+          "type": "string",
+          "format": "directory-path",
+          "description": "CTAT genome library directory. Providing it enables STAR-Fusion."
+        },
+        "isoform_switch": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run IsoformSwitchAnalyzeR (requires --aligner salmon and --transcript_fasta)."
+        },
+        "dtu": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run DEXSeq differential transcript usage testing (requires --aligner salmon or kallisto, and --gtf)."
+        },
+        "diffsplice": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run edgeR diffSpliceDGE differential splicing - exon-level usage for STAR/HISAT2, transcript-level usage for Salmon/Kallisto (requires --gtf)."
+        },
+        "design": {
+          "type": "string",
+          "description": "DESeq2/edgeR model formula, e.g. '~ batch + condition'. Default: '~ batch + condition' if the samplesheet has a batch column, otherwise '~ condition'. Covariates must be samplesheet columns and 'condition' must be included (it is the variable contrasted)."
+        }
+      }
+    },
+    "reference_download_options": {
+      "title": "Reference download workflow",
+      "type": "object",
+      "description": "Parameters for the --download_refs helper workflow.",
+      "properties": {
+        "download_refs": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run the reference-download helper workflow."
+        },
+        "download_species": {
+          "type": "string",
+          "default": "homo_sapiens",
+          "description": "Ensembl species name (lower-case, underscore-separated)."
+        },
+        "download_source": {
+          "type": "string",
+          "default": "ensembl",
+          "enum": ["ensembl", "ncbi"],
+          "description": "Reference data source."
+        },
+        "download_release": {
+          "type": ["string", "integer"],
+          "description": "Ensembl release to pin for reproducibility, e.g. 102. Default: current/latest."
+        },
+        "download_gmt": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also download MSigDB GMT gene sets for the organism."
+        }
+      }
+    },
+    "index_building_options": {
+      "title": "Index building workflow",
+      "type": "object",
+      "description": "Parameters for the --build_indices helper workflow.",
+      "properties": {
+        "build_indices": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run the index-building helper workflow."
+        },
+        "genome_fasta": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Genome FASTA for index building (STAR / HISAT2 / Salmon)."
+        }
+      }
+    },
+    "max_resource_options": {
+      "title": "Max resource options",
+      "type": "object",
+      "description": "Ceilings applied to per-process resource requests.",
+      "properties": {
+        "max_cpus": {
+          "type": "integer",
+          "default": 16,
+          "description": "Maximum number of CPUs a single process may request."
+        },
+        "max_memory": {
+          "type": "string",
+          "default": "128.GB",
+          "description": "Maximum memory a single process may request (e.g. 128.GB)."
+        },
+        "max_time": {
+          "type": "string",
+          "default": "240.h",
+          "description": "Maximum wall-time a single process may request (e.g. 240.h)."
+        }
+      }
+    },
+    "generic_options": {
+      "title": "Generic options",
+      "type": "object",
+      "description": "Less common options.",
+      "properties": {
+        "help": {
+          "type": "boolean",
+          "default": false,
+          "description": "Display the parameter help message and exit."
+        }
+      }
+    }
+  },
+  "allOf": [
+    { "$ref": "#/$defs/input_output_options" },
+    { "$ref": "#/$defs/alignment_quantification_options" },
+    { "$ref": "#/$defs/reference_genome_options" },
+    { "$ref": "#/$defs/analysis_options" },
+    { "$ref": "#/$defs/reference_download_options" },
+    { "$ref": "#/$defs/index_building_options" },
+    { "$ref": "#/$defs/max_resource_options" },
+    { "$ref": "#/$defs/generic_options" }
+  ]
+}

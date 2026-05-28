@@ -1,0 +1,1861 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>rnaseq-flow — introduction</title>
+<script src="deck-stage.js"></script>
+<script type="application/json" id="speaker-notes">
+[
+  "Welcome. Today I want to introduce rnaseq-flow — a modular bulk RNA-seq pipeline built in Nextflow DSL2. The talk is roughly ten minutes. I'll cover what the pipeline does, the design choices behind its modularity, walk through each analysis stage, and finish with what you need to actually run it.",
+
+  "Before we dive in, the headline. rnaseq-flow takes raw FASTQ files and produces differential expression results, splicing tables, fusion calls and pathway enrichment — and aggregates everything into interactive HTML reports. The modularity is the key idea here. You choose the aligner, you choose which analysis stages run, and you choose whether to bring your own references or generate them with the bundled helper workflows. Same entry point, very different runs.",
+
+  "This is the workflow map — and it's the single most useful picture of the pipeline. The four coloured lines are the four aligner routes — STAR in magenta, HISAT2 in blue, Kallisto in purple, Salmon in orange. They each take their own path through the alignment stage and then converge on common downstream steps — differential expression on the right, enrichment further right. The green branch is the QC and splicing side-track, and the grey line along the bottom is the reporting line where everything funnels into MultiQC and the Quarto report. Only one aligner runs per execution — you'll see this map a few more times in coloured form as we walk the stages.",
+
+  "Quick word on setup before we get to the science. Four things. First, install Nextflow — it's a one-line curl. Second, make sure you have Java 11 to 21 on the system. Third, pick a container engine — Docker, Singularity, or Conda — and you select it at run time with the profile flag. Every process in the pipeline declares its own container, so no bioinformatics tool needs to be installed by hand. And fourth — and this is a really useful one — every process ships a stub block, so the entire workflow graph can dry-run in seconds with the stub-run flag. That's how you sanity-check the wiring without spending compute.",
+
+  "main.nf has one entry point that dispatches to one of three workflows depending on the flags you pass. Mode one — download_refs — fetches genome FASTA and GTF from Ensembl, and optionally MSigDB gene sets for GSEA. You can pin a specific Ensembl release for reproducibility. Mode two — build_indices — builds the index for whichever aligner you pick, or all four at once. And mode three is the actual analysis, which kicks off whenever you supply an input samplesheet. Only one mode runs per invocation.",
+
+  "Stage one of the analysis: read QC. FastQC profiles the raw reads, fastp trims adapters and low-quality bases. Two things worth knowing here. First, you can stop the pipeline early — stop_at preQC halts after FastQC, postQC halts after alignment QC. That's how you do a fast sanity-check on a new dataset without spending compute on differential expression. Second, all the FastQC and fastp metrics get aggregated into the MultiQC report later, so don't read them sample-by-sample.",
+
+  "Stage two: alignment. This is where the aligner choice matters. STAR is the default genome aligner and unlocks the full downstream stack — featureCounts, RSeQC, rMATS, fusion calling, the lot. HISAT2 is a lighter-weight genome aligner with essentially the same downstream stack minus fusion detection. Salmon and Kallisto are pseudo-aligners — much faster, transcript-level quantification rather than full alignments. Salmon additionally unlocks isoform-switch analysis. One flag — aligner — picks the route, and the downstream stages adapt automatically.",
+
+  "Stage three is gene quantification — and this is where the two paths converge. If you used STAR or HISAT2, featureCounts counts reads overlapping each gene on the sorted BAM. RSeQC auto-detects strandedness per sample, and that verdict feeds straight into featureCounts — so you don't need to know your library type in advance. If you used Salmon or Kallisto, tximport summarises the transcript-level quantifications to gene level, with proper length-aware normalisation. Either way, you end up with a gene-by-sample count matrix in the exact shape DESeq2 and edgeR want.",
+
+  "Stage four: differential expression. We run DESeq2 and edgeR in parallel on the same gene counts. They're two independent callers with very similar statistical machinery — DESeq2 uses a Wald test with apeglm log-fold-change shrinkage, edgeR uses a quasi-likelihood GLM throughout. Both honour the same design matrix — covariates and batch effects are handled the same way in both. The key insight here is the cross-check: genes called significant by both are the most robust hits. Only the DESeq2 route continues to functional enrichment downstream — that's the convention.",
+
+  "Stage 5a — alternative splicing on the genome-aligner route. Two complementary views. rMATS is event-based — it detects skipped exons, mutually-exclusive exons, alternative splice sites, retained introns — five event classes — and reports inclusion-level differences with FDR. edgeR diffSplice is exon-usage based — it asks whether an exon's fold-change between conditions departs from the gene's overall fold-change, which catches differential usage even when total expression looks similar. diffSplice is opt-in via the diffsplice flag.",
+
+  "Stage 5b — transcript isoforms and fusions. This is the territory where gene-level differential expression can miss things entirely. IsoformSwitchAnalyzeR flags genes whose dominant transcript actually flips between conditions, even when total expression doesn't change. DEXSeq tests differential transcript usage — significant shifts in transcript proportions. And STAR-Fusion detects gene fusions from STAR's chimeric alignments — needs a CTAT library to run. Three independent tools, three windows on the transcriptome that gene-level DE simply can't see.",
+
+  "Stage 6 is functional enrichment. Two methods, intentionally complementary. GSEA via fgsea runs on the whole ranked DESeq2 gene list — no cutoffs — and reports normalised enrichment scores per pathway. Its sign tells you direction. gProfiler runs over-representation testing on the thresholded significant up- and down-regulated lists separately, against GO terms and pathway databases. Different statistical approaches, often agreeing on the same biology. When they do agree, you can be much more confident in the result.",
+
+  "Stage seven, the final stage, is reporting. Every run produces three pieces of self-contained HTML. MultiQC is the QC aggregation — one page combining metrics from every QC tool across every sample. Start there. The Quarto report is the analysis narrative — interactive plotly volcano plots, PCA, MDS, heatmaps, searchable result tables, a DESeq2-vs-edgeR agreement table — sections appear only when their data is present, so a smaller run gives a smaller report. And there's a third, the run summary, which I'll come back to in a moment.",
+
+  "Now usage. Everything starts with this four-column CSV. Sample ID, R1 path, R2 path — empty for single-end data — and condition. The pipeline auto-detects paired versus single-end from whether R2 is present. There's an important convention here: a condition literally named REF is treated as the baseline of every contrast. Name your control group REF and positive log2 fold changes mean up in the other condition. Optional batch column? Add it and the design becomes batch plus condition automatically. The samplesheet is validated before any process is scheduled, so typos and missing files surface immediately.",
+
+  "Here's a comprehensive STAR run end-to-end. Input samplesheet, STAR aligner with its index, the GTF, stranded library — note this could be set to 'auto' to let RSeQC infer it — the CTAT library for fusion calling, opt-in diffsplice for exon-level splicing, a GMT for GSEA, the output directory, and the Docker profile. That's one invocation, end-to-end. For the Salmon route, swap aligner to salmon, point at the salmon_index and transcript fasta, and add isoform_switch and dtu for the transcript-level analyses. Same samplesheet, same output structure.",
+
+  "When the run finishes, this is what you get. The two HTML files I keep mentioning — multiqc_report and analysis_report — are your entry points. Then there's a directory per analysis stage. Per-contrast result CSVs from DESeq2 and edgeR carry gene_name and gene_biotype annotation so you can read them without an ID-mapping step. The RSeQC strandedness file per sample is worth knowing about — it's the auto-detected verdict that feeds featureCounts. And run_summary.html under pipeline_info is written automatically at the end of every run, success or failure — it has the resource usage per process and links to everything that was produced.",
+
+  "Quick note on what's new in version 1.1.0, released a couple of days ago. Differential splicing — the diffsplice flag I mentioned — is new. Batch and covariate modelling is new: a batch column is auto-detected and the design flag accepts any formula. Every DE result table now carries gene_name and gene_biotype columns. Per-contrast volcano plots are written for both DESeq2 and edgeR. DESeq2 log-fold-changes are now shrunk with apeglm for better effect-size estimates. And the Quarto report grew into a full analysis report — searchable tables, plotly volcanoes — plus an automatic run-summary page at the end of every run.",
+
+  "To wrap up — the quick start, four commands. One, validate the workflow without data using stub-run. Two, fetch references for your species, pinned to a specific Ensembl release. Three, build the index for your chosen aligner — or pass aligner=all to build all four. Four, run the analysis itself. Once it finishes, open results/multiqc/multiqc_report.html and you're in. That's rnaseq-flow. Happy to take questions."
+]
+</script>
+<style>
+  :root {
+    /* Palette — pulled from the metro map */
+    --ink:        #1f2533;
+    --ink-2:      #495057;
+    --ink-mute:   #868e96;
+    --line:       #dde2ea;
+    --line-soft:  #eceef3;
+    --bg:         #fbfcfe;
+    --bg-card:    #ffffff;
+    --bg-soft:    #f4f6fa;
+    --navy:       #1f4e79;
+    --navy-2:     #2e6aa3;
+
+    --route-star:    #c2255c;
+    --route-hisat:   #1c7ed6;
+    --route-kallis:  #7048e8;
+    --route-salmon:  #f08c00;
+    --route-qc:      #0ca678;
+    --route-report:  #495057;
+
+    /* Type — px at 1920×1080 */
+    --type-eyebrow:  24px;
+    --type-title:    72px;
+    --type-subtitle: 40px;
+    --type-body:     30px;
+    --type-small:    24px;
+    --type-code:     26px;
+    --type-mega:    160px;
+
+    /* Spacing */
+    --pad-top:    96px;
+    --pad-bottom: 84px;
+    --pad-x:     112px;
+    --gap-title:  44px;
+    --gap-item:   26px;
+  }
+
+  html, body { margin: 0; padding: 0; background: #0a0a0a; }
+  body { font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+
+  deck-stage > section {
+    background: var(--bg);
+    color: var(--ink);
+    font-size: var(--type-body);
+    line-height: 1.35;
+    overflow: hidden;
+  }
+
+  /* ---------- Shared layout pieces ---------- */
+  .frame {
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    padding: var(--pad-top) var(--pad-x) var(--pad-bottom);
+    display: flex;
+    flex-direction: column;
+  }
+  .eyebrow {
+    font-size: var(--type-eyebrow);
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0 0 22px;
+  }
+  .slide-title {
+    font-size: var(--type-title);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--navy);
+    margin: 0;
+    line-height: 1.05;
+  }
+  .slide-subtitle {
+    font-size: var(--type-subtitle);
+    font-weight: 400;
+    color: var(--ink-2);
+    margin: 26px 0 0;
+    line-height: 1.25;
+    max-width: 1500px;
+  }
+  .rule {
+    height: 6px;
+    width: 84px;
+    background: var(--navy);
+    border-radius: 3px;
+    margin: 36px 0 var(--gap-title);
+  }
+
+  /* Page chrome — small label bottom-left */
+  .pagemark {
+    position: absolute;
+    left: var(--pad-x);
+    bottom: 44px;
+    font-size: 24px;
+    color: var(--ink-mute);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .pagemark .dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--navy);
+    margin-right: 14px;
+    transform: translateY(-3px);
+  }
+
+  /* ---------- TITLE SLIDE ---------- */
+  .title-slide {
+    background: var(--bg);
+    position: relative;
+  }
+  .title-slide .frame { justify-content: center; padding-left: 140px; padding-right: 140px; }
+  .title-eyebrow {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--route-star);
+    margin: 0 0 30px;
+  }
+  .title-name {
+    font-size: 240px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+    color: var(--navy);
+    margin: 0;
+  }
+  .title-tag {
+    font-size: 44px;
+    color: var(--ink-2);
+    margin: 36px 0 0;
+    font-weight: 400;
+    max-width: 1500px;
+    line-height: 1.25;
+  }
+  .title-meta {
+    position: absolute;
+    bottom: 80px;
+    left: 140px;
+    right: 140px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 24px;
+    color: var(--ink-mute);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .title-routes {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .title-routes span {
+    width: 56px; height: 10px; border-radius: 5px;
+  }
+
+  /* ---------- METRO MAP SLIDE (full-bleed) ---------- */
+  .map-slide { background: #fbfcfe; }
+  .map-slide .frame { padding: 0; }
+  .map-slide svg { width: 100%; height: 100%; display: block; }
+
+  /* ---------- TWO-COLUMN STAGE SLIDES ---------- */
+  .stage-grid {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 88px;
+    flex: 1;
+    min-height: 0;
+  }
+  .stage-left { display: flex; flex-direction: column; min-width: 0; }
+  .stage-right { display: flex; flex-direction: column; min-width: 0; gap: 22px; }
+
+  .stage-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    font-size: var(--type-small);
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 22px;
+  }
+  .stage-tag .swatch {
+    width: 40px; height: 10px; border-radius: 5px;
+  }
+
+  .lead {
+    font-size: 34px;
+    line-height: 1.35;
+    color: var(--ink);
+    margin: 0 0 28px;
+    max-width: 760px;
+  }
+  .lead em {
+    font-style: normal;
+    color: var(--navy);
+    font-weight: 700;
+  }
+
+  .bullets {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .bullets li {
+    font-size: var(--type-body);
+    line-height: 1.35;
+    color: var(--ink-2);
+    padding-left: 30px;
+    position: relative;
+  }
+  .bullets li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 14px;
+    width: 14px; height: 14px;
+    background: var(--navy);
+    border-radius: 2px;
+  }
+  .bullets li strong { color: var(--ink); font-weight: 700; }
+
+  /* Tool cards (right column) */
+  .tool-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-left: 8px solid var(--navy);
+    border-radius: 6px;
+    padding: 24px 28px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 26px;
+    align-items: baseline;
+  }
+  .tool-card .name {
+    font-size: var(--type-subtitle);
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .tool-card .name small {
+    display: block;
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--ink-mute);
+    letter-spacing: 0;
+    text-transform: none;
+    margin-top: 4px;
+  }
+  .tool-card .desc {
+    font-size: 26px;
+    color: var(--ink-2);
+    line-height: 1.35;
+  }
+
+  /* ---------- THREE-MODE SLIDE ---------- */
+  .modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 36px;
+    flex: 1;
+    min-height: 0;
+  }
+  .mode-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-top: 10px solid var(--navy);
+    border-radius: 8px;
+    padding: 48px 44px;
+    display: flex;
+    flex-direction: column;
+  }
+  .mode-card .num {
+    font-size: 90px;
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    margin: 0 0 24px;
+  }
+  .mode-card h3 {
+    font-size: 38px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 18px;
+    letter-spacing: -0.005em;
+  }
+  .mode-card p {
+    font-size: 26px;
+    color: var(--ink-2);
+    line-height: 1.4;
+    margin: 0 0 24px;
+  }
+  .mode-card .flag {
+    margin-top: auto;
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 26px;
+    color: var(--navy);
+    background: var(--bg-soft);
+    padding: 14px 18px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    word-break: break-all;
+  }
+
+  /* ---------- ALIGNER SLIDE ---------- */
+  .aligners {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px 40px;
+    flex: 1;
+    min-height: 0;
+  }
+  .aligner-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-left: 14px solid currentColor;
+    border-radius: 6px;
+    padding: 32px 38px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px 0;
+    align-items: center;
+  }
+  .aligner-card .a-name {
+    font-size: 46px;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .aligner-card .a-kind {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: currentColor;
+  }
+  .aligner-card .a-desc {
+    grid-column: 1 / -1;
+    font-size: 25px;
+    color: var(--ink-2);
+    line-height: 1.35;
+    margin: 0;
+  }
+  .aligner-card.star    { color: var(--route-star); }
+  .aligner-card.hisat   { color: var(--route-hisat); }
+  .aligner-card.kallis  { color: var(--route-kallis); }
+  .aligner-card.salmon  { color: var(--route-salmon); }
+
+  /* ---------- DE SLIDE (parallel rails) ---------- */
+  .de-canvas {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 320px 1fr 1fr 320px;
+    grid-template-rows: auto 1fr;
+    gap: 28px;
+    align-items: stretch;
+  }
+  .de-source, .de-output {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+  }
+  .de-source { grid-row: 1 / span 2; }
+  .de-output { grid-row: 1 / span 2; }
+  .de-source .lbl, .de-output .lbl {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 18px;
+  }
+  .de-source .val, .de-output .val {
+    font-size: 34px;
+    color: var(--ink);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .de-output .val small {
+    display: block;
+    font-size: 24px;
+    font-weight: 500;
+    color: var(--ink-mute);
+    margin-top: 8px;
+  }
+  .de-rail {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-top: 10px solid var(--navy);
+    border-radius: 8px;
+    padding: 32px 36px;
+    display: flex;
+    flex-direction: column;
+    grid-row: 1 / span 2;
+  }
+  .de-rail h3 {
+    font-size: 42px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .de-rail .rail-sub {
+    font-size: 26px;
+    color: var(--ink-mute);
+    margin: 0 0 24px;
+    font-weight: 500;
+  }
+  .de-rail ul {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: flex; flex-direction: column;
+    gap: 16px;
+  }
+  .de-rail li {
+    font-size: 25px;
+    color: var(--ink-2);
+    padding-left: 26px;
+    position: relative;
+    line-height: 1.35;
+  }
+  .de-rail li::before {
+    content: "";
+    position: absolute; left: 0; top: 13px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--navy);
+  }
+
+  /* ---------- SPLICING / ISOFORM GRID ---------- */
+  .four-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 28px;
+    flex: 1;
+    min-height: 0;
+  }
+  .feat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .feat-card .feat-tool {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--navy);
+    margin: 0 0 6px;
+    letter-spacing: -0.005em;
+  }
+  .feat-card .feat-kind {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 14px;
+  }
+  .feat-card .feat-desc {
+    font-size: 25px;
+    color: var(--ink-2);
+    line-height: 1.35;
+    margin: 0;
+  }
+  .feat-card .feat-flag {
+    margin-top: auto;
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    color: var(--navy);
+    padding-top: 14px;
+  }
+
+  /* ---------- SAMPLESHEET SLIDE ---------- */
+  .csv-block {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 25px;
+    color: var(--ink);
+    box-shadow: 0 2px 0 var(--line-soft);
+  }
+  .csv-block table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .csv-block th, .csv-block td {
+    text-align: left;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--line-soft);
+    font-weight: 500;
+  }
+  .csv-block thead th {
+    background: var(--navy);
+    color: #fff;
+    font-weight: 700;
+    font-size: 24px;
+    letter-spacing: 0.04em;
+  }
+  .csv-block tbody tr:last-child td { border-bottom: none; }
+  .csv-block td.cond-ref { color: var(--route-star); font-weight: 700; }
+  .csv-block td.cond-tx  { color: var(--route-kallis); font-weight: 700; }
+
+  .csv-notes {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 28px;
+    margin-top: 32px;
+  }
+  .csv-note {
+    border-top: 4px solid var(--navy);
+    padding-top: 18px;
+  }
+  .csv-note h4 {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 8px;
+  }
+  .csv-note p {
+    font-size: 26px;
+    color: var(--ink-2);
+    line-height: 1.35;
+    margin: 0;
+  }
+  .csv-note code {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: var(--navy);
+  }
+
+  /* ---------- COMMAND-LINE SLIDE ---------- */
+  .terminal {
+    background: #0f1626;
+    color: #e9ecf3;
+    border-radius: 10px;
+    padding: 44px 40px 28px;
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 26px;
+    line-height: 1.4;
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .terminal .tdots {
+    position: absolute;
+    top: 18px; left: 22px;
+    display: flex; gap: 10px;
+  }
+  .terminal .tdots span {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #3a4358;
+  }
+  .terminal .tdots span:nth-child(1){ background:#ff5f56; }
+  .terminal .tdots span:nth-child(2){ background:#ffbd2e; }
+  .terminal .tdots span:nth-child(3){ background:#27c93f; }
+  .terminal .ttitle {
+    position: absolute;
+    top: 12px; left: 0; right: 0;
+    text-align: center;
+    color: #7f8aa3;
+    font-size: 24px;
+    letter-spacing: 0.1em;
+  }
+    letter-spacing: 0.1em;
+  }
+  .terminal .code {
+    margin: 0;
+    white-space: pre;
+    overflow: hidden;
+  }
+  .terminal .prompt { color: #7048e8; font-weight: 700; }
+  .terminal .cmd    { color: #ffd479; }
+  .terminal .flag   { color: #6cc4ff; }
+  .terminal .val    { color: #e9ecf3; }
+  .terminal .com    { color: #6b7488; font-style: italic; }
+
+  .scenario-note {
+    margin-top: 20px;
+    font-size: 25px;
+    color: var(--ink-2);
+    line-height: 1.5;
+    max-width: 1500px;
+  }
+  .scenario-note strong { color: var(--navy); }
+
+  /* ---------- WHAT'S NEW SLIDE ---------- */
+  .release-head {
+    display: flex;
+    align-items: baseline;
+    gap: 32px;
+    margin-bottom: 28px;
+  }
+  .release-tag {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    background: var(--navy);
+    padding: 8px 20px;
+    border-radius: 6px;
+    letter-spacing: 0.05em;
+  }
+  .release-date {
+    font-size: 26px;
+    color: var(--ink-mute);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .changes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px 56px;
+    flex: 1;
+    min-height: 0;
+  }
+  .change {
+    border-top: 4px solid var(--navy);
+    padding-top: 18px;
+  }
+  .change h4 {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 10px;
+    letter-spacing: -0.005em;
+  }
+  .change p {
+    font-size: 26px;
+    color: var(--ink-2);
+    line-height: 1.4;
+    margin: 0;
+  }
+  .change code {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    color: var(--navy);
+    background: var(--bg-soft);
+    padding: 1px 8px;
+    border-radius: 3px;
+  }
+
+  /* ---------- QUICK START / CLOSING ---------- */
+  .qs-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    flex: 1;
+    min-height: 0;
+  }
+  .qs-step {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  .qs-step .qs-num {
+    font-size: 56px;
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .qs-step .qs-body h4 {
+    font-size: 32px;
+    margin: 0 0 4px;
+    color: var(--ink);
+    font-weight: 800;
+    letter-spacing: -0.005em;
+  }
+  .qs-step .qs-body p {
+    font-size: 25px;
+    color: var(--ink-2);
+    margin: 0 0 8px;
+    line-height: 1.35;
+  }
+  .qs-step .qs-body code {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 22px;
+    color: #fff;
+    background: var(--navy);
+    padding: 4px 12px;
+    border-radius: 4px;
+    display: inline-block;
+    max-width: 100%;
+    word-break: break-all;
+    white-space: normal;
+    line-height: 1.4;
+  }
+
+  /* ---------- REPORTING SLIDE ---------- */
+  .reports {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    flex: 1;
+    min-height: 0;
+  }
+  .report-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 36px 40px;
+    display: flex;
+    flex-direction: column;
+  }
+  .report-card .r-eyebrow {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--route-report);
+    margin-bottom: 14px;
+  }
+  .report-card h3 {
+    font-size: 42px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+  }
+  .report-card p {
+    font-size: 25px;
+    color: var(--ink-2);
+    line-height: 1.4;
+    margin: 0 0 18px;
+  }
+  .report-card ul {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: flex; flex-direction: column;
+    gap: 12px;
+  }
+  .report-card li {
+    font-size: 24px;
+    color: var(--ink-2);
+    padding-left: 24px;
+    position: relative;
+    line-height: 1.4;
+  }
+  .report-card li::before {
+    content: "";
+    position: absolute; left: 0; top: 12px;
+    width: 8px; height: 8px;
+    background: var(--route-report);
+    border-radius: 50%;
+  }
+  .report-card .filepath {
+    margin-top: auto;
+    padding-top: 18px;
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    color: var(--ink-mute);
+  }
+
+  /* ---------- ENRICHMENT SLIDE ---------- */
+  .enrich {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    flex: 1;
+    min-height: 0;
+  }
+  .enrich .feat-card {
+    border-top: 8px solid currentColor;
+  }
+  .enrich .feat-card.gsea  { color: var(--navy); }
+  .enrich .feat-card.gprof { color: var(--route-qc); }
+  .enrich .feat-card .feat-tool { color: currentColor; }
+
+  /* ---------- READ QC SLIDE: numeric inputs callout ---------- */
+  .qc-flow {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr 60px 1fr;
+    gap: 24px;
+    align-items: center;
+    margin: 20px 0 40px;
+  }
+  .qc-step {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 26px 28px;
+    text-align: left;
+  }
+  .qc-step .qs-eyebrow {
+    font-size: 24px; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-bottom: 8px;
+  }
+  .qc-step .qs-name {
+    font-size: 38px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 10px;
+    letter-spacing: -0.005em;
+  }
+  .qc-step .qs-desc {
+    font-size: 24px; color: var(--ink-2);
+    line-height: 1.35; margin: 0;
+  }
+  .qc-arrow {
+    color: var(--ink-mute);
+    font-size: 48px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  /* ---------- QUANT SLIDE ---------- */
+  .quant {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    flex: 1;
+    min-height: 0;
+  }
+  .quant .feat-card { border-top: 8px solid var(--navy); }
+
+  /* code chips */
+  .chip {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    color: var(--navy);
+    background: var(--bg-soft);
+    padding: 0 8px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  /* ---------- SETUP SLIDE ---------- */
+  .setup {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 28px;
+    flex: 1;
+    min-height: 0;
+  }
+  .setup-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 30px 36px;
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 26px;
+    align-items: start;
+  }
+  .setup-card .s-num {
+    font-size: 64px;
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  .setup-card .s-body h3 {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 8px;
+    letter-spacing: -0.005em;
+  }
+  .setup-card .s-body p {
+    font-size: 25px;
+    color: var(--ink-2);
+    line-height: 1.35;
+    margin: 0 0 14px;
+  }
+  .setup-card .s-cmd {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 22px;
+    color: #e9ecf3;
+    background: #0f1626;
+    padding: 8px 14px;
+    border-radius: 5px;
+    display: block;
+    word-break: break-all;
+    line-height: 1.45;
+  }
+  .setup-card .s-cmd .p { color: #7048e8; font-weight: 700; }
+  .setup-card .s-cmd .f { color: #6cc4ff; }
+  .setup-card .s-cmd .c { color: #ffd479; }
+
+  /* ---------- RESULTS-TO-EXPECT SLIDE ---------- */
+  .results-grid {
+    display: grid;
+    grid-template-columns: 0.85fr 1.15fr;
+    gap: 48px;
+    flex: 1;
+    min-height: 0;
+  }
+  .tree {
+    background: #0f1626;
+    color: #e9ecf3;
+    border-radius: 10px;
+    padding: 56px 32px 24px;
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    line-height: 1.36;
+    overflow: hidden;
+    position: relative;
+  }
+  .tree .t-title {
+    position: absolute;
+    top: 12px; left: 0; right: 0;
+    text-align: center;
+    color: #7f8aa3;
+    font-size: 24px;
+    letter-spacing: 0.1em;
+  }
+  .tree .dir  { color: #6cc4ff; font-weight: 700; }
+  .tree .file { color: #e9ecf3; }
+  .tree .acc  { color: #ffd479; font-weight: 700; }
+  .tree .com  { color: #6b7488; }
+
+  .key-outputs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .key-output {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-left: 8px solid var(--navy);
+    border-radius: 6px;
+    padding: 14px 22px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+  .key-output .ko-file {
+    font-family: "JetBrains Mono", "SF Mono", Consolas, Menlo, monospace;
+    font-size: 24px;
+    color: var(--navy);
+    font-weight: 700;
+  }
+  .key-output .ko-desc {
+    font-size: 24px;
+    color: var(--ink-2);
+    line-height: 1.32;
+  }
+  .key-output.qc      { border-left-color: var(--route-qc); }
+  .key-output.qc .ko-file { color: var(--route-qc); }
+  .key-output.de      { border-left-color: var(--route-star); }
+  .key-output.de .ko-file { color: var(--route-star); }
+  .key-output.report  { border-left-color: var(--route-report); }
+  .key-output.report .ko-file { color: var(--route-report); }
+
+  /* ---------- SPLIT SPLICING SLIDE LAYOUTS ---------- */
+  .two-feat {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 36px;
+    flex: 1;
+    min-height: 0;
+  }
+  .three-feat {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 28px;
+    flex: 1;
+    min-height: 0;
+  }
+  .two-feat .feat-card, .three-feat .feat-card {
+    border-top: 8px solid currentColor;
+  }
+  .two-feat .feat-card .feat-tool, .three-feat .feat-card .feat-tool {
+    color: currentColor;
+  }
+
+  /* Page-mark variants: per-slide accent */
+  .pagemark.star  .dot { background: var(--route-star); }
+  .pagemark.hisat .dot { background: var(--route-hisat); }
+  .pagemark.qc    .dot { background: var(--route-qc); }
+  .pagemark.report .dot { background: var(--route-report); }
+</style>
+</head>
+
+<body>
+
+<deck-stage width="1920" height="1080">
+
+<!-- ============================================================
+  SLIDE 1 — TITLE
+============================================================ -->
+<section data-label="01 Title" class="title-slide">
+  <div class="frame">
+    <p class="title-eyebrow">Modular bulk RNA-seq · Nextflow DSL2</p>
+    <h1 class="title-name">rnaseq-flow</h1>
+    <p class="title-tag">From FASTQ to differential expression, splicing and enrichment — one pipeline, four aligners, three run modes.</p>
+  </div>
+  <div class="title-meta">
+    <div class="title-routes">
+      <span style="background: var(--route-star)"></span>
+      <span style="background: var(--route-hisat)"></span>
+      <span style="background: var(--route-kallis)"></span>
+      <span style="background: var(--route-salmon)"></span>
+      <span style="background: var(--route-qc)"></span>
+    </div>
+    <div>Version 1.1.0 &nbsp;·&nbsp; May 2026</div>
+  </div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 2 — WHAT IT IS
+============================================================ -->
+<section data-label="02 What it is">
+  <div class="frame">
+    <p class="eyebrow">Overview</p>
+    <h2 class="slide-title">A single pipeline, three axes of choice</h2>
+    <div class="rule"></div>
+
+    <div class="stage-grid">
+      <div class="stage-left">
+        <p class="lead">rnaseq-flow processes raw FASTQs through <em>QC, alignment, quantification, differential expression, splicing, fusions and enrichment</em>, and aggregates everything into interactive HTML reports.</p>
+        <p class="lead">It is modular in three senses — and you compose them per run.</p>
+      </div>
+
+      <div class="stage-right">
+        <div class="tool-card" style="border-left-color: var(--route-star)">
+          <div class="name">Aligner<small>--aligner</small></div>
+          <div class="desc">STAR, HISAT2, Salmon or Kallisto — pick one per run; downstream stages adapt to the choice.</div>
+        </div>
+        <div class="tool-card" style="border-left-color: var(--route-hisat)">
+          <div class="name">Stages<small>--stop_at, --dtu, --diffsplice</small></div>
+          <div class="desc">Stop at preQC, postQC, DE or GSEA. Splicing, DTU, fusions and enrichment are opt-in.</div>
+        </div>
+        <div class="tool-card" style="border-left-color: var(--route-kallis)">
+          <div class="name">References<small>--download_refs, --build_indices</small></div>
+          <div class="desc">Bring your own FASTA / GTF / indices, or generate them with the bundled helper workflows.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>02 · Overview</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 3 — METRO MAP (full bleed)
+============================================================ -->
+<section data-label="03 Pipeline at a glance" class="map-slide">
+  <div class="frame">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1960 1070" preserveAspectRatio="xMidYMid meet" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+      <rect width="1960" height="1070" fill="#fbfcfe"></rect>
+      <text x="70" y="56" font-size="34" font-weight="800" text-anchor="start" fill="#1f4e79"><tspan x="70" dy="0">rnaseq-flow</tspan></text>
+      <text x="70" y="82" font-size="16" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="70" dy="0">Bulk RNA-seq pipeline — workflow map</tspan></text>
+      <text x="300" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="300" dy="0">INPUT  &amp;  READ QC</tspan></text>
+      <text x="905" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="905" dy="0">ALIGNMENT  /  QUANTIFICATION</tspan></text>
+      <text x="1500" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="1500" dy="0">DIFFERENTIAL EXPRESSION</tspan></text>
+      <text x="1780" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="1780" dy="0">ENRICHMENT</tspan></text>
+      <line x1="520" y1="116" x2="520" y2="1014" stroke="#eceef3" stroke-width="2"></line>
+      <line x1="1290" y1="116" x2="1290" y2="1014" stroke="#eceef3" stroke-width="2"></line>
+      <line x1="1640" y1="116" x2="1640" y2="1014" stroke="#eceef3" stroke-width="2"></line>
+      <path d="M 120 502 L 464 502 Q 480 502 491.3 490.7 L 670.7 311.3 Q 682 300 698 300 L 1074 300 Q 1090 300 1101.3 311.3 L 1230.7 440.7 Q 1242 452 1258 452 L 1900 452" fill="none" stroke="#c2255c" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 120 514 L 464 514 Q 480 514 491.3 502.7 L 646.7 347.3 Q 658 336 674 336 L 1074 336 Q 1090 336 1101.3 347.3 L 1206.7 452.7 Q 1218 464 1234 464 L 1900 464" fill="none" stroke="#1c7ed6" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 120 526 L 464 526 Q 480 526 491.3 537.3 L 646.7 692.7 Q 658 704 674 704 L 1074 704 Q 1090 704 1101.3 692.7 L 1306.7 487.3 Q 1318 476 1334 476 L 1900 476" fill="none" stroke="#7048e8" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 120 538 L 464 538 Q 480 538 491.3 549.3 L 670.7 728.7 Q 682 740 698 740 L 1074 740 Q 1090 740 1101.3 728.7 L 1330.7 499.3 Q 1342 488 1358 488 L 1900 488" fill="none" stroke="#f08c00" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1380 452 L 1508.7 580.7 Q 1520 592 1536 592 L 1640 592" fill="none" stroke="#c2255c" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1380 464 L 1508.7 592.7 Q 1520 604 1536 604 L 1640 604" fill="none" stroke="#1c7ed6" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1380 476 L 1508.7 604.7 Q 1520 616 1536 616 L 1640 616" fill="none" stroke="#7048e8" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1380 488 L 1508.7 616.7 Q 1520 628 1536 628 L 1640 628" fill="none" stroke="#f08c00" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 800 300 L 950 150" fill="none" stroke="#c2255c" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 900 285 L 939.6 246.2 Q 951 235 967 235 L 1620 235" fill="none" stroke="#0ca678" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 820 740 L 914 834" fill="none" stroke="#f08c00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1000 704 L 1000 848 Q 1000 864 1016 864 L 1300 864" fill="none" stroke="#7048e8" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1016 740 L 1016 864 Q 1016 880 1032 880 L 1300 880" fill="none" stroke="#f08c00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 250 968 L 1560 968" fill="none" stroke="#495057" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"></path>
+      <circle cx="300" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
+      <circle cx="440" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
+      <circle cx="720" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
+      <circle cx="900" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
+      <circle cx="1090" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
+      <rect x="105" y="487" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="120" y="576" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="120" dy="0">FASTQ</tspan><tspan x="120" dy="17">raw reads</tspan></text>
+      <rect x="285" y="487" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="300" y="576" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="300" dy="0">FastQC</tspan></text>
+      <rect x="425" y="487" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="440" y="576" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="440" dy="0">fastp</tspan><tspan x="440" dy="17">trim + filter</tspan></text>
+      <rect x="885" y="285" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="900" y="374" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="900" dy="0">SAMtools</tspan><tspan x="900" dy="17">index</tspan></text>
+      <rect x="1075" y="285" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1090" y="374" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1090" dy="0">featureCounts</tspan></text>
+      <rect x="1075" y="689" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1090" y="778" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1090" dy="0">tximport</tspan><tspan x="1090" dy="17">transcript → gene</tspan></text>
+      <rect x="1455" y="437" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1470" y="427" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1470" dy="0">DESeq2</tspan></text>
+      <rect x="1685" y="437" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1700" y="427" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1700" dy="0">GSEA</tspan></text>
+      <rect x="1845" y="437" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1860" y="526" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1860" dy="0">gProfiler</tspan></text>
+      <rect x="1585" y="577" width="30" height="66" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1600" y="666" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1600" dy="0">edgeR</tspan></text>
+      <circle cx="720" cy="300" r="9.5" fill="#fff" stroke="#c2255c" stroke-width="4.2"></circle>
+      <text x="720" y="275" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="720" dy="0">STAR</tspan></text>
+      <circle cx="720" cy="336" r="9.5" fill="#fff" stroke="#1c7ed6" stroke-width="4.2"></circle>
+      <text x="720" y="374" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="720" dy="0">HISAT2</tspan></text>
+      <circle cx="720" cy="704" r="9.5" fill="#fff" stroke="#7048e8" stroke-width="4.2"></circle>
+      <text x="720" y="679" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="720" dy="0">Kallisto</tspan></text>
+      <circle cx="720" cy="740" r="9.5" fill="#fff" stroke="#f08c00" stroke-width="4.2"></circle>
+      <text x="720" y="778" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="720" dy="0">Salmon</tspan></text>
+      <circle cx="950" cy="150" r="9.5" fill="#fff" stroke="#c2255c" stroke-width="4.2"></circle>
+      <text x="972" y="155" font-size="15" font-weight="600" text-anchor="start" fill="#212529"><tspan x="972" dy="0">STAR-Fusion</tspan></text>
+      <circle cx="1080" cy="235" r="9.5" fill="#fff" stroke="#0ca678" stroke-width="4.2"></circle>
+      <text x="1080" y="210" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1080" dy="0">RSeQC</tspan></text>
+      <circle cx="1240" cy="235" r="9.5" fill="#fff" stroke="#0ca678" stroke-width="4.2"></circle>
+      <text x="1240" y="210" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1240" dy="0">bigWig coverage</tspan></text>
+      <circle cx="1400" cy="235" r="9.5" fill="#fff" stroke="#0ca678" stroke-width="4.2"></circle>
+      <text x="1400" y="210" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1400" dy="0">rMATS  (splicing)</tspan></text>
+      <circle cx="1560" cy="235" r="9.5" fill="#fff" stroke="#0ca678" stroke-width="4.2"></circle>
+      <text x="1560" y="193" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1560" dy="0">edgeR diffSplice</tspan><tspan x="1560" dy="17">(exon usage)</tspan></text>
+      <circle cx="914" cy="834" r="9.5" fill="#fff" stroke="#f08c00" stroke-width="4.2"></circle>
+      <text x="914" y="872" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="914" dy="0">IsoformSwitchAnalyzeR</tspan></text>
+      <rect x="1135" y="849" width="30" height="46" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1150" y="918" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1150" dy="0">DEXSeq DTU</tspan><tspan x="1150" dy="17">diff. transcript usage</tspan></text>
+      <rect x="1285" y="849" width="30" height="46" rx="15" fill="#fff" stroke="#212529" stroke-width="3.4"></rect>
+      <text x="1300" y="822" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1300" dy="0">edgeR diffSplice</tspan><tspan x="1300" dy="17">(transcript usage)</tspan></text>
+      <circle cx="1340" cy="968" r="9.5" fill="#fff" stroke="#495057" stroke-width="4.2"></circle>
+      <text x="1340" y="943" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1340" dy="0">MultiQC</tspan></text>
+      <circle cx="1500" cy="968" r="9.5" fill="#fff" stroke="#495057" stroke-width="4.2"></circle>
+      <text x="1500" y="943" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1500" dy="0">Quarto report</tspan></text>
+      <text x="250" y="1014" font-size="13" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="250" dy="0">Reporting line — MultiQC aggregates QC logs from FastQC, fastp, alignment, RSeQC and featureCounts; Quarto renders the final HTML report.</tspan></text>
+      <text x="1600" y="696" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96"><tspan x="1600" dy="0">DESeq2 and edgeR both run on the same gene counts as independent</tspan></text>
+      <text x="1600" y="713" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96"><tspan x="1600" dy="0">callers — only the DESeq2 route continues to GSEA / gProfiler.</tspan></text>
+      <rect x="92" y="150" width="372" height="322" rx="14" fill="#fff" stroke="#dde2ea" stroke-width="2"></rect>
+      <text x="114" y="184" font-size="18" font-weight="800" text-anchor="start" fill="#1f4e79"><tspan x="114" dy="0">Legend</tspan></text>
+      <line x1="116" y1="214" x2="162" y2="214" stroke="#c2255c" stroke-width="8" stroke-linecap="round"></line>
+      <text x="176" y="219" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">STAR route (genome aligner)</tspan></text>
+      <line x1="116" y1="244" x2="162" y2="244" stroke="#1c7ed6" stroke-width="8" stroke-linecap="round"></line>
+      <text x="176" y="249" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">HISAT2 route (genome aligner)</tspan></text>
+      <line x1="116" y1="274" x2="162" y2="274" stroke="#7048e8" stroke-width="8" stroke-linecap="round"></line>
+      <text x="176" y="279" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Kallisto route (pseudo-aligner)</tspan></text>
+      <line x1="116" y1="304" x2="162" y2="304" stroke="#f08c00" stroke-width="8" stroke-linecap="round"></line>
+      <text x="176" y="309" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Salmon route (pseudo-aligner)</tspan></text>
+      <line x1="116" y1="334" x2="162" y2="334" stroke="#0ca678" stroke-width="8" stroke-linecap="round"></line>
+      <text x="176" y="339" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">QC &amp; splicing branch</tspan></text>
+      <line x1="116" y1="364" x2="162" y2="364" stroke="#495057" stroke-width="8" stroke-linecap="round"></line>
+      <text x="176" y="369" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">MultiQC reporting line</tspan></text>
+      <rect x="126" y="389" width="26" height="26" rx="13" fill="#fff" stroke="#212529" stroke-width="3.2"></rect>
+      <text x="176" y="407" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Interchange — step shared by routes</tspan></text>
+      <circle cx="139" cy="435" r="9.5" fill="#fff" stroke="#868e96" stroke-width="4.2"></circle>
+      <text x="176" y="440" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Stop — single-route step</tspan></text>
+      <text x="114" y="454" font-size="12" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="114" dy="0">One aligner runs per execution. Reference download</tspan><tspan x="114" dy="15">and index building are separate helper workflows.</tspan></text>
+    </svg>
+  </div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 4 — NEXTFLOW SETUP
+============================================================ -->
+<section data-label="04 Setup">
+  <div class="frame">
+    <p class="eyebrow">Requirements &amp; install</p>
+    <h2 class="slide-title">Setup is four small things</h2>
+    <p class="slide-subtitle">Nextflow itself, a Java runtime, a container engine and a dry-run check. Every pipeline tool lives inside its own container — nothing to install by hand.</p>
+    <div class="rule"></div>
+
+    <div class="setup">
+      <div class="setup-card">
+        <div class="s-num">01</div>
+        <div class="s-body">
+          <h3>Install Nextflow</h3>
+          <p>One-liner — drop the binary on your <span class="chip">PATH</span> and check the version.</p>
+          <span class="s-cmd"><span class="p">$</span> <span class="c">curl -s</span> https://get.nextflow.io | bash<br><span class="p">$</span> <span class="c">nextflow</span> -version</span>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <div class="s-num">02</div>
+        <div class="s-body">
+          <h3>Java 11–21</h3>
+          <p>Required by Nextflow. Anything in that range works; check with <span class="chip">java -version</span>.</p>
+          <span class="s-cmd"><span class="p">$</span> <span class="c">java</span> -version</span>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <div class="s-num">03</div>
+        <div class="s-body">
+          <h3>Pick a container engine</h3>
+          <p>Docker, Singularity / Apptainer, or Conda. Choice flows in through <span class="chip">-profile</span> at run time.</p>
+          <span class="s-cmd"><span class="f">-profile</span> docker  |  singularity  |  conda</span>
+        </div>
+      </div>
+
+      <div class="setup-card">
+        <div class="s-num">04</div>
+        <div class="s-body">
+          <h3>Dry-run the graph</h3>
+          <p>Every process ships a <span class="chip">stub</span> block — the full workflow validates in seconds, no data needed.</p>
+          <span class="s-cmd"><span class="p">$</span> <span class="c">nextflow run</span> main.nf <span class="f">-stub-run</span> ...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>04 · Setup</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 5 — THREE RUN MODES
+============================================================ -->
+<section data-label="04 Three run modes">
+  <div class="frame">
+    <p class="eyebrow">main.nf</p>
+    <h2 class="slide-title">Three run modes, one entry point</h2>
+    <p class="slide-subtitle">A single invocation dispatches to one of three workflows. The pipeline runs exactly one mode per execution.</p>
+    <div class="rule"></div>
+
+    <div class="modes">
+      <div class="mode-card" style="border-top-color: var(--route-qc)">
+        <p class="num">01</p>
+        <h3>Download references</h3>
+        <p>Fetch genome FASTA + GTF (and optional MSigDB GMT gene sets) from Ensembl. Pin a specific release with <span class="chip">--download_release</span>; outputs land in a versioned <span class="chip">v&lt;release&gt;/</span> subfolder.</p>
+        <div class="flag">--download_refs</div>
+      </div>
+
+      <div class="mode-card" style="border-top-color: var(--route-hisat)">
+        <p class="num">02</p>
+        <h3>Build indices</h3>
+        <p>Build the index for one aligner — or all four at once with <span class="chip">--aligner all</span>. Accepts gzipped FASTA / GTF inputs and writes each index into its own directory.</p>
+        <div class="flag">--build_indices</div>
+      </div>
+
+      <div class="mode-card" style="border-top-color: var(--route-star)">
+        <p class="num">03</p>
+        <h3>Run the analysis</h3>
+        <p>The full RNASEQ workflow: read QC, alignment or pseudo-alignment, quantification, DE, splicing, fusions, enrichment and reporting. Triggered whenever <span class="chip">--input</span> is given.</p>
+        <div class="flag">--input samplesheet.csv</div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>05 · main.nf</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 5 — READ QC
+============================================================ -->
+<section data-label="05 Read QC">
+  <div class="frame">
+    <p class="eyebrow">Stage 1 · Read QC and trimming</p>
+    <h2 class="slide-title">From raw FASTQ to clean reads</h2>
+    <p class="slide-subtitle">FastQC profiles raw read quality; fastp trims adapters and low-quality bases; metrics flow on to MultiQC.</p>
+    <div class="rule"></div>
+
+    <div class="qc-flow">
+      <div class="qc-step" style="border-left: 8px solid var(--ink-2);">
+        <div class="qs-eyebrow">Input</div>
+        <p class="qs-name">FASTQ</p>
+        <p class="qs-desc">Paired- or single-end raw reads, gzipped. Layout auto-detected from the samplesheet.</p>
+      </div>
+      <div class="qc-arrow">→</div>
+      <div class="qc-step" style="border-left: 8px solid var(--route-qc);">
+        <div class="qs-eyebrow">FastQC</div>
+        <p class="qs-name">Profile</p>
+        <p class="qs-desc">Per-base quality, adapter content, duplication and overrepresented sequences.</p>
+      </div>
+      <div class="qc-arrow">→</div>
+      <div class="qc-step" style="border-left: 8px solid var(--route-qc);">
+        <div class="qs-eyebrow">fastp</div>
+        <p class="qs-name">Trim + filter</p>
+        <p class="qs-desc">Adapter removal and quality trimming. A large drop in read count signals aggressive filtering.</p>
+      </div>
+    </div>
+
+    <ul class="bullets" style="max-width: 1500px;">
+      <li><strong>Stop early.</strong> <span class="chip">--stop_at preQC</span> halts after FastQC; <span class="chip">postQC</span> halts after alignment QC — fast end-to-end sanity checks without spending compute on DE.</li>
+      <li><strong>Aggregated, not isolated.</strong> All FastQC and fastp metrics are picked up by MultiQC for cross-sample comparison.</li>
+    </ul>
+  </div>
+  <div class="pagemark qc"><span class="dot"></span>06 · Read QC</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 6 — ALIGNERS
+============================================================ -->
+<section data-label="06 Aligners">
+  <div class="frame">
+    <p class="eyebrow">Stage 2 · Alignment and quantification</p>
+    <h2 class="slide-title">Four aligners, one --aligner flag</h2>
+    <p class="slide-subtitle">Two genome aligners (STAR, HISAT2) and two pseudo-aligners (Salmon, Kallisto). Pick one — downstream stages adapt automatically.</p>
+    <div class="rule"></div>
+
+    <div class="aligners">
+      <div class="aligner-card star">
+        <div class="a-name">STAR</div>
+        <div class="a-kind">Genome aligner</div>
+        <p class="a-desc">Default. Sorted BAMs unlock the full analysis: featureCounts, RSeQC, rMATS, STAR-Fusion, diffSplice, coverage tracks.</p>
+      </div>
+      <div class="aligner-card hisat">
+        <div class="a-name">HISAT2</div>
+        <div class="a-kind">Genome aligner · lighter</div>
+        <p class="a-desc">Lower-memory genome alignment. Same downstream stack as STAR minus fusion calling (STAR-Fusion only).</p>
+      </div>
+      <div class="aligner-card salmon">
+        <div class="a-name">Salmon</div>
+        <div class="a-kind">Pseudo-aligner</div>
+        <p class="a-desc">Fast transcript-level quantification with built-in library-type detection. Unlocks isoform switching and DTU.</p>
+      </div>
+      <div class="aligner-card kallis">
+        <div class="a-name">Kallisto</div>
+        <div class="a-kind">Pseudo-aligner</div>
+        <p class="a-desc">Fastest path to transcript abundances. Pair with <span class="chip">--strandedness forward/reverse</span> for stranded libraries.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot" style="background: var(--route-star)"></span>07 · Aligners</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 7 — QUANTIFICATION
+============================================================ -->
+<section data-label="07 Quantification">
+  <div class="frame">
+    <p class="eyebrow">Stage 3 · Gene-level counts</p>
+    <h2 class="slide-title">Two paths converge on one count matrix</h2>
+    <p class="slide-subtitle">Both routes produce a gene × sample count matrix in the shape DESeq2 and edgeR expect — no manual reshaping.</p>
+    <div class="rule"></div>
+
+    <div class="quant">
+      <div class="feat-card" style="border-top: 8px solid var(--route-star); color: var(--route-star);">
+        <p class="feat-tool" style="color: var(--route-star)">featureCounts</p>
+        <p class="feat-kind">STAR / HISAT2 route</p>
+        <p class="feat-desc">Counts reads overlapping each gene on the sorted BAM. RSeQC auto-detects strandedness per sample with <span class="chip">--strandedness auto</span>, and the verdict feeds straight into <span class="chip">-s</span>.</p>
+        <p class="feat-flag">→ featurecounts/&lt;sample&gt;.counts</p>
+      </div>
+      <div class="feat-card" style="border-top: 8px solid var(--route-salmon); color: var(--route-salmon);">
+        <p class="feat-tool" style="color: var(--route-salmon)">tximport</p>
+        <p class="feat-kind">Salmon / Kallisto route</p>
+        <p class="feat-desc">Summarises transcript quantifications to gene level with length-aware normalisation. Writes <span class="chip">tximport_gene_counts.csv</span> and a <span class="chip">txi.rds</span> object DESeq2/edgeR import directly.</p>
+        <p class="feat-flag">→ tximport/txi.rds</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>08 · Quantification</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 8 — DIFFERENTIAL EXPRESSION (parallel rails)
+============================================================ -->
+<section data-label="08 Differential expression">
+  <div class="frame">
+    <p class="eyebrow">Stage 4 · Differential expression</p>
+    <h2 class="slide-title">DESeq2 and edgeR run in parallel</h2>
+    <p class="slide-subtitle">Two independent callers on the same gene counts — genes called significant by both are the most robust hits.</p>
+    <div class="rule"></div>
+
+    <div class="de-canvas">
+      <div class="de-source">
+        <div class="lbl">Input</div>
+        <div class="val">Gene counts<br><span style="font-weight:400;color:var(--ink-mute);font-size:24px;">featureCounts or tximport</span></div>
+      </div>
+
+      <div class="de-rail" style="border-top-color: var(--navy)">
+        <h3 style="color: var(--navy)">DESeq2</h3>
+        <p class="rail-sub">Wald test · apeglm LFC shrinkage</p>
+        <ul>
+          <li><strong>~ batch + condition</strong> auto-applied when a batch column is present; override with <span class="chip">--design</span>.</li>
+          <li>Per-contrast CSVs with <span class="chip">gene_name</span> and <span class="chip">gene_biotype</span> annotation.</li>
+          <li>MA, volcano and PCA plots; top-20 heatmap.</li>
+          <li>Feeds GSEA (fgsea) and gProfiler downstream.</li>
+        </ul>
+      </div>
+
+      <div class="de-rail" style="border-top-color: var(--route-qc)">
+        <h3 style="color: var(--route-qc)">edgeR</h3>
+        <p class="rail-sub">Quasi-likelihood GLM (glmQLFTest)</p>
+        <ul>
+          <li>Same design matrix and covariate handling as DESeq2 — comparable methodology.</li>
+          <li>Per-contrast CSVs with <span class="chip">logFC</span>, <span class="chip">FDR</span> and annotation columns.</li>
+          <li>MDS, smear and per-contrast volcano plots.</li>
+          <li>Independent cross-check — agreement strengthens calls.</li>
+        </ul>
+      </div>
+
+      <div class="de-output">
+        <div class="lbl">Output</div>
+        <div class="val">Per-contrast<br>results CSVs<small>+ plots, PCA, heatmap</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>09 · Differential expression</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 10 — ALTERNATIVE SPLICING (split A)
+============================================================ -->
+<section data-label="10 Alternative splicing">
+  <div class="frame">
+    <p class="eyebrow">Stage 5a · Alternative splicing</p>
+    <h2 class="slide-title">Two windows on splicing — events and exons</h2>
+    <p class="slide-subtitle">Both run on the genome-aligner route. They answer related but distinct questions, and complement each other.</p>
+    <div class="rule"></div>
+
+    <div class="two-feat">
+      <div class="feat-card" style="color: var(--route-qc)">
+        <p class="feat-tool">rMATS</p>
+        <p class="feat-kind">Event-based splicing</p>
+        <p class="feat-desc">Five event classes detected per condition pair:</p>
+        <ul class="bullets" style="margin-top: 18px;">
+          <li><strong>SE</strong> — skipped exons</li>
+          <li><strong>MXE</strong> — mutually exclusive exons</li>
+          <li><strong>A3SS / A5SS</strong> — alternative splice sites</li>
+          <li><strong>RI</strong> — retained introns</li>
+        </ul>
+        <p class="feat-flag">→ rmats_output/  ·  cutoff: FDR &lt; 0.05, |ΔPSI| &gt; 0.1</p>
+      </div>
+
+      <div class="feat-card" style="color: var(--navy)">
+        <p class="feat-tool">edgeR diffSplice</p>
+        <p class="feat-kind">Differential exon usage</p>
+        <p class="feat-desc">For each exon, tests whether its log-fold-change between conditions departs from the gene's overall log-fold-change.</p>
+        <ul class="bullets" style="margin-top: 18px;">
+          <li><strong>Per-feature table</strong> — which exon drives the change</li>
+          <li><strong>Per-gene table</strong> — Simes-aggregated across the gene's exons</li>
+          <li><strong>Annotated</strong> with <span class="chip">gene_name</span>, <span class="chip">gene_biotype</span></li>
+        </ul>
+        <p class="feat-flag">opt-in · --diffsplice · needs --gtf</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>10 · Alt splicing</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 11 — ISOFORMS & FUSIONS (split B)
+============================================================ -->
+<section data-label="11 Isoforms and fusions">
+  <div class="frame">
+    <p class="eyebrow">Stage 5b · Transcript isoforms &amp; fusions</p>
+    <h2 class="slide-title">Three views invisible to gene-level DE</h2>
+    <p class="slide-subtitle">A gene can show no change in total expression yet still flip its dominant isoform, redistribute its transcripts, or harbour a fusion.</p>
+    <div class="rule"></div>
+
+    <div class="three-feat">
+      <div class="feat-card" style="color: var(--route-salmon)">
+        <p class="feat-tool">IsoformSwitchAnalyzeR</p>
+        <p class="feat-kind">Dominant-isoform changes</p>
+        <p class="feat-desc">Flags genes whose dominant transcript flips between conditions — even when total gene expression is flat. Per-gene switch plots included.</p>
+        <p class="feat-flag">Salmon · --isoform_switch</p>
+      </div>
+      <div class="feat-card" style="color: var(--route-kallis)">
+        <p class="feat-tool">DEXSeq DTU</p>
+        <p class="feat-kind">Transcript-proportion shifts</p>
+        <p class="feat-desc">Tests significant changes in a gene's transcript proportions, independent of total expression. Per-gene q-values aggregate across transcripts.</p>
+        <p class="feat-flag">Salmon / Kallisto · --dtu</p>
+      </div>
+      <div class="feat-card" style="color: var(--route-star)">
+        <p class="feat-tool">STAR-Fusion</p>
+        <p class="feat-kind">Gene-fusion detection</p>
+        <p class="feat-desc">Per-sample <span class="chip">fusion_predictions.tsv</span> with junction and spanning-read counts, breakpoints and FFPM. Needs a CTAT library.</p>
+        <p class="feat-flag">STAR · --ctat_lib &lt;dir&gt;</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>11 · Isoforms &amp; fusions</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 10 — ENRICHMENT
+============================================================ -->
+<section data-label="10 Functional enrichment">
+  <div class="frame">
+    <p class="eyebrow">Stage 6 · Functional enrichment</p>
+    <h2 class="slide-title">From gene lists to pathway biology</h2>
+    <p class="slide-subtitle">Two complementary methods downstream of DESeq2 — one ranked, one thresholded. Agreement strengthens the conclusion.</p>
+    <div class="rule"></div>
+
+    <div class="enrich">
+      <div class="feat-card gsea">
+        <p class="feat-tool">GSEA · fgsea</p>
+        <p class="feat-kind">Ranked-list enrichment</p>
+        <p class="feat-desc">Runs on the full ranked DESeq2 gene list, no cutoffs. Reports <span class="chip">NES</span> (direction by sign), p, padj per pathway.</p>
+        <p class="feat-flag">enable with --gmt &lt;file.gmt&gt;</p>
+      </div>
+      <div class="feat-card gprof">
+        <p class="feat-tool">gProfiler · gprofiler2</p>
+        <p class="feat-kind">Over-representation</p>
+        <p class="feat-desc">Tests thresholded significant up- and down-regulated lists separately against GO terms and pathways. Per-contrast tables and <span class="chip">gostplot</span> images.</p>
+        <p class="feat-flag">organism via --organism (default hsapiens)</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>12 · Enrichment</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 11 — REPORTING
+============================================================ -->
+<section data-label="11 Reporting">
+  <div class="frame">
+    <p class="eyebrow">Stage 7 · Reporting</p>
+    <h2 class="slide-title">Three reports per run, no clicking required</h2>
+    <p class="slide-subtitle">Every run produces self-contained HTML — start with MultiQC, drill into Quarto, hand off the run summary.</p>
+    <div class="rule"></div>
+
+    <div class="reports">
+      <div class="report-card">
+        <p class="r-eyebrow">QC aggregation</p>
+        <h3>MultiQC</h3>
+        <p>Single page combining FastQC, fastp, STAR/HISAT2, RSeQC and featureCounts metrics for every sample.</p>
+        <ul>
+          <li>Cross-sample comparison and outlier spotting</li>
+          <li>Custom rnaseq-flow theme and ordered modules</li>
+          <li>Best starting point for run-wide QC</li>
+        </ul>
+        <div class="filepath">multiqc/multiqc_report.html</div>
+      </div>
+
+      <div class="report-card">
+        <p class="r-eyebrow">Analysis narrative</p>
+        <h3>Quarto report</h3>
+        <p>Interactive analysis report that brings every stage's results together in one place; sections appear only when their data is present.</p>
+        <ul>
+          <li>Plotly volcano plots (DESeq2 + edgeR)</li>
+          <li>PCA / MDS / heatmap panels</li>
+          <li>Searchable DESeq2, edgeR, GSEA, gProfiler tables</li>
+          <li>DESeq2-vs-edgeR agreement table</li>
+        </ul>
+        <div class="filepath">quarto_report/analysis_report.html</div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark report"><span class="dot"></span>13 · Reporting</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 12 — SAMPLESHEET
+============================================================ -->
+<section data-label="12 Samplesheet">
+  <div class="frame">
+    <p class="eyebrow">Usage · The input</p>
+    <h2 class="slide-title">Everything starts with a four-column CSV</h2>
+    <p class="slide-subtitle">Validated before any process is scheduled — typos and missing files surface immediately.</p>
+    <div class="rule"></div>
+
+    <div class="csv-block">
+      <table>
+        <thead>
+          <tr>
+            <th>sample</th>
+            <th>R1</th>
+            <th>R2</th>
+            <th>condition</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ctrl_1</td>
+            <td>/data/ctrl_1_R1.fastq.gz</td>
+            <td>/data/ctrl_1_R2.fastq.gz</td>
+            <td class="cond-ref">REF</td>
+          </tr>
+          <tr>
+            <td>ctrl_2</td>
+            <td>/data/ctrl_2_R1.fastq.gz</td>
+            <td>/data/ctrl_2_R2.fastq.gz</td>
+            <td class="cond-ref">REF</td>
+          </tr>
+          <tr>
+            <td>treat_1</td>
+            <td>/data/treat_1_R1.fastq.gz</td>
+            <td>/data/treat_1_R2.fastq.gz</td>
+            <td class="cond-tx">treatment</td>
+          </tr>
+          <tr>
+            <td>treat_2</td>
+            <td>/data/treat_2_R1.fastq.gz</td>
+            <td>/data/treat_2_R2.fastq.gz</td>
+            <td class="cond-tx">treatment</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="csv-notes">
+      <div class="csv-note">
+        <h4>REF is the baseline</h4>
+        <p>Naming a group <code>REF</code> makes it the denominator of every contrast — positive log2FC means up in the other condition.</p>
+      </div>
+      <div class="csv-note">
+        <h4>R2 is optional</h4>
+        <p>Single-end vs paired-end is detected automatically from whether the <code>R2</code> column is populated.</p>
+      </div>
+      <div class="csv-note">
+        <h4>Batch column auto-detected</h4>
+        <p>Add a <code>batch</code> column and the DE model becomes <code>~ batch + condition</code>; <code>--design</code> takes any formula.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>14 · Samplesheet</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 13 — WORKED SCENARIO
+============================================================ -->
+<section data-label="13 Worked scenario">
+  <div class="frame">
+    <p class="eyebrow">Usage · End-to-end</p>
+    <h2 class="slide-title">Scenario A — comprehensive STAR run</h2>
+    <p class="slide-subtitle">Fusions, splicing, differential expression and enrichment, all from a single invocation.</p>
+    <div class="rule"></div>
+
+    <div class="terminal">
+      <div class="tdots"><span></span><span></span><span></span></div>
+      <div class="ttitle">~ / rnaseq-flow</div>
+<pre class="code"><span class="prompt">$</span> <span class="cmd">nextflow run</span> main.nf \
+    <span class="flag">--input</span>          <span class="val">samplesheet.csv</span> \
+    <span class="flag">--aligner</span>        <span class="val">star</span> \
+    <span class="flag">--star_index</span>     <span class="val">indices/human/star_index</span> \
+    <span class="flag">--gtf</span>            <span class="val">references/human/annotation.gtf.gz</span> \
+    <span class="flag">--strandedness</span>   <span class="val">reverse</span> \
+    <span class="flag">--ctat_lib</span>       <span class="val">/refs/CTAT_lib/ctat_genome_lib_build_dir</span> \
+    <span class="flag">--diffsplice</span> \
+    <span class="flag">--gmt</span>            <span class="val">references/human/gmt/c2_kegg.gmt</span> \
+    <span class="flag">--outdir</span>         <span class="val">results</span> \
+    <span class="flag">-profile</span>         <span class="val">docker</span></pre>
+    </div>
+
+    <p class="scenario-note"><strong>Salmon variant (Scenario B):</strong> swap to <span class="chip">--aligner salmon</span> with <span class="chip">--salmon_index</span> and <span class="chip">--transcript_fasta</span>, add <span class="chip">--isoform_switch</span> and <span class="chip">--dtu</span> for transcript-level analyses. Same samplesheet, same outputs structure.</p>
+  </div>
+  <div class="pagemark"><span class="dot"></span>15 · Worked scenario</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 16 — RESULTS TO EXPECT
+============================================================ -->
+<section data-label="16 Results to expect">
+  <div class="frame">
+    <p class="eyebrow">Sample output</p>
+    <h2 class="slide-title">What lands in <code style="font-family:'JetBrains Mono',monospace;font-size:64px;color:var(--navy);">results/</code></h2>
+    <p class="slide-subtitle">Self-contained HTML reports plus a directory per analysis stage.</p>
+    <div class="rule"></div>
+
+    <div class="results-grid">
+      <div class="tree">
+        <div class="t-title">results/ &nbsp; (STAR run · all stages)</div>
+<pre style="margin: 0; white-space: pre;"><span class="dir">results/</span>
+├── <span class="acc">multiqc/multiqc_report.html</span>
+├── <span class="acc">quarto_report/analysis_report.html</span>
+├── <span class="dir">fastqc/</span>           <span class="com">raw read QC</span>
+├── <span class="dir">fastp/</span>            <span class="com">trim + filter</span>
+├── <span class="dir">star/</span>             <span class="com">sorted BAMs</span>
+├── <span class="dir">rseqc/</span>            <span class="com">strandedness</span>
+├── <span class="dir">bam_to_bigwig/</span>    <span class="com">CPM tracks</span>
+├── <span class="dir">featurecounts/</span>    <span class="com">gene counts</span>
+├── <span class="dir">deseq2_output/</span>    <span class="com">DE + volcanoes</span>
+├── <span class="dir">edger_output/</span>     <span class="com">DE cross-check</span>
+├── <span class="dir">rmats_output/</span>     <span class="com">splicing</span>
+├── <span class="dir">gsea_output/</span>      <span class="com">enrichment</span>
+└── <span class="dir">pipeline_info/</span>    <span class="com">run summary</span></pre>
+      </div>
+
+      <div class="key-outputs">
+        <div class="key-output report">
+          <div class="ko-file">multiqc/multiqc_report.html</div>
+          <div class="ko-desc">Start here. One page combining every QC tool's metrics across all samples.</div>
+        </div>
+        <div class="key-output report">
+          <div class="ko-file">quarto_report/analysis_report.html</div>
+          <div class="ko-desc">Interactive narrative — plotly volcanoes, PCA / MDS / heatmaps, searchable tables.</div>
+        </div>
+        <div class="key-output de">
+          <div class="ko-file">deseq2_output/deseq2_results_&lt;A&gt;_vs_&lt;B&gt;.csv</div>
+          <div class="ko-desc">Per-contrast DE — gene_name, log2FC (apeglm), padj, plus volcano + MA plots.</div>
+        </div>
+        <div class="key-output de">
+          <div class="ko-file">edger_output/edger_results_&lt;A&gt;_vs_&lt;B&gt;.csv</div>
+          <div class="ko-desc">Independent edgeR cross-check — logFC, FDR, MDS and smear plots.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>16 · Results</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 17 — WHAT'S NEW IN 1.1.0
+============================================================ -->
+<section data-label="14 What's new in 1.1.0">
+  <div class="frame">
+    <p class="eyebrow">Release notes</p>
+    <h2 class="slide-title">What's new in 1.1.0</h2>
+    <div class="release-head" style="margin-top: 18px;">
+      <span class="release-tag">v1.1.0</span>
+      <span class="release-date">25 May 2026</span>
+    </div>
+    <div class="rule" style="margin-top: 6px;"></div>
+
+    <div class="changes">
+      <div class="change">
+        <h4>Differential splicing — <code>--diffsplice</code></h4>
+        <p>edgeR <code>diffSpliceDGE</code> at exon level (STAR/HISAT2) or transcript level (Salmon/Kallisto). New <code>diffsplice_output/</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Batch &amp; covariate modelling</h4>
+        <p>A <code>batch</code> samplesheet column is auto-detected; <code>--design</code> accepts any formula such as <code>~ sex + batch + condition</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Gene-symbol annotation</h4>
+        <p>A new <code>GTF2GENEINFO</code> step adds <code>gene_name</code> and <code>gene_biotype</code> to every DE, DTU and diffSplice result table.</p>
+      </div>
+      <div class="change">
+        <h4>Per-contrast volcano plots</h4>
+        <p>DESeq2 and edgeR each emit a coloured <code>volcano_&lt;A&gt;_vs_&lt;B&gt;.png</code> for every pairwise contrast.</p>
+      </div>
+      <div class="change">
+        <h4>apeglm LFC shrinkage</h4>
+        <p>DESeq2 log2 fold changes are shrunk with <code>lfcShrink</code>; Wald significance is preserved from the unshrunken fit.</p>
+      </div>
+      <div class="change">
+        <h4>Expanded Quarto report + run summary</h4>
+        <p>Full analysis report with interactive plotly volcanoes and searchable tables, plus a self-written <code>run_summary.html</code> after every run.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>17 · What's new</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 18 — QUICK START
+============================================================ -->
+<section data-label="15 Quick start">
+  <div class="frame">
+    <p class="eyebrow">Closing</p>
+    <h2 class="slide-title">Quick start — four commands</h2>
+    <p class="slide-subtitle">Validate, fetch, build, run. Each step is a separate invocation of <code style="font-family:'JetBrains Mono',monospace;font-size:30px;color:var(--navy);">main.nf</code>.</p>
+    <div class="rule"></div>
+
+    <div class="qs-stack">
+      <div class="qs-step">
+        <div class="qs-num">01</div>
+        <div class="qs-body">
+          <h4>Validate the workflow without data</h4>
+          <p>Every process ships a stub block — the full graph dry-runs in seconds.</p>
+          <code>nextflow run main.nf --input test.csv --aligner star --star_index fake --gtf fake.gtf -stub-run</code>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">02</div>
+        <div class="qs-body">
+          <h4>Fetch references for your species</h4>
+          <p>Pin a release; outputs land in a versioned <code>v&lt;release&gt;/</code> subfolder.</p>
+          <code>nextflow run main.nf --download_refs --download_species homo_sapiens --download_release 102</code>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">03</div>
+        <div class="qs-body">
+          <h4>Build the index for your aligner</h4>
+          <p>Or pass <code>--aligner all</code> to build STAR, HISAT2, Salmon and Kallisto in one run.</p>
+          <code>nextflow run main.nf --build_indices --aligner star --genome_fasta genome.fa.gz --gtf annotation.gtf.gz</code>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">04</div>
+        <div class="qs-body">
+          <h4>Run the analysis</h4>
+          <p>One invocation, end-to-end. Check <code>results/multiqc/multiqc_report.html</code> when it finishes.</p>
+          <code>nextflow run main.nf --input samplesheet.csv --aligner star --star_index ... --gtf ... -profile docker</code>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>18 · Quick start</div>
+</section>
+
+</deck-stage>
+
+</body>
+</html>

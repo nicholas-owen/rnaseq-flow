@@ -1,0 +1,12 @@
+#stuff
+.nextflow/
+docs/
+references/
+work/
+results/
+.nextflow.log*
+future_improvements.md
+*.code-workspace
+*.pptx
+*.rar
+validate*.py

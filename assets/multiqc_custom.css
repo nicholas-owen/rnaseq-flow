@@ -1,0 +1,122 @@
+/* ===========================================================================
+   rnaseq-flow — custom MultiQC report theme
+   ---------------------------------------------------------------------------
+   A light, additive restyle of the MultiQC report in the rnaseq-flow blue
+   palette. Loaded via `custom_css_files` in multiqc_config.yml. Every rule is
+   cosmetic — if a selector does not match a given MultiQC version the report
+   still renders correctly, just without that touch of styling.
+   =========================================================================== */
+
+:root {
+  --rf-ink:    #1f2937;
+  --rf-blue:   #1f4e79;
+  --rf-accent: #2e75b6;
+  --rf-bg:     #f4f6fb;
+  --rf-line:   #e2e8f0;
+}
+
+/* ---- Typography ---------------------------------------------------------- */
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont,
+               Roboto, Helvetica, Arial, sans-serif;
+  color: var(--rf-ink);
+  background-color: var(--rf-bg);
+}
+
+h1, h2, h3, h4,
+.mqc-section-header,
+.mqc-module-section-header {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--rf-blue);
+}
+
+/* ---- Report title & header ---------------------------------------------- */
+#page_title,
+#mqc_header {
+  border-bottom: 3px solid var(--rf-accent);
+  padding-bottom: 12px;
+  margin-bottom: 22px;
+}
+#page_title img,
+.custom-logo,
+img.custom-logo {
+  max-height: 58px;
+  width: auto;
+}
+#analysis_dirs_wrapper,
+.mqc-intro { color: #475569; }
+
+/* ---- Left navigation ----------------------------------------------------- */
+.side-nav,
+.side-nav-wrapper {
+  background-color: #ffffff;
+  border-right: 1px solid var(--rf-line);
+}
+.side-nav .mqc_loading_warning { color: var(--rf-accent); }
+.side-nav a,
+#side-nav a { color: var(--rf-accent); }
+.side-nav a:hover,
+.side-nav li.active > a {
+  color: var(--rf-blue);
+  font-weight: 600;
+}
+.mqc-toplevel { color: var(--rf-blue) !important; font-weight: 700; }
+
+/* ---- Section panels ------------------------------------------------------ */
+.mqc-section,
+.mqc-module-section {
+  background-color: #ffffff;
+  border: 1px solid var(--rf-line);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.mqc-section-header,
+.mqc-module-section-header {
+  border-left: 4px solid var(--rf-accent);
+  padding-left: 12px;
+}
+
+/* ---- Links & buttons ----------------------------------------------------- */
+a { color: var(--rf-accent); }
+a:hover, a:focus { color: var(--rf-blue); }
+
+.btn-primary {
+  background-color: var(--rf-accent);
+  border-color: var(--rf-accent);
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+  background-color: var(--rf-blue);
+  border-color: var(--rf-blue);
+}
+.btn-default { border-color: var(--rf-line); }
+
+/* ---- Tables -------------------------------------------------------------- */
+.table > thead > tr > th,
+.mqc_table thead th,
+table.dataTable thead th {
+  background-color: var(--rf-blue);
+  color: #ffffff;
+  font-weight: 600;
+  border-color: var(--rf-blue);
+}
+.table > tbody > tr:hover > td { background-color: #eef3fb; }
+.mqc_table tbody td { border-color: var(--rf-line); }
+
+/* ---- Info / alert boxes -------------------------------------------------- */
+.alert-info {
+  background-color: #eef3fb;
+  border-color: #cdddf0;
+  color: var(--rf-blue);
+}
+.well, .panel {
+  border-radius: 10px;
+  border-color: var(--rf-line);
+}
+
+/* ---- Footer -------------------------------------------------------------- */
+.footer, .footer a { color: #64748b; }

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 128" width="600" height="128"
+     role="img" aria-label="rnaseq-flow — bulk RNA-seq pipeline">
+  <title>rnaseq-flow</title>
+
+  <!-- route-line mark: the four aligner-route colours, metro-map style -->
+  <line x1="32" y1="36" x2="120" y2="36" stroke="#c2255c" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="32" y1="55" x2="150" y2="55" stroke="#1c7ed6" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="32" y1="74" x2="104" y2="74" stroke="#7048e8" stroke-width="9.5" stroke-linecap="round"/>
+  <line x1="32" y1="93" x2="134" y2="93" stroke="#f08c00" stroke-width="9.5" stroke-linecap="round"/>
+  <circle cx="150" cy="55" r="7.6" fill="#ffffff" stroke="#1c7ed6" stroke-width="3.6"/>
+  <circle cx="134" cy="93" r="7.6" fill="#ffffff" stroke="#f08c00" stroke-width="3.6"/>
+
+  <!-- wordmark -->
+  <text x="184" y="74" font-family="'Segoe UI',Helvetica,Arial,sans-serif"
+        font-size="56" font-weight="800">
+    <tspan fill="#1f4e79">rnaseq</tspan><tspan fill="#2e75b6">-flow</tspan>
+  </text>
+
+  <!-- tagline -->
+  <text x="187" y="103" font-family="'Segoe UI',Helvetica,Arial,sans-serif"
+        font-size="14.5" font-weight="600" letter-spacing="3" fill="#64748b">BULK RNA-SEQ PIPELINE</text>
+</svg>

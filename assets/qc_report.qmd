@@ -1,0 +1,104 @@
+---
+title: "RNA-seq Quality Control Report"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: cosmo
+    embed-resources: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+# Only base + tidyverse packages are used so this renders in the standard
+# rocker/verse container without installing extra dependencies.
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(jsonlite)
+```
+
+# Introduction
+
+This report provides a summary of the quality control steps for the RNA-seq analysis pipeline.
+
+## Data Source
+Parsing MultiQC JSON output.
+
+```{r load_data}
+# Look for multiqc_data.json in the current directory or a 'multiqc_data' subdirectory
+json_file <- list.files(pattern = "multiqc_data.json", recursive = TRUE, full.names = TRUE)[1]
+
+if (is.na(json_file)) {
+  stop("Could not find multiqc_data.json file.")
+}
+
+mqc_data <- fromJSON(json_file)
+```
+
+# General Statistics
+
+```{r general_stats}
+# Extract General Stats
+# Structure depends on MultiQC version, but usually under report_general_stats_data
+stats_list <- mqc_data$report_general_stats_data
+# Combine list of lists into a dataframe
+stats_df <- bind_rows(stats_list, .id = "Sample")
+
+# Depending on exact structure, we might need to handle specific columns
+if (!is.null(stats_df)) {
+  # Clean up column names if needed
+  knitr::kable(stats_df, caption = "General Statistics Summary")
+} else {
+  print("No general statistics found in JSON.")
+}
+```
+
+# Read Counts (Fastp)
+
+```{r fastp_counts}
+# Check for Fastp data
+if ("fastp" %in% names(mqc_data$report_saved_raw_data)) {
+  fastp_raw <- mqc_data$report_saved_raw_data$fastp
+  # Depending on structure, might be nested. 
+  # Usually multiqc saves nice tables. Let's try to find the plot data specifically or just parse raw.
+  
+  # Simplification: Create a dummy plot if parsing fails or just showing concepts
+  # Ideally we parse `multiqc_general_stats`
+  
+  if ("fastp_mqc-generalstats-fastp-filtering_result_passed_filter_reads" %in% names(stats_df)) {
+      plot_df <- stats_df %>%
+        select(Sample, Passed = `fastp_mqc-generalstats-fastp-filtering_result_passed_filter_reads`) %>%
+        mutate(Passed = as.numeric(Passed))
+      
+      p <- ggplot(plot_df, aes(x = Sample, y = Passed)) +
+        geom_bar(stat = "identity", fill = "steelblue") +
+        theme_minimal() +
+        coord_flip() +
+        labs(title = "Reads Passing Filter (Fastp)", y = "Count")
+
+      print(p)
+  }
+}
+```
+
+# FastQC Summary
+
+```{r fastqc_summary}
+# FastQC usually contributes to general stats too
+qc_cols <- grep("FastQC", names(stats_df), value = TRUE, ignore.case = TRUE)
+
+if (length(qc_cols) > 0) {
+  # visualize first metric found
+  col_to_plot <- qc_cols[1]
+  
+  p2 <- ggplot(stats_df, aes(x = .data[["Sample"]], y = .data[[col_to_plot]])) +
+    geom_bar(stat = "identity", fill = "salmon") +
+    theme_minimal() +
+    coord_flip() +
+    labs(title = paste("FastQC:", col_to_plot), x = "Sample")
+
+  print(p2)
+}
+```

@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1960 1070" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<rect width="1960" height="1070" fill="#fbfcfe"/>
+<text x="70.0" y="56.0" font-size="34" font-weight="800" text-anchor="start" fill="#1f4e79" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="70.0" dy="0">rnaseq-flow</tspan>
+</text>
+<text x="70.0" y="82.0" font-size="16" font-weight="500" text-anchor="start" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="70.0" dy="0">Bulk RNA-seq pipeline — workflow map</tspan>
+</text>
+<text x="300.0" y="104.0" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="300.0" dy="0">INPUT  &amp;  READ QC</tspan>
+</text>
+<text x="905.0" y="104.0" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="905.0" dy="0">ALIGNMENT  /  QUANTIFICATION</tspan>
+</text>
+<text x="1500.0" y="104.0" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1500.0" dy="0">DIFFERENTIAL EXPRESSION</tspan>
+</text>
+<text x="1780.0" y="104.0" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1780.0" dy="0">ENRICHMENT</tspan>
+</text>
+<line x1="520" y1="116" x2="520" y2="1014" stroke="#eceef3" stroke-width="2"/>
+<line x1="1290" y1="116" x2="1290" y2="1014" stroke="#eceef3" stroke-width="2"/>
+<line x1="1640" y1="116" x2="1640" y2="1014" stroke="#eceef3" stroke-width="2"/>
+<path d="M 120.0 502.0 L 464.0 502.0 Q 480.0 502.0 491.3 490.7 L 670.7 311.3 Q 682.0 300.0 698.0 300.0 L 1074.0 300.0 Q 1090.0 300.0 1101.3 311.3 L 1230.7 440.7 Q 1242.0 452.0 1258.0 452.0 L 1900.0 452.0" fill="none" stroke="#c2255c" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 120.0 514.0 L 464.0 514.0 Q 480.0 514.0 491.3 502.7 L 646.7 347.3 Q 658.0 336.0 674.0 336.0 L 1074.0 336.0 Q 1090.0 336.0 1101.3 347.3 L 1206.7 452.7 Q 1218.0 464.0 1234.0 464.0 L 1900.0 464.0" fill="none" stroke="#1c7ed6" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 120.0 526.0 L 464.0 526.0 Q 480.0 526.0 491.3 537.3 L 646.7 692.7 Q 658.0 704.0 674.0 704.0 L 1074.0 704.0 Q 1090.0 704.0 1101.3 692.7 L 1306.7 487.3 Q 1318.0 476.0 1334.0 476.0 L 1900.0 476.0" fill="none" stroke="#7048e8" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 120.0 538.0 L 464.0 538.0 Q 480.0 538.0 491.3 549.3 L 670.7 728.7 Q 682.0 740.0 698.0 740.0 L 1074.0 740.0 Q 1090.0 740.0 1101.3 728.7 L 1330.7 499.3 Q 1342.0 488.0 1358.0 488.0 L 1900.0 488.0" fill="none" stroke="#f08c00" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1380.0 452.0 L 1508.7 580.7 Q 1520.0 592.0 1536.0 592.0 L 1640.0 592.0" fill="none" stroke="#c2255c" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1380.0 464.0 L 1508.7 592.7 Q 1520.0 604.0 1536.0 604.0 L 1640.0 604.0" fill="none" stroke="#1c7ed6" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1380.0 476.0 L 1508.7 604.7 Q 1520.0 616.0 1536.0 616.0 L 1640.0 616.0" fill="none" stroke="#7048e8" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1380.0 488.0 L 1508.7 616.7 Q 1520.0 628.0 1536.0 628.0 L 1640.0 628.0" fill="none" stroke="#f08c00" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 800.0 300.0 L 950.0 150.0" fill="none" stroke="#c2255c" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 900.0 285.0 L 939.6 246.2 Q 951.0 235.0 967.0 235.0 L 1620.0 235.0" fill="none" stroke="#0ca678" stroke-width="9" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 820.0 740.0 L 914.0 834.0" fill="none" stroke="#f08c00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1000.0 704.0 L 1000.0 848.0 Q 1000.0 864.0 1016.0 864.0 L 1300.0 864.0" fill="none" stroke="#7048e8" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1016.0 740.0 L 1016.0 864.0 Q 1016.0 880.0 1032.0 880.0 L 1300.0 880.0" fill="none" stroke="#f08c00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 250.0 968.0 L 1560.0 968.0" fill="none" stroke="#495057" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="300" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
+<circle cx="440" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
+<circle cx="720" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
+<circle cx="900" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
+<circle cx="1090" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
+<rect x="105" y="487" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="120.0" y="576.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="120.0" dy="0">FASTQ</tspan>
+<tspan x="120.0" dy="17">raw reads</tspan>
+</text>
+<rect x="285" y="487" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="300.0" y="576.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="300.0" dy="0">FastQC</tspan>
+</text>
+<rect x="425" y="487" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="440.0" y="576.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="440.0" dy="0">fastp</tspan>
+<tspan x="440.0" dy="17">trim + filter</tspan>
+</text>
+<rect x="885" y="285" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="900.0" y="374.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="900.0" dy="0">SAMtools</tspan>
+<tspan x="900.0" dy="17">index</tspan>
+</text>
+<rect x="1075" y="285" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1090.0" y="374.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1090.0" dy="0">featureCounts</tspan>
+</text>
+<rect x="1075" y="689" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1090.0" y="778.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1090.0" dy="0">tximport</tspan>
+<tspan x="1090.0" dy="17">transcript → gene</tspan>
+</text>
+<rect x="1455" y="437" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1470.0" y="427.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1470.0" dy="0">DESeq2</tspan>
+</text>
+<rect x="1685" y="437" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1700.0" y="427.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1700.0" dy="0">GSEA</tspan>
+</text>
+<rect x="1845" y="437" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1860.0" y="526.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1860.0" dy="0">gProfiler</tspan>
+</text>
+<rect x="1585" y="577" width="30" height="66" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1600.0" y="666.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1600.0" dy="0">edgeR</tspan>
+</text>
+<circle cx="720" cy="300" r="9.5" fill="#ffffff" stroke="#c2255c" stroke-width="4.2"/>
+<text x="720.0" y="275.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="720.0" dy="0">STAR</tspan>
+</text>
+<circle cx="720" cy="336" r="9.5" fill="#ffffff" stroke="#1c7ed6" stroke-width="4.2"/>
+<text x="720.0" y="374.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="720.0" dy="0">HISAT2</tspan>
+</text>
+<circle cx="720" cy="704" r="9.5" fill="#ffffff" stroke="#7048e8" stroke-width="4.2"/>
+<text x="720.0" y="679.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="720.0" dy="0">Kallisto</tspan>
+</text>
+<circle cx="720" cy="740" r="9.5" fill="#ffffff" stroke="#f08c00" stroke-width="4.2"/>
+<text x="720.0" y="778.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="720.0" dy="0">Salmon</tspan>
+</text>
+<circle cx="950" cy="150" r="9.5" fill="#ffffff" stroke="#c2255c" stroke-width="4.2"/>
+<text x="972.0" y="155.0" font-size="15" font-weight="600" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="972.0" dy="0">STAR-Fusion</tspan>
+</text>
+<circle cx="1080" cy="235" r="9.5" fill="#ffffff" stroke="#0ca678" stroke-width="4.2"/>
+<text x="1080.0" y="210.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1080.0" dy="0">RSeQC</tspan>
+</text>
+<circle cx="1240" cy="235" r="9.5" fill="#ffffff" stroke="#0ca678" stroke-width="4.2"/>
+<text x="1240.0" y="210.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1240.0" dy="0">bigWig coverage</tspan>
+</text>
+<circle cx="1400" cy="235" r="9.5" fill="#ffffff" stroke="#0ca678" stroke-width="4.2"/>
+<text x="1400.0" y="210.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1400.0" dy="0">rMATS  (splicing)</tspan>
+</text>
+<circle cx="1560" cy="235" r="9.5" fill="#ffffff" stroke="#0ca678" stroke-width="4.2"/>
+<text x="1560.0" y="193.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1560.0" dy="0">edgeR diffSplice</tspan>
+<tspan x="1560.0" dy="17">(exon usage)</tspan>
+</text>
+<circle cx="914" cy="834" r="9.5" fill="#ffffff" stroke="#f08c00" stroke-width="4.2"/>
+<text x="914.0" y="872.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="914.0" dy="0">IsoformSwitchAnalyzeR</tspan>
+</text>
+<rect x="1135" y="849" width="30" height="46" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1150.0" y="918.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1150.0" dy="0">DEXSeq DTU</tspan>
+<tspan x="1150.0" dy="17">diff. transcript usage</tspan>
+</text>
+<rect x="1285" y="849" width="30" height="46" rx="15" fill="#ffffff" stroke="#212529" stroke-width="3.4"/>
+<text x="1300.0" y="822.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1300.0" dy="0">edgeR diffSplice</tspan>
+<tspan x="1300.0" dy="17">(transcript usage)</tspan>
+</text>
+<circle cx="1340" cy="968" r="9.5" fill="#ffffff" stroke="#495057" stroke-width="4.2"/>
+<text x="1340.0" y="943.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1340.0" dy="0">MultiQC</tspan>
+</text>
+<circle cx="1500" cy="968" r="9.5" fill="#ffffff" stroke="#495057" stroke-width="4.2"/>
+<text x="1500.0" y="943.0" font-size="15" font-weight="600" text-anchor="middle" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1500.0" dy="0">Quarto report</tspan>
+</text>
+<text x="250.0" y="1014.0" font-size="13" font-weight="500" text-anchor="start" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="250.0" dy="0">Reporting line — MultiQC aggregates QC logs from FastQC, fastp, alignment, RSeQC and featureCounts; Quarto renders the final HTML report.</tspan>
+</text>
+<text x="1600.0" y="696.0" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1600.0" dy="0">DESeq2 and edgeR both run on the same gene counts as independent</tspan>
+</text>
+<text x="1600.0" y="713.0" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1600.0" dy="0">callers — only the DESeq2 route continues to GSEA / gProfiler.</tspan>
+</text>
+<rect x="92" y="150" width="372" height="322" rx="14" fill="#ffffff" stroke="#dde2ea" stroke-width="2"/>
+<text x="114.0" y="184.0" font-size="18" font-weight="800" text-anchor="start" fill="#1f4e79" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="114.0" dy="0">Legend</tspan>
+</text>
+<line x1="116" y1="214" x2="162" y2="214" stroke="#c2255c" stroke-width="8" stroke-linecap="round"/>
+<text x="176.0" y="219.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">STAR route (genome aligner)</tspan>
+</text>
+<line x1="116" y1="244" x2="162" y2="244" stroke="#1c7ed6" stroke-width="8" stroke-linecap="round"/>
+<text x="176.0" y="249.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">HISAT2 route (genome aligner)</tspan>
+</text>
+<line x1="116" y1="274" x2="162" y2="274" stroke="#7048e8" stroke-width="8" stroke-linecap="round"/>
+<text x="176.0" y="279.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">Kallisto route (pseudo-aligner)</tspan>
+</text>
+<line x1="116" y1="304" x2="162" y2="304" stroke="#f08c00" stroke-width="8" stroke-linecap="round"/>
+<text x="176.0" y="309.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">Salmon route (pseudo-aligner)</tspan>
+</text>
+<line x1="116" y1="334" x2="162" y2="334" stroke="#0ca678" stroke-width="8" stroke-linecap="round"/>
+<text x="176.0" y="339.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">QC &amp; splicing branch</tspan>
+</text>
+<line x1="116" y1="364" x2="162" y2="364" stroke="#495057" stroke-width="8" stroke-linecap="round"/>
+<text x="176.0" y="369.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">MultiQC reporting line</tspan>
+</text>
+<rect x="126" y="389" width="26" height="26" rx="13" fill="#ffffff" stroke="#212529" stroke-width="3.2"/>
+<text x="176.0" y="407.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">Interchange — step shared by routes</tspan>
+</text>
+<circle cx="139" cy="435" r="9.5" fill="#ffffff" stroke="#868e96" stroke-width="4.2"/>
+<text x="176.0" y="440.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="176.0" dy="0">Stop — single-route step</tspan>
+</text>
+<text x="114.0" y="454.0" font-size="12" font-weight="500" text-anchor="start" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="114.0" dy="0">One aligner runs per execution. Reference download</tspan>
+<tspan x="114.0" dy="15">and index building are separate helper workflows.</tspan>
+</text>
+</svg>

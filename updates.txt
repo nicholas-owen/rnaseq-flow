@@ -1,0 +1,35 @@
+Documentation
+Four documents, all in your pipeline folder: a polished Word user guide, plus README.md, USAGE.md (run instructions, worked scenarios, troubleshooting) and OUTPUTS.md (how to read every output file — DESeq2/edgeR columns, GSEA NES, rMATS event types, STAR-Fusion, RSeQC, etc.).
+One thing worth knowing: differential expression runs only with star/hisat2 (it uses featureCounts) — Salmon/Kallisto give transcript quantification only. The old run_example.md claimed otherwise; the new docs correct this.
+
+Validation
+I couldn't install Nextflow here — this sandbox's network blocks every Nextflow distribution channel (GitHub's release CDN, nextflow.io, conda, Maven). Instead I wrote a static topology validator (validate_topology.py, included in the folder) which confirmed all 26 process calls have matching argument/input arity and every .out.<emit> reference is valid. To validate live on your machine:
+bashnextflow run main.nf --input samplesheet_test.csv --aligner star \
+    --star_index fake --gtf fake.gtf -stub-run
+
+
+
+
+
+Found a bug I hadn't finished fixing — the rMATS input channel still uses the broken .collect() (flattens pairs) and doesn't carry single_end. Fixing it now.Edited 2 files, read 2 files, ran a commandEdited 2 files, read 2 files, ran a commandI've completed a full review, fixed every bug found, and written the documentation. Here's what was done.
+Checking it — bugs found
+Your pipeline was well-structured but had several bugs that would have broken real runs:
+Show-stoppers
+
+Nothing was ever published to results/ — no module had a publishDir directive and there was no modules.config, so every output stayed buried in work/.
+rnaseq.nf referenced ch_multiqc_files ~120 lines before it was declared (crashes when STAR-Fusion runs); MultiQC was called without .collect() so it ran once per file instead of once over all files.
+STAR-Fusion declared output filenames that didn't match what its script produced → process would fail.
+STAR used --chimOutType WithinBAM, which never produces the Chimeric.out.junction file STAR-Fusion needs → fusions silently never ran.
+HISAT2 piped into samtools that wasn't in its container, had no single-end support, and produced an unsorted BAM that samtools index then rejected.
+rMATS input channel used .collect() which flattened BAM/BAI pairs into garbage; used a non-existent params.single_end.
+IsoformSwitchAnalyzeR received Salmon results as [meta, dir] tuples instead of directories, and ran an R script via ${projectDir} that isn't visible inside the container.
+
+Other fixes — gzipped reference handling (STAR/HISAT2/featureCounts/Salmon decoys/gtf2bed couldn't read .gz); R scripts loading packages absent from their containers (pheatmap, ggplot2, dplyr, rowVars); deprecated docker.userEmulation; Quarto's plotly dependency.
+Ensuring it works — what was added
+
+conf/base.config — real CPU/memory/time per process (every task was silently running on 1 core), capped by --max_*.
+conf/modules.config — publishDir rules so results land in results/.
+stub blocks on all 26 modules so the whole pipeline can be dry-run with -stub-run.
+
+
+
