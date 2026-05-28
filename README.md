@@ -1,3 +1,10 @@
+<p align="center">
+  <img src="./assets/rnaseq-flow_logo.svg" alt="refseq-flow logo" width="600">
+</p>
+
+
+
+
 # rnaseq-flow
 
 A modular **bulk RNA-seq analysis pipeline** built with Nextflow DSL2. It takes
@@ -13,16 +20,25 @@ that download and index them for you.
 
 ## Contents
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Quick start](#quick-start)
-- [The three run modes](#the-three-run-modes)
-- [Pipeline stages](#pipeline-stages)
-- [Samplesheet format](#samplesheet-format)
-- [Parameter reference](#parameter-reference)
-- [Choosing an aligner](#choosing-an-aligner)
-- [Documentation](#documentation)
-- [Known limitations](#known-limitations)
+- [rnaseq-flow](#rnaseq-flow)
+  - [Contents](#contents)
+  - [Features](#features)
+  - [Requirements](#requirements)
+  - [Quick start](#quick-start)
+  - [The three run modes](#the-three-run-modes)
+  - [Pipeline stages](#pipeline-stages)
+  - [Samplesheet format](#samplesheet-format)
+  - [Parameter reference](#parameter-reference)
+    - [Input / output](#input--output)
+    - [Alignment \& references](#alignment--references)
+    - [Analysis options](#analysis-options)
+    - [Helper workflows](#helper-workflows)
+    - [Resources](#resources)
+  - [Choosing an aligner](#choosing-an-aligner)
+  - [Documentation](#documentation)
+  - [Known limitations](#known-limitations)
+  - [Pipeline configuration files](#pipeline-configuration-files)
+  - [License](#license)
 
 For step-by-step run instructions see **[USAGE.md](USAGE.md)**.
 For how to read every output file see **[OUTPUTS.md](OUTPUTS.md)**.
