@@ -76,6 +76,28 @@ def checkParameters() {
     if (params.input == null && !params.download_refs && !params.build_indices) {
         error "Please specify an input samplesheet or glob pattern with --input"
     }
+
+    // Count-matrix entry (--counts): starts at differential expression, so it
+    // needs the samplesheet (for the design) and the GTF (for gene annotation),
+    // and it is incompatible with the pre-DE stop points.
+    if (params.counts) {
+        if (params.input == null) {
+            error "--counts requires --input: the samplesheet supplies the condition/design."
+        }
+        if (!params.gtf) {
+            error "--counts requires --gtf: gene-level annotation is mandatory (results must " +
+                  "carry gene symbols and biotypes, not bare gene IDs)."
+        }
+        if (params.stop_at in ['preQC', 'postQC']) {
+            error "--counts enters at differential expression; --stop_at ${params.stop_at} " +
+                  "would leave nothing to run."
+        }
+        if (params.diffsplice || params.dtu || params.isoform_switch || params.ctat_lib) {
+            log.warn "--counts: splicing / DTU / isoform-switch / fusion analyses need reads or " +
+                     "BAMs and cannot run from a count matrix; those options are ignored."
+        }
+        log.info "Count-matrix input: skipping QC and alignment, entering at differential expression."
+    }
 }
 
 /*
@@ -105,9 +127,13 @@ def validateSamplesheet(samplesheet_path) {
     def errors   = []
     def warnings = []
 
-    // Required columns
+    // Required columns. R1 is only needed when the pipeline reads FASTQs; a
+    // --counts run supplies expression directly, so it needs sample + condition
+    // (plus any design covariates) but no read files.
     def cols = rows[0].keySet()
-    ['sample', 'R1', 'condition'].each { c ->
+    def required_cols = (params.counts == null) ? ['sample', 'R1', 'condition']
+                                                : ['sample', 'condition']
+    required_cols.each { c ->
         if (!cols.contains(c)) errors << "missing required column '${c}'"
     }
     // --design covariate columns must exist; 'condition' must be in the design.
@@ -153,8 +179,9 @@ def validateSamplesheet(samplesheet_path) {
             else    batch_values << b
         }
 
-        // FASTQ existence (skipped during -stub-run, which never reads the data)
-        if (!workflow.stubRun) {
+        // FASTQ existence (skipped during -stub-run, which never reads the data,
+        // and for --counts, which has no read files to check)
+        if (!workflow.stubRun && params.counts == null) {
             def r1 = row.R1?.trim()
             if (!r1) {
                 errors << "row ${lineno} (sample '${s}'): empty 'R1' path"
@@ -265,7 +292,14 @@ workflow {
         //
         // Create input channel
         //
-        if (params.input.endsWith('.csv')) {
+        if (params.counts) {
+            // Count-matrix entry: validate the (relaxed) samplesheet, but build
+            // no read channel — RNASEQ enters directly at differential
+            // expression and consumes params.counts, not FASTQs.
+            validateSamplesheet( params.input )
+            channel.empty().set { ch_reads }
+        }
+        else if (params.input.endsWith('.csv')) {
             // Fail fast on a bad samplesheet before scheduling any work.
             validateSamplesheet( params.input )
 

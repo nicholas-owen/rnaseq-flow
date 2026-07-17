@@ -111,9 +111,17 @@ if (length(present)) {
 
 # Quality control
 
-The [MultiQC report](../multiqc/multiqc_report.html) is the authoritative,
-per-sample QC document; the table below is a compact summary of its general
-statistics for a quick scan.
+```{r qc-intro, results="asis"}
+if (have_mqc) {
+  cat("The [MultiQC report](../multiqc/multiqc_report.html) is the authoritative,",
+      "per-sample QC document; the table below is a compact summary of its general",
+      "statistics for a quick scan.\n")
+} else {
+  cat("\n*No MultiQC report was produced for this run. A `--counts` run enters at",
+      "differential expression from a pre-computed count matrix, so it has no read",
+      "or alignment QC to summarise.*\n")
+}
+```
 
 ```{r qc-load, include=FALSE}
 stats_df <- NULL
@@ -127,7 +135,7 @@ qc_ok <- !is.null(stats_df) && nrow(stats_df) > 0
 ```
 
 ```{r qc-note, results="asis"}
-if (!qc_ok) {
+if (!qc_ok && have_mqc) {
   cat("\n*No MultiQC general-statistics table was available for this run;",
       "see the MultiQC report linked above for full QC.*\n")
 }

@@ -136,6 +136,13 @@ based on the flags you pass:
 
 Only one mode runs per invocation.
 
+The `RNASEQ` mode can also start from a **pre-computed gene count matrix** with
+`--counts <matrix>` (plus `--input` for the design and `--gtf` for annotation).
+This skips QC and alignment and enters directly at differential expression —
+useful for re-analysing published or collaborator count tables (e.g. GEO
+supplementary files). See [Starting from a count matrix](USAGE.md#46-starting-from-a-count-matrix---counts)
+in the usage guide.
+
 ---
 
 ## Pipeline stages
@@ -233,6 +240,7 @@ silently ignored.
 | Parameter | Required | Default | Description |
 |---|---|---|---|
 | `--input` | Yes (RNASEQ mode) | — | Path to the CSV samplesheet |
+| `--counts` | No | — | Pre-computed gene count matrix; enters at differential expression, skipping QC/alignment. Requires `--input` and `--gtf` |
 | `--outdir` | No | `results` | Output directory |
 | `--publish_dir_mode` | No | `copy` | How results are published (`copy`, `symlink`, `link`) |
 | `--stop_at` | No | — | Stop after a stage: `preQC`, `postQC`, `DE`, `GSEA` |

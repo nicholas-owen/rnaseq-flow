@@ -318,6 +318,13 @@ which makes it easy to iterate on options, for example adding
 `--aligner star --star_index ...`, or trying a different `--gmt` file
 (`c2_kegg.gmt`, `c5_go_bp.gmt`).
 
+If instead of raw reads you already have a **gene count matrix** — from another
+pipeline, or a public dataset such as a GEO supplementary file — you can skip the
+FASTQ, alignment and quantification steps entirely and enter at differential
+expression with `--counts`. You still supply the samplesheet (for `condition`)
+and `--gtf` (for gene annotation); see
+[USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
+
 The whole example is deliberately small, reproducible (subsample seed,
 pinned Ensembl release) and self-verifying through the TGF-β signature —
 so it serves as both a tutorial and an ongoing setup check.

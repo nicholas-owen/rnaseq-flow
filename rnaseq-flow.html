@@ -1146,6 +1146,7 @@
       <path d="M 1000 704 L 1000 848 Q 1000 864 1016 864 L 1300 864" fill="none" stroke="#7048e8" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"></path>
       <path d="M 1016 740 L 1016 864 Q 1016 880 1032 880 L 1300 880" fill="none" stroke="#f08c00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"></path>
       <path d="M 250 968 L 1560 968" fill="none" stroke="#495057" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"></path>
+      <path d="M 1405 411.5 L 1405 428 Q 1405 440 1417 440 L 1455 440" fill="none" stroke="#0b7285" stroke-width="7" stroke-dasharray="10 8" stroke-linejoin="round" stroke-linecap="round"></path>
       <circle cx="300" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
       <circle cx="440" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
       <circle cx="720" cy="968" r="5.5" fill="#fff" stroke="#495057" stroke-width="3"></circle>
@@ -1221,6 +1222,8 @@
       <circle cx="139" cy="435" r="9.5" fill="#fff" stroke="#868e96" stroke-width="4.2"></circle>
       <text x="176" y="440" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Stop — single-route step</tspan></text>
       <text x="114" y="454" font-size="12" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="114" dy="0">One aligner runs per execution. Reference download</tspan><tspan x="114" dy="15">and index building are separate helper workflows.</tspan></text>
+      <circle cx="1405" cy="402" r="9.5" fill="#fff" stroke="#0b7285" stroke-width="4.2"></circle>
+      <text x="1405" y="386" font-size="13" font-weight="700" text-anchor="middle" fill="#0b7285"><tspan x="1405" dy="0">Count matrix (--counts)</tspan></text>
     </svg>
   </div>
 </section>
@@ -1415,6 +1418,7 @@
         <p class="feat-flag">→ tximport/txi.rds</p>
       </div>
     </div>
+    <p class="slide-subtitle" style="margin-top: 22px;">Already have counts? Skip QC and alignment entirely — <span class="chip">--counts matrix.tsv</span> enters the pipeline right here. Feed a featureCounts table or a plain gene × sample matrix (e.g. a GEO supplementary file), add <span class="chip">--gtf</span> for gene annotation, and DESeq2, edgeR and everything downstream run unchanged.</p>
   </div>
   <div class="pagemark"><span class="dot"></span>08 · Quantification</div>
 </section>

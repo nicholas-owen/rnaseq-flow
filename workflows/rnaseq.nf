@@ -60,6 +60,11 @@ workflow RNASEQ {
     ch_quarto_gsea      = channel.value([])
     ch_quarto_gprofiler = channel.value([])
 
+    // Count-matrix entry: when --counts is set the pipeline skips QC and
+    // alignment entirely and enters at differential expression (Level 3),
+    // consuming the pre-computed matrix instead of FASTQs.
+    def from_counts = params.counts != null
+
     // Define execution levels
     def run_level = 100 // Default: run all
     if (params.stop_at == 'preQC')       run_level = 1
@@ -70,7 +75,7 @@ workflow RNASEQ {
     //
     // MODULE: FastQC (Raw) (Level >= 1)
     //
-    if (run_level >= 1) {
+    if (run_level >= 1 && !from_counts) {
         FASTQC ( ch_reads )
         ch_versions = ch_versions.mix(FASTQC.out.versions.first())
         
@@ -97,8 +102,8 @@ workflow RNASEQ {
     ch_starfusion_results    = channel.empty()
     ch_multiqc_files         = channel.empty()
     ch_tx_quant              = channel.empty()  // Salmon/Kallisto quant dirs -> tximport
-    
-    if (run_level >= 2) {
+
+    if (run_level >= 2 && !from_counts) {
         if (params.aligner == 'star') {
             if (!params.star_index) error "STAR index not provided via --star_index"
             STAR_ALIGN( FASTP.out.reads, file(params.star_index), file(params.gtf) ) 
@@ -248,7 +253,13 @@ workflow RNASEQ {
             ch_gene_info = GTF2GENEINFO.out.gene_info
         }
 
-        if (params.aligner == 'star' || params.aligner == 'hisat2') {
+        if (from_counts) {
+            // Pre-computed matrix: feed it straight to DESeq2/edgeR (both R
+            // scripts read it in --matrix mode). No aligner ran.
+            ch_de_counts = channel.fromPath(params.counts)
+            run_de = true
+        }
+        else if (params.aligner == 'star' || params.aligner == 'hisat2') {
             ch_de_counts = ch_featurecounts_results
             run_de = true
             if (params.dtu) {
@@ -348,43 +359,52 @@ workflow RNASEQ {
     }
 
     //
-    // MODULE: MultiQC (Always run)
+    // MODULE: MultiQC
+    //
+    // Skipped entirely for a --counts run: there are no QC / alignment logs to
+    // aggregate, so `multiqc .` would find no modules and fail. The Quarto
+    // report then receives an empty MultiQC directory and renders without its
+    // QC section (the .qmd already guards every QC chunk on the data existing).
     //
     // ch_multiqc_files was initialised to channel.empty() at the top of the
     // workflow, so the conditional mixes below are always safe.
-    if (run_level >= 1) {
-        ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect { row -> row[1] })
-        ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.html.collect { row -> row[1] })
-        ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.json.collect { row -> row[1] })
-        ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.html.collect { row -> row[1] })
+    ch_multiqc_data = channel.value([])
+    if (!from_counts) {
+        if (run_level >= 1) {
+            ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.collect { row -> row[1] })
+            ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.html.collect { row -> row[1] })
+            ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.json.collect { row -> row[1] })
+            ch_multiqc_files = ch_multiqc_files.mix(FASTP.out.html.collect { row -> row[1] })
+        }
+
+        ch_multiqc_files = ch_multiqc_files.mix(ch_align_results)
+        ch_multiqc_files = ch_multiqc_files.mix(ch_featurecounts_mqc)
+        ch_multiqc_files = ch_multiqc_files.mix(ch_rseqc_results)
+        ch_multiqc_files = ch_multiqc_files.mix(ch_starfusion_results)
+
+        // .collect() so MultiQC runs ONCE over all staged files, not once per file.
+        // The custom config (auto-detected by `multiqc .`) styles the report; the
+        // CSS + logo it references are staged alongside it so MultiQC finds them.
+        MULTIQC (
+            file("${projectDir}/assets/multiqc_config.yml"),
+            [ file("${projectDir}/assets/multiqc_custom.css"),
+              file("${projectDir}/assets/multiqc_logo.png") ],
+            ch_versions.unique().collectFile(name: 'software_versions.yml'),
+            [],
+            ch_multiqc_files.collect()
+        )
+        ch_versions = ch_versions.mix(MULTIQC.out.versions.first())
+        ch_multiqc_data = MULTIQC.out.data
     }
-
-    ch_multiqc_files = ch_multiqc_files.mix(ch_align_results)
-    ch_multiqc_files = ch_multiqc_files.mix(ch_featurecounts_mqc)
-    ch_multiqc_files = ch_multiqc_files.mix(ch_rseqc_results)
-    ch_multiqc_files = ch_multiqc_files.mix(ch_starfusion_results)
-
-    // .collect() so MultiQC runs ONCE over all staged files, not once per file.
-    // The custom config (auto-detected by `multiqc .`) styles the report; the
-    // CSS + logo it references are staged alongside it so MultiQC finds them.
-    MULTIQC (
-        file("${projectDir}/assets/multiqc_config.yml"),
-        [ file("${projectDir}/assets/multiqc_custom.css"),
-          file("${projectDir}/assets/multiqc_logo.png") ],
-        ch_versions.unique().collectFile(name: 'software_versions.yml'),
-        [],
-        ch_multiqc_files.collect()
-    )
-    ch_versions = ch_versions.mix(MULTIQC.out.versions.first())
 
     //
     // MODULE: Quarto analysis report
     //
-    // Always runs after MultiQC; the DE/enrichment result directories are
-    // passed when those stages ran, else an empty list, and the report renders
-    // whichever sections have data.
+    // Always runs; the DE/enrichment result directories are passed when those
+    // stages ran, else an empty list, and the report renders whichever sections
+    // have data. multiqc_data is empty for a --counts run (see above).
     QUARTO_REPORT (
-        MULTIQC.out.data,
+        ch_multiqc_data,
         file("${projectDir}/assets/analysis_report.qmd"),
         ch_quarto_deseq2,
         ch_quarto_edger,
