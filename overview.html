@@ -121,6 +121,7 @@ flowchart TD
     TX[("transcript FASTA")]:::input
     GMT[("GMT gene sets")]:::input
     CTAT[("CTAT library")]:::input
+    COUNTS[("count matrix<br/>--counts")]:::input
 
     FASTQC["FastQC<br/><small>raw-read QC</small>"]:::qc
     FASTP["fastp<br/><small>trim + filter</small>"]:::qc
@@ -208,6 +209,8 @@ flowchart TD
     FC -->|gene count matrix| EDGER
     TXI -->|gene count matrix| DESEQ
     TXI -->|gene count matrix| EDGER
+    COUNTS -.->|skips QC + alignment| DESEQ
+    COUNTS -.->|skips QC + alignment| EDGER
     DESEQ -->|ranked / DE genes| GSEA
     DESEQ -->|DE genes| GPROF
     GMT -.-> GSEA
@@ -282,6 +285,7 @@ flowchart TD
 <path d="M 1000.0 704.0 L 1000.0 848.0 Q 1000.0 864.0 1016.0 864.0 L 1300.0 864.0" fill="none" stroke="#7048e8" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
 <path d="M 1016.0 740.0 L 1016.0 864.0 Q 1016.0 880.0 1032.0 880.0 L 1300.0 880.0" fill="none" stroke="#f08c00" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
 <path d="M 250.0 968.0 L 1560.0 968.0" fill="none" stroke="#495057" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M 1405.0 411.5 L 1405.0 428.0 Q 1405.0 440.0 1417.0 440.0 L 1455.0 440.0" fill="none" stroke="#0b7285" stroke-width="7" stroke-dasharray="10 8" stroke-linejoin="round" stroke-linecap="round"/>
 <circle cx="300" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
 <circle cx="440" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
 <circle cx="720" cy="968" r="5.5" fill="#ffffff" stroke="#495057" stroke-width="3"/>
@@ -439,6 +443,10 @@ flowchart TD
 <tspan x="114.0" dy="0">One aligner runs per execution. Reference download</tspan>
 <tspan x="114.0" dy="15">and index building are separate helper workflows.</tspan>
 </text>
+<circle cx="1405" cy="402" r="9.5" fill="#ffffff" stroke="#0b7285" stroke-width="4.2"/>
+<text x="1405.0" y="386.0" font-size="13" font-weight="700" text-anchor="middle" fill="#0b7285" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+<tspan x="1405.0" dy="0">Count matrix (--counts)</tspan>
+</text>
 </svg>
     </div>
   </div>
@@ -499,6 +507,7 @@ flowchart TD
     <table>
       <tr><th>Gate</th><th>Effect on the graph</th></tr>
       <tr><td><code>--aligner</code></td><td>One of STAR / HISAT2 / Salmon / Kallisto runs. DESeq2 + edgeR + enrichment run for <b>every</b> aligner &mdash; STAR/HISAT2 feed them via featureCounts, Salmon/Kallisto via <b>tximport</b> (needs <code>--gtf</code>). rMATS and BigWig are STAR/HISAT2 only.</td></tr>
+      <tr><td><code>--counts</code></td><td>Enters at differential expression from a pre-computed gene count matrix (featureCounts wide or plain gene &times; sample), skipping FastQC, fastp, alignment and quantification. DESeq2, edgeR and enrichment run as normal. Requires <code>--input</code> (design) and <code>--gtf</code> (annotation).</td></tr>
       <tr><td><code>--stop_at preQC</code></td><td>Stops after FastQC + fastp.</td></tr>
       <tr><td><code>--stop_at postQC</code></td><td>Stops after alignment, SAMtools index, RSeQC and BigWig.</td></tr>
       <tr><td><code>--stop_at DE</code></td><td>Stops after gene quantification, DESeq2 and edgeR.</td></tr>

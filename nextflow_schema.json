@@ -13,7 +13,12 @@
         "input": {
           "type": "string",
           "format": "file-path",
-          "description": "Path to the CSV samplesheet (columns: sample,R1,R2,condition)."
+          "description": "Path to the CSV samplesheet (columns: sample,R1,R2,condition). With --counts, R1/R2 are optional."
+        },
+        "counts": {
+          "type": "string",
+          "format": "file-path",
+          "description": "Pre-computed gene count matrix (featureCounts wide output or a plain gene-id + samples table). Enters at differential expression, skipping QC and alignment. Requires --input and --gtf."
         },
         "outdir": {
           "type": "string",

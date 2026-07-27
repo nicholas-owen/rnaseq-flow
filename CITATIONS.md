@@ -134,7 +134,7 @@ A template for a manuscript Methods section. Edit it to match the run you
 performed — delete the stages you did not use, and fill in the bracketed
 tool **versions** from `pipeline_info/software_versions.yml`.
 
-> RNA-seq data were processed with the rnaseq-flow pipeline (v1.3.0), implemented
+> RNA-seq data were processed with the rnaseq-flow pipeline (v1.4.0), implemented
 > in Nextflow (Di Tommaso et al., 2017); each step ran in a Bioconda-based
 > (Grüning et al., 2018) container (BioContainers; da Veiga Leprevost et al.,
 > 2017). Raw reads were assessed with FastQC v[…] (Andrews, 2010) and

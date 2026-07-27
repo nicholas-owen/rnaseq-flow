@@ -313,6 +313,84 @@ every treated sample in another): the model would be rank-deficient and
 DESeq2/edgeR would abort. `--design` covers the gene-level DE tests; rMATS, DTU
 and diffSplice keep their own designs.
 
+### 4.6 Starting from a count matrix (`--counts`)
+
+If you already have a gene count matrix — from a previous run, a collaborator,
+or a public dataset (e.g. a GEO supplementary file) — you can skip QC and
+alignment and enter the pipeline directly at differential expression. DESeq2,
+edgeR, GSEA, gProfiler and the analysis report all run as normal.
+
+```bash
+nextflow run main.nf \
+    --input samplesheet.csv \
+    --counts counts.tsv \
+    --gtf references/human/annotation.gtf \
+    -profile docker
+```
+
+- **`--input` is still required** — the samplesheet supplies `condition` (and any
+  `batch` / `--design` covariates). With `--counts` the `R1`/`R2` columns are
+  optional and ignored, so a minimal samplesheet is just:
+
+  ```csv
+  sample,condition
+  ctrl_1,REF
+  ctrl_2,REF
+  treat_1,treatment
+  treat_2,treatment
+  ```
+
+- **`--gtf` is required** — results are annotated with gene symbols and biotypes,
+  never bare gene IDs. The GTF should match the annotation the counts were
+  generated against; the run reports the fraction of matrix genes it could
+  annotate and aborts if that fraction is implausibly low (a sign the matrix and
+  GTF are different genome builds).
+
+**Two matrix layouts are accepted, auto-detected:**
+
+1. **featureCounts wide output** — the pipeline's own `featurecounts/*.txt`, or
+   any multi-sample featureCounts table. The `Geneid, Chr, Start, End, Strand,
+   Length` annotation columns are dropped; the remaining columns are samples.
+   Count columns named after BAM paths are matched back to the samplesheet by
+   file/path name.
+2. **Plain matrix** — first column gene IDs, every other column a sample; tab- or
+   comma-delimited.
+
+   ```
+   gene_id   ctrl_1  ctrl_2  treat_1  treat_2
+   ENSG0001  142     156     87       91
+   ```
+
+Every samplesheet sample must map to exactly one count column (matched by exact
+name or path token — a numeric id like `100` will not accidentally match
+`1100`); the run aborts and lists any sample it cannot place. Column order in the
+matrix does not matter — columns are reordered to the samplesheet.
+
+**Reading is tolerant of common GEO quirks.** The matrix may be gzipped
+(`.tsv.gz` / `.csv.gz` — the usual form of GEO supplementary files) and is read
+directly. The delimiter (tab or comma) is auto-detected, and a gene-ID column
+with no header — a leading tab/comma before the sample names, as many GEO
+matrices have — is handled correctly. Extra annotation columns (a gene-symbol or
+length column) are ignored as long as every samplesheet sample still maps to a
+column.
+
+**Not accepted** (each rejected up front with a clear message):
+
+- **Normalised values** — TPM, FPKM/RPKM, or DESeq2-/CPM-normalised matrices.
+  DESeq2 and edgeR require raw integer counts, so any non-integer matrix is
+  rejected; obtain the raw counts instead.
+- **Salmon/Kallisto *estimated* gene counts as a flat matrix** — non-integer, and
+  they lose the transcript-length offsets that length-aware DE needs. Re-run
+  those datasets through the pseudo-aligner (`--aligner salmon|kallisto`), which
+  imports them correctly via tximport.
+- **Matrices keyed by Entrez or RefSeq IDs** (e.g. `7157`, `NM_000546`). A GTF is
+  keyed by Ensembl/GENCODE gene IDs and symbols, so these cannot be annotated and
+  fail the annotation-match check — map the IDs to Ensembl gene IDs or symbols
+  first.
+
+Splicing, DTU, isoform-switch and fusion analyses also need reads/BAMs and
+cannot run from a count matrix.
+
 ---
 
 ## 5. Profiles & execution
@@ -364,6 +442,10 @@ allows it.
 | `Cannot find any reads matching` | FASTQ paths in the samplesheet are wrong or relative to the wrong directory |
 | STAR-Fusion produced nothing | `--ctat_lib` not set, or not pointing at the extracted `ctat_genome_lib_build_dir` |
 | No `deseq2_output/` | Needs a CSV samplesheet; for Salmon/Kallisto also needs `--gtf` (the tximport transcript-to-gene map) |
+| `--counts requires --gtf` | A count-matrix run must supply `--gtf` so results are annotated with gene symbols |
+| `could not map samplesheet samples to count columns` | A `sample` in the samplesheet has no (or an ambiguous) column in the `--counts` matrix — check the sample names against the column headers |
+| `count matrix has non-integer values` | The matrix holds normalised values (TPM, FPKM/RPKM, DESeq2-/CPM-normalised) or Salmon/Kallisto estimates — `--counts` needs raw integer counts. Get the raw counts, or for pseudo-aligner data re-run via `--aligner salmon\|kallisto` |
+| `only N% of matrix gene IDs match the --gtf` | The `--counts` matrix and the `--gtf` are different annotation builds, or the matrix is keyed by Entrez/RefSeq IDs — map the IDs to Ensembl gene IDs or symbols first |
 | No `diffsplice_output/` | `--diffsplice` not set, or `--gtf` missing (needed for exon counting and the transcript-to-gene map) |
 | Splicing/fusion missing | These run only at full depth — don't combine with `--stop_at DE` |
 | Out-of-memory kills | Raise `--max_memory`, or lower concurrency |

@@ -7,6 +7,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+
 ### Fixed
 
 - **GSEA now ranks genes by the identifier the gene sets actually use.** `gsea.R`
@@ -19,10 +20,27 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   duplicate symbols to their most-extreme statistic, and warns (rather than
   failing silently) when the overlap is too low to trust.
 
+
 Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.
+
+## [1.4.0] - 2026-07-17
+
+### Added
+
+- **Count-matrix entry point (`--counts`).** The pipeline can now start from a
+  pre-computed gene count matrix, skipping QC and alignment and entering directly
+  at differential expression (DESeq2, edgeR, GSEA, gProfiler, Quarto report). This
+  supports re-analysing published or collaborator count tables (e.g. GEO
+  supplementary files). Two layouts are auto-detected: featureCounts wide output
+  and a plain gene-id + samples matrix (tab or comma delimited), including
+  gzipped and header-less matrices. Requires `--input` (for the design) and
+  `--gtf` (for gene annotation); the `R1`/`R2` samplesheet columns become
+  optional. Non-integer input (normalised / TPM / FPKM or Salmon/Kallisto
+  estimates) and Entrez/RefSeq-keyed matrices are rejected with clear guidance.
+  See [USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
 
 ## [1.3.0] - 2026-07-08
 

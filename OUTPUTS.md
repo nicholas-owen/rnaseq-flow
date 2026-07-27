@@ -37,6 +37,14 @@ results/
 
 Which directories appear depends on the aligner and options you chose.
 
+> **Count-matrix runs (`--counts`).** Starting from a pre-computed count matrix
+> skips read QC, alignment and quantification, so those directories
+> (`fastqc/`, `fastp/`, `star/`|`hisat2/`|`salmon/`|`kallisto/`, `rseqc/`,
+> `bam_to_bigwig/`, `featurecounts/`, `tximport/`) and the MultiQC report are
+> **not** produced. You get the differential-expression outputs onward
+> (`deseq2_output/`, `edger_output/`, and any enrichment), plus a Quarto report
+> whose QC section is omitted. See [USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
+
 ---
 
 ## Recommended reading order
