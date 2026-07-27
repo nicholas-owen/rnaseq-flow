@@ -7,6 +7,20 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+
+### Fixed
+
+- **GSEA now ranks genes by the identifier the gene sets actually use.** `gsea.R`
+  ranked genes by their Ensembl gene IDs, but MSigDB `--gmt` files (and the
+  pipeline's own downloaded gene sets) are keyed by gene *symbol*, so the ranked
+  list and the pathways overlapped at essentially zero genes — fgsea returned an
+  empty table and the report's GSEA section silently showed "no data". Ranking
+  now uses whichever identifier overlaps the gene sets (the annotated gene
+  symbol, falling back to the Ensembl ID for an Ensembl-keyed GMT), collapses
+  duplicate symbols to their most-extreme statistic, and warns (rather than
+  failing silently) when the overlap is too low to trust.
+
+
 Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion

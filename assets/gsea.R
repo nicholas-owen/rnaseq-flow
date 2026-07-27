@@ -16,8 +16,28 @@ library(ggplot2)
 library(dplyr)
 library(tibble)
 
+# Build a named, de-duplicated, descending ranking vector from a value vector and
+# a matching identifier vector. Genes with a missing/empty id or value are
+# dropped; when several genes share an id (e.g. two Ensembl IDs collapsing to one
+# gene symbol) the one with the largest absolute statistic is kept.
+build_ranks <- function(values, ids) {
+    ids  <- as.character(ids)
+    keep <- !is.na(values) & !is.na(ids) & nzchar(ids)
+    values <- values[keep]; ids <- ids[keep]
+    if (!length(values)) return(numeric(0))
+    ord    <- order(abs(values), decreasing = TRUE)   # keep the most extreme per id
+    values <- values[ord]; ids <- ids[ord]
+    keep2  <- !duplicated(ids)
+    values <- values[keep2]
+    names(values) <- ids[keep2]
+    sort(values, decreasing = TRUE)
+}
+
 # 1. Load Pathways
 pathways <- fgsea::gmtPathways(gmt_file)
+# Union of all genes across the gene sets, used to pick the ranking identifier
+# (gene symbol vs Ensembl ID) that actually overlaps the pathways.
+pathway_genes <- unique(unlist(pathways, use.names = FALSE))
 
 # 2. Find DE Result files
 res_files <- list.files(de_dir, pattern = "deseq2_results_.*\\.csv", full.names = TRUE)
@@ -35,22 +55,45 @@ for (f in res_files) {
     # Read DE results
     res <- read.csv(f, row.names = 1, stringsAsFactors = FALSE)
     
-    # Rank genes
-    # We use stat column from DESeq2
-    # If stat is missing (e.g. shrinking was used without recalculating), use signed -log10 pvalue
+    # Per-gene ranking statistic: DESeq2's Wald stat, or a signed -log10 p
+    # fallback when a shrunken table lacks it.
     if ("stat" %in% colnames(res)) {
-        ranks <- res$stat
+        stat <- res$stat
     } else {
-        # Fallback: sign(log2FoldChange) * -log10(pvalue)
-        # Avoid infinite pvalues
         res$pvalue[is.na(res$pvalue)] <- 1
-        ranks <- sign(res$log2FoldChange) * -log10(res$pvalue + 1e-300)
+        stat <- sign(res$log2FoldChange) * -log10(res$pvalue + 1e-300)
     }
-    
-    names(ranks) <- rownames(res)
-    ranks <- ranks[!is.na(ranks)]
-    ranks <- sort(ranks, decreasing = TRUE)
-    
+
+    # GMT gene sets (MSigDB, and the pipeline's own download) are keyed by gene
+    # SYMBOL, but the DESeq2 rows are keyed by Ensembl gene ID. Ranking by the row
+    # names would overlap the pathways at essentially zero genes and silently
+    # empty the GSEA result. Rank by whichever identifier actually overlaps the
+    # gene sets: prefer the annotated gene_name (symbol) column, fall back to the
+    # Ensembl IDs -- so both a symbol GMT and an Ensembl-keyed GMT work.
+    cand <- list("gene ID" = build_ranks(stat, rownames(res)))
+    if ("gene_name" %in% colnames(res))
+        cand[["gene symbol"]] <- build_ranks(stat, res$gene_name)
+    overlaps <- vapply(cand, function(r) length(intersect(names(r), pathway_genes)),
+                       integer(1))
+    best  <- names(cand)[which.max(overlaps)]
+    ranks <- cand[[best]]
+    message(sprintf("  ranking by %s - %d of %d genes overlap the gene sets",
+                    best, max(overlaps), length(ranks)))
+
+    # Zero overlap would make fgsea error (or return nothing); skip with a
+    # diagnostic instead of failing the run or emitting a silent empty table.
+    if (length(ranks) < 1 || max(overlaps) < 1) {
+        warning(sprintf(paste0("contrast '%s': no ranked genes overlap the gene sets - skipping ",
+            "GSEA. The --gmt is expected to use gene symbols; ranking by symbol needs a --gtf so ",
+            "the DE tables carry a gene_name column, and the --gmt organism must match the data."),
+            contrast_name))
+        next
+    }
+    if (max(overlaps) < 15)
+        warning(sprintf(paste0("contrast '%s': only %d genes overlap the gene sets (< minSize 15); ",
+            "GSEA results will be sparse or empty. Check that the --gmt identifiers match the data."),
+            contrast_name, max(overlaps)))
+
     # Run FGSEA
     fgseaRes <- fgsea(pathways = pathways, 
                       stats    = ranks,
