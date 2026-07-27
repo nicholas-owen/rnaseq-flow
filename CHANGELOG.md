@@ -7,6 +7,35 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **GSEA results are now reproducible.** `fgsea()` dispatches to the multilevel
+  algorithm, which estimates its p-values by Monte Carlo sampling, and nothing
+  seeded it — so the same ranked list gave different p-values, and a different
+  pathway order, on every run (including on `-resume`). `gsea.R` now seeds the
+  generator once per contrast, so each contrast is reproducible on its own
+  regardless of how many contrasts a run has or the order they are processed in.
+
+- **GSEA no longer discards the leading edge.** The `leadingEdge` column — the
+  genes driving each enrichment, and the part of a GSEA result that actually
+  gets followed up — was deleted before the results were written. It is now
+  collapsed to a `/`-delimited string and kept. This also removes a latent trap
+  in the column-dropping idiom: `-which(names(x) %in% "leadingEdge")` evaluates
+  to `-integer(0)` if the column is ever absent, which selects *zero* columns
+  and writes an empty table.
+
+- **gProfiler over-representation now tests against the right background.**
+  `gprofiler.R` queried with `domain_scope = "annotated"` and no custom
+  background, so a contrast's significant genes were tested against every gene
+  g:Profiler holds an annotation for, rather than against the genes that were
+  actually measured. That inflates enrichment significance across the board and
+  most severely for tissue-specific categories — the ones an RNA-seq experiment
+  is usually looking for. The background is now the tested gene universe (the
+  rows of the DESeq2 result table, i.e. everything surviving expression
+  filtering), passed as `custom_bg` with `domain_scope = "custom_annotated"`.
+  **Enrichment results from earlier versions will differ, and should be
+  regarded as over-optimistic.**
+
 Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
