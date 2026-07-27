@@ -7,10 +7,89 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+
+- **GSEA results are now reproducible.** `fgsea()` dispatches to the multilevel
+  algorithm, which estimates its p-values by Monte Carlo sampling, and nothing
+  seeded it — so the same ranked list gave different p-values, and a different
+  pathway order, on every run (including on `-resume`). `gsea.R` now seeds the
+  generator once per contrast, so each contrast is reproducible on its own
+  regardless of how many contrasts a run has or the order they are processed in.
+
+- **GSEA no longer discards the leading edge.** The `leadingEdge` column — the
+  genes driving each enrichment, and the part of a GSEA result that actually
+  gets followed up — was deleted before the results were written. It is now
+  collapsed to a `/`-delimited string and kept. This also removes a latent trap
+  in the column-dropping idiom: `-which(names(x) %in% "leadingEdge")` evaluates
+  to `-integer(0)` if the column is ever absent, which selects *zero* columns
+  and writes an empty table.
+
+- **gProfiler over-representation now tests against the right background.**
+  `gprofiler.R` queried with `domain_scope = "annotated"` and no custom
+  background, so a contrast's significant genes were tested against every gene
+  g:Profiler holds an annotation for, rather than against the genes that were
+  actually measured. That inflates enrichment significance across the board and
+  most severely for tissue-specific categories — the ones an RNA-seq experiment
+  is usually looking for. The background is now the tested gene universe (the
+  rows of the DESeq2 result table, i.e. everything surviving expression
+  filtering), passed as `custom_bg` with `domain_scope = "custom_annotated"`.
+  **Enrichment results from earlier versions will differ, and should be
+  regarded as over-optimistic.**
+
 Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.
+
+## [1.4.2] - 2026-08-04
+
+An HPC-execution release: rnaseq-flow can now be submitted to an SGE cluster
+with `-profile sge`, tuned for the UCL Research Computing clusters. No change to
+any analysis step — this release only affects how and where jobs are run.
+
+### Added
+
+- **SGE / UCL Myriad execution profile — `-profile sge`.** A new
+  `conf/sge.config` submits every process to an SGE cluster with Singularity,
+  registered as a profile in `nextflow.config`. Derived from the nf-core
+  institutional config for UCL Myriad (Chris Wyatt, Fernando Duarte; MIT) and
+  adapted to rnaseq-flow's resource profile:
+  - Memory is requested **per core** in the form SGE expects (`-l mem=<X>M`,
+    multiplied by the slots in `-pe smp N`) and **rounded up**. Groovy's `/` on
+    integral types returns a BigDecimal, so a request that does not divide
+    evenly — `STAR_GENOME_GENERATE` at 38 GB / 12 cpus, most `HISAT2_BUILD`
+    sizes — would otherwise emit a fractional value such as
+    `-l mem=3242.6666666667M`, which the scheduler rejects.
+  - `params.max_time` is set to `48.h`. The pipeline default of `240.h` becomes
+    `-l h_rt=240:00:00`, above the queue limit, so every job would be rejected
+    at submission.
+  - Node-local scratch is both requested (`-l tmpfs=`, sized per process label)
+    and used (`scratch = '$TMPDIR'`), keeping the heavy RNA-seq I/O off the
+    shared filesystem.
+  - Jobs are routed to the right **node class** automatically. Because SGE
+    allocates memory per slot, what decides where a job can run is the
+    memory-per-core ratio, not the total: a Myriad standard (D) node offers
+    4.4 GB/core, so anything above that matches no D node whatever its total.
+    Every process here sits at ≤ 4 GB/core except mammalian HISAT2 index
+    building (17.0 GB/core for human, 13.2 for mouse), which now has
+    `-ac allow=IB` appended and queues against the high-memory nodes instead.
+  - **A mammalian HISAT2 index is splice-aware by default.** `HISAT2_BUILD` is
+    given its own `resourceLimits` so it is exempt from the standard-node memory
+    ceiling; its GTF-derived estimate (~204 GB for human) passes through
+    unclamped rather than being reduced to 160 GB, which would have silently
+    dropped `--ss`/`--exon`. The exemption is scoped to that one process, so no
+    other job can request high-memory-node resources. Sites without high-memory
+    access should lower it — see the note in `conf/sge.config`.
+  - The Apptainer cache and temp directories are pointed at `$HOME/Scratch`.
+
+- **Institutional-config parameters are declared in the schema.**
+  `config_profile_description` / `_contact` / `_url` are the nf-core convention
+  for site configs, and `conf/sge.config` sets them — but the unknown-parameter
+  check rejected any parameter absent from `nextflow_schema.json`, so
+  `-profile sge` failed immediately with "Unknown parameter(s)". They are now
+  declared in a hidden `institutional_config_options` group, which also lets any
+  other institutional config be layered on with `-c`. `--help` learned to honour
+  the schema's `hidden` flag, so these stay out of the printed parameter list.
 
 ## [1.4.0] - 2026-07-17
 

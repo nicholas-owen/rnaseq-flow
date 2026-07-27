@@ -38,6 +38,14 @@ for (f in res_files) {
        next
     }
     
+    # Statistical background for the over-representation test: the genes that
+    # were actually tested for this contrast (everything DESeq2 kept after
+    # filtering), not every gene g:Profiler has an annotation for. Testing a
+    # tissue's expressed genes against the whole annotated genome inflates
+    # enrichment p-values -- most severely for tissue-specific categories,
+    # which are exactly the ones being looked for.
+    bg <- rownames(res)
+
     # Run GOST for Up and Down separately or together
     run_gost <- function(genes, label) {
         if (length(genes) > 0) {
@@ -51,8 +59,8 @@ for (f in res_files) {
                             evcodes = FALSE, 
                             user_threshold = 0.05, 
                             correction_method = "g_SCS", 
-                            domain_scope = "annotated", 
-                            custom_bg = NULL, 
+                            domain_scope = "custom_annotated",
+                            custom_bg = bg,
                             numeric_ns = "", 
                             sources = NULL, 
                             as_short_link = FALSE)
