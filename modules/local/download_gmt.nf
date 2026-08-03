@@ -4,7 +4,7 @@ process DOWNLOAD_GMT {
     // fly by Nextflow Wave from the Conda package below. Wave builds a minimal,
     // secure container at runtime (see the wave {} block in nextflow.config),
     // which avoids depending on a specific pre-built biocontainer tag.
-    conda 'bioconda::r-msigdbr=7.5.1'
+    conda 'conda-forge::r-msigdbr=7.5.1'
 
     input:
     val organism
