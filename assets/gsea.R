@@ -94,8 +94,15 @@ for (f in res_files) {
             "GSEA results will be sparse or empty. Check that the --gmt identifiers match the data."),
             contrast_name, max(overlaps)))
 
-    # Run FGSEA
-    fgseaRes <- fgsea(pathways = pathways, 
+    # Run FGSEA.
+    # fgsea() dispatches to the multilevel algorithm, which estimates its
+    # p-values by Monte Carlo sampling. Without a fixed seed the same ranking
+    # yields different p-values -- and so a different pathway order -- on every
+    # run, including on -resume. Seeding per contrast (rather than once before
+    # the loop) keeps each contrast reproducible on its own, whatever else the
+    # run contains and in whatever order the contrasts happen to be processed.
+    set.seed(42)
+    fgseaRes <- fgsea(pathways = pathways,
                       stats    = ranks,
                       minSize  = 15,
                       maxSize  = 500)
@@ -105,8 +112,15 @@ for (f in res_files) {
       as_tibble() %>%
       arrange(padj)
     
-    # Save Results
-    write.csv(fgseaResTidy[, -which(names(fgseaResTidy) %in% c("leadingEdge"))], 
+    # Save Results.
+    # leadingEdge is a list-column of the genes driving each enrichment -- the
+    # part of a GSEA result that is actually followed up -- so it is collapsed
+    # to a '/'-delimited string rather than dropped. (The previous
+    # -which(... %in% ...) form also had a trap: were the column ever absent,
+    # -integer(0) selects *zero* columns and writes an empty table.)
+    fgseaResTidy$leadingEdge <- vapply(fgseaResTidy$leadingEdge, paste,
+                                       character(1), collapse = "/")
+    write.csv(fgseaResTidy,
               file = file.path("gsea_output", paste0("gsea_stats_", contrast_name, ".csv")))
     
     # Plot top pathways
