@@ -225,6 +225,28 @@
         }
       }
     },
+    "institutional_config_options": {
+      "title": "Institutional config options",
+      "type": "object",
+      "description": "Descriptive metadata set by an execution profile (e.g. conf/sge.config). Not intended to be set on the command line; they are declared here so the unknown-parameter check accepts a site config that sets them, following the nf-core convention.",
+      "properties": {
+        "config_profile_description": {
+          "type": "string",
+          "hidden": true,
+          "description": "Free-text description of the execution profile in use."
+        },
+        "config_profile_contact": {
+          "type": "string",
+          "hidden": true,
+          "description": "Who to contact about the execution profile."
+        },
+        "config_profile_url": {
+          "type": "string",
+          "hidden": true,
+          "description": "Documentation URL for the cluster or site the profile targets."
+        }
+      }
+    },
     "generic_options": {
       "title": "Generic options",
       "type": "object",
@@ -246,6 +268,7 @@
     { "$ref": "#/$defs/reference_download_options" },
     { "$ref": "#/$defs/index_building_options" },
     { "$ref": "#/$defs/max_resource_options" },
+    { "$ref": "#/$defs/institutional_config_options" },
     { "$ref": "#/$defs/generic_options" }
   ]
 }

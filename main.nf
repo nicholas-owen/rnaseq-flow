@@ -48,8 +48,14 @@ def checkParameters() {
             if (params.help) {
                 def sb = new StringBuilder("\nrnaseq-flow - pipeline parameters\n")
                 schema_groups.each { title, names ->
+                    // Schema entries marked "hidden" are set by execution
+                    // profiles rather than on the command line; they are still
+                    // accepted by the typo check below, just not advertised. A
+                    // group whose parameters are all hidden is skipped entirely.
+                    def shown = names.findAll { pn -> !(schema_params[pn]?.get('hidden')) }
+                    if (!shown) return
                     sb << "\n${title}\n"
-                    names.each { pn ->
+                    shown.each { pn ->
                         def d   = schema_params[pn] ?: [:]
                         def dft = d.containsKey('default') ? "  (default: ${d['default']})" : ""
                         sb << String.format("  --%-18s %s%s%n", pn, (d['description'] ?: ''), dft)
