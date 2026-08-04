@@ -38,9 +38,11 @@
 
   "When the run finishes, this is what you get. The two HTML files I keep mentioning — multiqc_report and analysis_report — are your entry points. Then there's a directory per analysis stage. Per-contrast result CSVs from DESeq2 and edgeR carry gene_name and gene_biotype annotation so you can read them without an ID-mapping step. The RSeQC strandedness file per sample is worth knowing about — it's the auto-detected verdict that feeds featureCounts. And run_summary.html under pipeline_info is written automatically at the end of every run, success or failure — it has the resource usage per process and links to everything that was produced.",
 
-  "What's new in the latest release, 1.4.2 — this one is about running the pipeline on a cluster rather than on a workstation. There's a new sge profile, tuned for the UCL Research Computing clusters, derived from the nf-core Myriad config by Chris Wyatt and Fernando Duarte. Three things it gets right that the stock config didn't. First, memory: UCL clusters take memory per core, not per job, and the original divided memory by cores without rounding — Groovy returns a decimal there, so an uneven request produced 'minus l mem equals three thousand two hundred and forty two point six six six', which the scheduler simply rejects. That hit STAR and HISAT2 index building specifically. Rounding up fixes it. Second, wall time: the pipeline defaults to 240 hours, which is above the queue limit, so every job would have been rejected at submission — the profile sets 48. Third, scratch: the original asked for node-local disk and then didn't use it, so all the BAM sorting went to the shared filesystem; now it asks and uses it. One caveat worth flagging, and it's a useful mental model for any SGE cluster: memory is allocated per slot, not per job, so what decides where a job can run is the memory-per-core ratio, not the total. Everything in this pipeline asks for four gigabytes per core or less, which fits Myriad's three hundred and forty two standard nodes. The exception is a splice-aware HISAT2 index — that's seventeen gigabytes per core for human, so it can only run on the seventeen high-memory nodes, no matter what total you ask for. The profile handles that for you, in two ways. Anything above four point four gigabytes per core gets Myriad's node-type selector appended automatically, so it queues against the high-memory nodes rather than matching nothing; and the HISAT2 index step is exempted from the standard-node memory ceiling, so its estimate isn't clamped down and the index comes out splice-aware. That last part matters because the failure mode was silent — a clamped build quietly drops the splice-site flags and you get a usable but less sensitive index, with only a warning in the log. Human, mouse, zebrafish and yeast all build splice-aware now with no extra flags. The one thing to expect is a longer queue wait for a mammalian build, because it's competing for seventeen nodes rather than three hundred and forty two.",
+  "What's new in the latest release, 1.4.3 — this is the gene sets. The headline is a bug that had been sitting there quietly: the download_gmt step asked conda for a package called r-msigdbr from the bioconda channel, and msigdbr is a CRAN package that has never existed in bioconda. So the environment could never be solved and that step could never run — it's conda-forge now. The same wrong assumption, that msigdbr was a Bioconductor package, had also produced a BiocManager install call inside the script as a fallback, which couldn't have worked either; that's gone, and the environment is the process definition's job rather than something a running container installs for itself. While fixing the channel we took the chance to upgrade from seven point five point one to twenty-six point one, so you get MSigDB twenty twenty-six point one gene sets instead of a twenty twenty-two vintage — for human that's fifty hallmark sets, seven and a half thousand curated sets, sixteen thousand ontology sets. That needed an API migration, because msigdbr version ten renamed the category argument to collection and the gs underscore subcat column to gs underscore subcollection. Two smaller fixes fell out of actually testing it: passing a scientific name like Danio rerio to the organism flag was always rejected, because the resolver lower-cased its input and then handed back the lower-cased version; and the script used to log an error per collection, then print 'Download complete' and exit zero having written nothing at all. One thing to be aware of operationally: from msigdbr twenty-four the gene sets are fetched over the network on first use rather than being bundled in the package, so this step now needs internet access wherever it runs. On a cluster whose compute nodes have no outbound route, run the download somewhere that does and pass the file in with the gmt flag afterwards.",
 
-  "Before that, 1.4.0, which added a second way into the pipeline. Normally you start from FASTQs; the new counts flag lets you start from a gene count matrix instead, skipping QC and alignment and going straight to differential expression. That's for re-analysing someone else's counts — a GEO supplementary file, or another pipeline's output. It auto-detects featureCounts wide format or a plain gene-by-sample matrix, handles gzipped and header-less files, and refuses the things that would silently give you wrong statistics: TPMs, FPKMs, anything non-integer, and matrices keyed by Entrez or RefSeq IDs. The same release fixed a real GSEA bug — genes were being ranked by Ensembl ID while the MSigDB gene sets are keyed by symbol, so the two lists overlapped at essentially zero genes, fgsea returned nothing, and the report just showed 'no data' with no error. It now ranks by whichever identifier the gene sets actually use, and warns if the overlap is too low to trust.",
+  "Before that, 1.4.2 — that one was about running the pipeline on a cluster rather than on a workstation. There's a new sge profile, tuned for the UCL Research Computing clusters, derived from the nf-core Myriad config by Chris Wyatt and Fernando Duarte. Three things it gets right that the stock config didn't. First, memory: UCL clusters take memory per core, not per job, and the original divided memory by cores without rounding — Groovy returns a decimal there, so an uneven request produced 'minus l mem equals three thousand two hundred and forty two point six six six', which the scheduler simply rejects. That hit STAR and HISAT2 index building specifically. Rounding up fixes it. Second, wall time: the pipeline defaults to 240 hours, which is above the queue limit, so every job would have been rejected at submission — the profile sets 48. Third, scratch: the original asked for node-local disk and then didn't use it, so all the BAM sorting went to the shared filesystem; now it asks and uses it. One caveat worth flagging, and it's a useful mental model for any SGE cluster: memory is allocated per slot, not per job, so what decides where a job can run is the memory-per-core ratio, not the total. Everything in this pipeline asks for four gigabytes per core or less, which fits Myriad's three hundred and forty two standard nodes. The exception is a splice-aware HISAT2 index — that's seventeen gigabytes per core for human, so it can only run on the seventeen high-memory nodes, no matter what total you ask for. The profile handles that for you, in two ways. Anything above four point four gigabytes per core gets Myriad's node-type selector appended automatically, so it queues against the high-memory nodes rather than matching nothing; and the HISAT2 index step is exempted from the standard-node memory ceiling, so its estimate isn't clamped down and the index comes out splice-aware. That last part matters because the failure mode was silent — a clamped build quietly drops the splice-site flags and you get a usable but less sensitive index, with only a warning in the log. Human, mouse, zebrafish and yeast all build splice-aware now with no extra flags. The one thing to expect is a longer queue wait for a mammalian build, because it's competing for seventeen nodes rather than three hundred and forty two.",
+
+  "One before that, 1.4.0 added a second way into the pipeline. Normally you start from FASTQs; the new counts flag lets you start from a gene count matrix instead, skipping QC and alignment and going straight to differential expression. That's for re-analysing someone else's counts — a GEO supplementary file, or another pipeline's output. It auto-detects featureCounts wide format or a plain gene-by-sample matrix, handles gzipped and header-less files, and refuses the things that would silently give you wrong statistics: TPMs, FPKMs, anything non-integer, and matrices keyed by Entrez or RefSeq IDs. The same release fixed a real GSEA bug — genes were being ranked by Ensembl ID while the MSigDB gene sets are keyed by symbol, so the two lists overlapped at essentially zero genes, fgsea returned nothing, and the report just showed 'no data' with no error. It now ranks by whichever identifier the gene sets actually use, and warns if the overlap is too low to trust.",
 
   "Going further back — 1.3.0 was about Nextflow itself. Nextflow's strict language parser became the default in version 25.10, and it's what the built-in linter uses. It rejected several things the pipeline relied on, so on current Nextflow the pipeline simply wouldn't run — you'd have hit this on version 26. So we migrated the whole thing: the resource-ceiling helper became Nextflow's native resourceLimits, the run-completion summary moved into the workflow's onComplete section, top-level script statements moved into functions, and a handful of deprecated idioms were modernised — Channel with a capital C, implicit closure variables, a while loop. The pipeline now passes nextflow lint with zero errors and zero warnings, and I verified it end-to-end on 26.04 across the STAR, Salmon and download paths. The one thing to know: the minimum Nextflow is now 25.10. Nothing about the analysis changed — same processes, same resources, same outputs.",
 
@@ -1080,7 +1082,7 @@
       <span style="background: var(--route-salmon)"></span>
       <span style="background: var(--route-qc)"></span>
     </div>
-    <div>Version 1.4.2 &nbsp;·&nbsp; August 2026</div>
+    <div>Version 1.4.3 &nbsp;·&nbsp; August 2026</div>
   </div>
 </section>
 
@@ -1776,12 +1778,60 @@
 
 
 <!-- ============================================================
-  SLIDE 17 — WHAT'S NEW IN 1.4.2
+  SLIDE 17 — WHAT'S NEW IN 1.4.3
 ============================================================ -->
-<section data-label="14 What's new in 1.4.2">
+<section data-label="14 What's new in 1.4.3">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">What's new in 1.4.2</h2>
+    <h2 class="slide-title">What's new in 1.4.3</h2>
+    <div class="release-head" style="margin-top: 18px;">
+      <span class="release-tag">v1.4.3</span>
+      <span class="release-date">4 August 2026</span>
+    </div>
+    <div class="rule" style="margin-top: 6px;"></div>
+
+    <div class="changes">
+      <div class="change">
+        <h4>Fixed — <code>--download_gmt</code> could not run at all</h4>
+        <p><code>DOWNLOAD_GMT</code> asked for <code>bioconda::r-msigdbr</code>, but msigdbr is a CRAN package and has never existed in bioconda, so the environment could never be solved. Now <code>conda-forge::r-msigdbr</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Current gene sets — msigdbr 7.5.1 → 26.1.0</h4>
+        <p>Gene sets are now MSigDB release 2026.1 rather than the 2022 vintage 7.5.1 shipped. A human run produces 50 hallmark, 7,670 C2 and 16,283 C5 gene sets.</p>
+      </div>
+      <div class="change">
+        <h4>Migrated to the msigdbr ≥ 10 API</h4>
+        <p><code>category</code> → <code>collection</code>, and the <code>gs_subcat</code> column → <code>gs_subcollection</code> (values such as <code>GO:BP</code> are unchanged). The script now asserts the version up front instead of failing deep inside a <code>tryCatch</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Removed — runtime package installation</h4>
+        <p>The script tried <code>BiocManager::install("msigdbr")</code> when the package was missing — which could never have worked, msigdbr being CRAN, not Bioconductor. The environment is the process definition's job; a missing package now fails with a clear message.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed — scientific names to <code>--organism</code> were rejected</h4>
+        <p>The resolver lower-cased its input and returned that, so <code>"Danio rerio"</code> became <code>"danio rerio"</code> and failed lookup even though the species is available. Matching is now case-insensitive against both scientific and common names.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed — no more silent success</h4>
+        <p>Per-collection errors were logged, then the script printed "Download complete." and exited 0 having written nothing. It now tracks what was written and exits non-zero if no gene sets were retrieved.</p>
+      </div>
+      <div class="change">
+        <h4>Note — <code>--download_gmt</code> now needs network</h4>
+        <p>From msigdbr 24 the gene sets are fetched over HTTPS on first use rather than bundled in the package, so this step fails on a compute node with no outbound route. Run it somewhere with internet and pass the result with <code>--gmt</code>.</p>
+      </div>
+    </div>
+  </div>
+  <div class="pagemark"><span class="dot"></span>17 · What's new</div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 18 — PREVIOUSLY 1.4.2
+============================================================ -->
+<section data-label="15 Previously — 1.4.2">
+  <div class="frame">
+    <p class="eyebrow">Release notes</p>
+    <h2 class="slide-title">Previously — 1.4.2</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.4.2</span>
       <span class="release-date">4 August 2026</span>
@@ -1819,14 +1869,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>17 · What's new</div>
+  <div class="pagemark"><span class="dot"></span>18 · Previously</div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 18 — PREVIOUSLY 1.4.0
+  SLIDE 19 — PREVIOUSLY 1.4.0
 ============================================================ -->
-<section data-label="15 Previously — 1.4.0">
+<section data-label="16 Previously — 1.4.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously — 1.4.0</h2>
@@ -1855,14 +1905,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>18 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>19 · Previously</div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 19 — PREVIOUSLY 1.3.0
+  SLIDE 20 — PREVIOUSLY 1.3.0
 ============================================================ -->
-<section data-label="16 Previously — 1.3.0">
+<section data-label="17 Previously — 1.3.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously — 1.3.0</h2>
@@ -1899,14 +1949,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>19 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>20 · Previously</div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 20 — PREVIOUS RELEASE 1.2.0
+  SLIDE 21 — PREVIOUS RELEASE 1.2.0
 ============================================================ -->
-<section data-label="17 Previously — 1.2.0">
+<section data-label="18 Previously — 1.2.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously — 1.2.0</h2>
@@ -1947,14 +1997,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>20 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>21 · Previously</div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 21 — PREVIOUS RELEASE 1.1.0
+  SLIDE 22 — PREVIOUS RELEASE 1.1.0
 ============================================================ -->
-<section data-label="18 Previously — 1.1.0">
+<section data-label="19 Previously — 1.1.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously — 1.1.0</h2>
@@ -1991,14 +2041,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>21 · Previous release</div>
+  <div class="pagemark"><span class="dot"></span>22 · Previous release</div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 22 — QUICK START
+  SLIDE 23 — QUICK START
 ============================================================ -->
-<section data-label="19 Quick start">
+<section data-label="20 Quick start">
   <div class="frame">
     <p class="eyebrow">Closing</p>
     <h2 class="slide-title">Quick start — four commands</h2>
@@ -2040,7 +2090,7 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>22 · Quick start</div>
+  <div class="pagemark"><span class="dot"></span>23 · Quick start</div>
 </section>
 
 </deck-stage>

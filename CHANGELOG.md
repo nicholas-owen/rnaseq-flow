@@ -7,39 +7,70 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Fixed
-
-- **GSEA results are now reproducible.** `fgsea()` dispatches to the multilevel
-  algorithm, which estimates its p-values by Monte Carlo sampling, and nothing
-  seeded it — so the same ranked list gave different p-values, and a different
-  pathway order, on every run (including on `-resume`). `gsea.R` now seeds the
-  generator once per contrast, so each contrast is reproducible on its own
-  regardless of how many contrasts a run has or the order they are processed in.
-
-- **GSEA no longer discards the leading edge.** The `leadingEdge` column — the
-  genes driving each enrichment, and the part of a GSEA result that actually
-  gets followed up — was deleted before the results were written. It is now
-  collapsed to a `/`-delimited string and kept. This also removes a latent trap
-  in the column-dropping idiom: `-which(names(x) %in% "leadingEdge")` evaluates
-  to `-integer(0)` if the column is ever absent, which selects *zero* columns
-  and writes an empty table.
-
-- **gProfiler over-representation now tests against the right background.**
-  `gprofiler.R` queried with `domain_scope = "annotated"` and no custom
-  background, so a contrast's significant genes were tested against every gene
-  g:Profiler holds an annotation for, rather than against the genes that were
-  actually measured. That inflates enrichment significance across the board and
-  most severely for tissue-specific categories — the ones an RNA-seq experiment
-  is usually looking for. The background is now the tested gene universe (the
-  rows of the DESeq2 result table, i.e. everything surviving expression
-  filtering), passed as `custom_bg` with `domain_scope = "custom_annotated"`.
-  **Enrichment results from earlier versions will differ, and should be
-  regarded as over-optimistic.**
-
-Roadmap items are tracked in
+No unreleased changes. Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.
+
+## [1.4.3] - 2026-08-04
+
+A gene-set release. `--download_gmt` could not run at all — it requested a
+package from a channel that has never carried it — and the fix is paired with an
+upgrade to the current MSigDB gene sets.
+
+### Changed
+
+- **msigdbr upgraded from 7.5.1 to 26.1.0**, so `--download_gmt` now produces
+  current MSigDB gene sets (release 2026.1) rather than the 2022 vintage that
+  7.5.1 shipped. This required migrating `assets/download_gmt.R` to the API
+  introduced in msigdbr 10.0.0: the `msigdbr()` argument `category` became
+  `collection`, and the output column `gs_subcat` became `gs_subcollection`
+  (the values, e.g. `"GO:BP"`, are unchanged). The script now asserts
+  `msigdbr >= 10` up front and fails with an explicit message, rather than
+  erroring deep inside a `tryCatch` and writing empty gene sets.
+
+  Gene sets are still taken from the human MSigDB and mapped to other species by
+  orthology (msigdbr's `db_species = "HS"` default), preserving previous
+  behaviour. MSigDB's native mouse collections are left as a deliberate future
+  choice rather than a silent change of results.
+
+  **Note:** from msigdbr 24 the gene sets are fetched over HTTPS on first use
+  instead of being bundled in the package, so `--download_gmt` now needs outbound
+  network access on whichever machine runs it.
+
+### Removed
+
+- **Runtime package installation in `download_gmt.R`.** The script tried
+  `BiocManager::install("msigdbr")` if the package was missing — which could
+  never have worked, since msigdbr is a CRAN package, not a Bioconductor one. A
+  process that installs its own dependencies at run time is neither reproducible
+  nor guaranteed a network or a writable library path; the environment is now
+  the process definition's responsibility, and a missing package fails with a
+  clear message.
+
+### Fixed
+
+- **`--download_gmt` could not run at all.** `DOWNLOAD_GMT` requested
+  `bioconda::r-msigdbr`, but msigdbr is a CRAN package and has never existed in
+  the bioconda channel, so the environment could not be solved. It is now
+  `conda-forge::r-msigdbr`. (Both this and the `BiocManager` call above stem from
+  the same mistaken assumption that msigdbr is a Bioconductor package.)
+
+- **A scientific name passed to `--organism` was always rejected.** The organism
+  resolver lower-cased its input to compare against its alias table, then
+  returned that lower-cased string when no alias matched — so `"Danio rerio"`
+  became `"danio rerio"` and failed the lookup against msigdbr's `species_name`,
+  even though the species is available. Only the gProfiler-style codes and
+  common names ever worked, despite the scientific name being documented.
+  Matching is now case-insensitive against both msigdbr's scientific and common
+  name columns, and always resolves to msigdbr's own capitalisation.
+
+- **`download_gmt.R` reported success when it had downloaded nothing.** Each
+  collection was wrapped in a `tryCatch` that logged the error and continued, and
+  the script then printed "Download complete." and exited 0 regardless. It now
+  tracks what was actually written, still tolerates one collection being
+  unavailable, and exits non-zero with the underlying failures if no gene sets
+  were retrieved at all.
 
 ## [1.4.2] - 2026-08-04
 
@@ -90,6 +121,35 @@ any analysis step — this release only affects how and where jobs are run.
   declared in a hidden `institutional_config_options` group, which also lets any
   other institutional config be layered on with `-c`. `--help` learned to honour
   the schema's `hidden` flag, so these stay out of the printed parameter list.
+
+### Fixed
+
+- **GSEA results are now reproducible.** `fgsea()` dispatches to the multilevel
+  algorithm, which estimates its p-values by Monte Carlo sampling, and nothing
+  seeded it — so the same ranked list gave different p-values, and a different
+  pathway order, on every run (including on `-resume`). `gsea.R` now seeds the
+  generator once per contrast, so each contrast is reproducible on its own
+  regardless of how many contrasts a run has or the order they are processed in.
+
+- **GSEA no longer discards the leading edge.** The `leadingEdge` column — the
+  genes driving each enrichment, and the part of a GSEA result that actually
+  gets followed up — was deleted before the results were written. It is now
+  collapsed to a `/`-delimited string and kept. This also removes a latent trap
+  in the column-dropping idiom: `-which(names(x) %in% "leadingEdge")` evaluates
+  to `-integer(0)` if the column is ever absent, which selects *zero* columns
+  and writes an empty table.
+
+- **gProfiler over-representation now tests against the right background.**
+  `gprofiler.R` queried with `domain_scope = "annotated"` and no custom
+  background, so a contrast's significant genes were tested against every gene
+  g:Profiler holds an annotation for, rather than against the genes that were
+  actually measured. That inflates enrichment significance across the board and
+  most severely for tissue-specific categories — the ones an RNA-seq experiment
+  is usually looking for. The background is now the tested gene universe (the
+  rows of the DESeq2 result table, i.e. everything surviving expression
+  filtering), passed as `custom_bg` with `domain_scope = "custom_annotated"`.
+  **Enrichment results from earlier versions will differ, and should be
+  regarded as over-optimistic.**
 
 ## [1.4.0] - 2026-07-17
 
