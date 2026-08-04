@@ -17,16 +17,17 @@ process HISAT2_BUILD {
     // extracted from the GTF -- of the order of 200 GB for human. Rather than be
     // OOM-killed on a smaller node, fall back to a non-splice-aware index and say so.
     //
-    // need_gb comes from hisat2_build_mem() via ext.build_memory (conf/base.config);
-    // task.memory is what was actually granted, after check_max() clamped that
+    // need_gb comes from ext.build_memory_gb (conf/base.config); task.memory is
+    // what the scheduler actually granted, after resourceLimits clamped the
     // request to --max_memory.
     if (!task.memory) {
         error "[HISAT2_BUILD] No memory allocated. Configure memory for the 'process_high' label."
     }
+    // ext.build_memory_gb is a plain number of gigabytes (conf/base.config), so
+    // it is compared directly against what the scheduler granted -- no cast and
+    // no MemoryUnit reference is needed on this side.
     def avail_gb = task.memory.toGiga()
-    def need_gb  = task.ext.build_memory
-        ? (task.ext.build_memory as nextflow.util.MemoryUnit).toGiga()
-        : avail_gb
+    def need_gb  = task.ext.build_memory_gb ?: avail_gb
     def splice_aware = avail_gb >= need_gb
 
     // hisat2-build and the extract scripts cannot read gzipped input: decompress
