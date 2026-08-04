@@ -78,6 +78,12 @@ nextflow run main.nf \
 | `--download_gmt` | Also download Hallmark / C2 / C5 gene sets |
 | `--organism` | gProfiler-style organism ID; mapped to a scientific name for MSigDB |
 
+> **`--download_gmt` needs network access on the machine that runs it.** From
+> msigdbr 24 the gene sets are fetched over HTTPS on first use rather than being
+> bundled in the package, so this step will fail on a compute node with no
+> outbound route. Run the download workflow somewhere with internet access, then
+> pass the resulting file with `--gmt` on later runs.
+
 **Reproducibility — the versioned subfolder.** When `--download_release` is
 set, the reference files are written to a `v<release>` subfolder *under*
 `--outdir`, so each Ensembl build is kept separate. With

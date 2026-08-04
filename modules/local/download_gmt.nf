@@ -4,7 +4,22 @@ process DOWNLOAD_GMT {
     // fly by Nextflow Wave from the Conda package below. Wave builds a minimal,
     // secure container at runtime (see the wave {} block in nextflow.config),
     // which avoids depending on a specific pre-built biocontainer tag.
-    conda 'bioconda::r-msigdbr=7.5.1'
+    //
+    // conda-forge, NOT bioconda: msigdbr is a CRAN package, so it is packaged as
+    // conda-forge::r-msigdbr. It has never existed in bioconda, so the previous
+    // `bioconda::r-msigdbr=7.5.1` could not be solved and this process could not
+    // run at all.
+    //
+    // Pinned exactly, because the API is version-sensitive: msigdbr 10.0.0
+    // renamed the `category` argument to `collection` and the `gs_subcat` column
+    // to `gs_subcollection`, both of which assets/download_gmt.R relies on. The
+    // script asserts msigdbr >= 10 at run time and fails with a clear message
+    // rather than producing empty gene sets.
+    //
+    // From msigdbr 24.1.0 the gene sets are fetched over the network on first
+    // use rather than shipped inside the package, so this process needs outbound
+    // HTTPS -- see the note at the top of assets/download_gmt.R.
+    conda 'conda-forge::r-msigdbr=26.1.0'
 
     input:
     val organism
