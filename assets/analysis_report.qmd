@@ -242,12 +242,13 @@ tbl <- deseq2 %>%
             pvalue, padj)
 truncated <- nrow(tbl) > MAX_TABLE_ROWS
 if (truncated) tbl <- head(tbl, MAX_TABLE_ROWS)
-cap <- if (truncated)
+cap <- if (truncated) {
   sprintf("Top %d significant genes by padj (of %d).", MAX_TABLE_ROWS,
           sum(deseq2$significant))
-else
+} else {
   sprintf("All %d significant genes (padj < %.2f, |log2FC| > %g).",
           nrow(tbl), PADJ_CUT, LFC_CUT)
+}
 dt <- DT::datatable(tbl, rownames = FALSE, filter = "top", caption = cap,
                     options = list(pageLength = 10, scrollX = TRUE))
 DT::formatSignif(dt, c("pvalue", "padj"), digits = 3)
@@ -329,12 +330,13 @@ tbl <- edger %>%
             PValue, FDR)
 truncated <- nrow(tbl) > MAX_TABLE_ROWS
 if (truncated) tbl <- head(tbl, MAX_TABLE_ROWS)
-cap <- if (truncated)
+cap <- if (truncated) {
   sprintf("Top %d significant genes by FDR (of %d).", MAX_TABLE_ROWS,
           sum(edger$significant))
-else
+} else {
   sprintf("All %d significant genes (FDR < %.2f, |logFC| > %g).",
           nrow(tbl), PADJ_CUT, LFC_CUT)
+}
 dt <- DT::datatable(tbl, rownames = FALSE, filter = "top", caption = cap,
                     options = list(pageLength = 10, scrollX = TRUE))
 DT::formatSignif(dt, c("PValue", "FDR"), digits = 3)
