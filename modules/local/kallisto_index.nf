@@ -1,6 +1,6 @@
 process KALLISTO_INDEX {
     label 'process_medium'
-    container 'quay.io/biocontainers/kallisto:0.48.0--h159158b_2'
+    container 'quay.io/biocontainers/kallisto:0.48.0--h15996b6_2'
 
     input:
     path transcript_fasta

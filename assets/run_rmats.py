@@ -84,8 +84,14 @@ def main():
         with open(b1_path, 'w') as f: f.write(",".join(b1))
         with open(b2_path, 'w') as f: f.write(",".join(b2))
         
-        # Construct rMATS command
-        # rmats.py --b1 b1.txt --b2 b2.txt --gtf gtf -t paired --readLength 100 --nthread 4 --od out_dir --tmp tmp_dir
+        # Construct rMATS command.
+        #
+        # --variable-read-length is essential here: --readLength is a single
+        # number, and by default rMATS DISCARDS every read that is not exactly
+        # that length. Reads reaching this step have been adapter/quality
+        # trimmed by fastp, so their lengths vary -- without this flag most of
+        # the data is silently thrown away and the splicing results are
+        # meaningless rather than obviously wrong.
         cmd = [
             "rmats.py",
             "--b1", b1_path,
@@ -93,6 +99,7 @@ def main():
             "--gtf", gtf,
             "-t", read_type,
             "--readLength", str(read_length),
+            "--variable-read-length",
             "--nthread", "4",
             "--od", out_subdir,
             "--tmp", os.path.join(out_subdir, "tmp")

@@ -1,12 +1,13 @@
 process GPROFILER {
     label 'process_medium'
-    // Container with gprofiler2. rocker/verse usually does NOT have it by default, 
-    // but we can install it or use a bioconductor container if available. 
-    // 'gprofiler2' is on CRAN. 
-    // Let's use a container that likely has it or install it on fly (not recommended for NF)
-    // or use a safer bet: custom docker or a container from biocontainers that includes it.
-    // 'quay.io/biocontainers/r-gprofiler2:0.2.1--r41h7d875b9_0' exists.
-    container 'quay.io/biocontainers/r-gprofiler2:0.2.3--r43hc247a5b_0'
+    // No fixed image: provisioned on the fly by Nextflow Wave from the Conda
+    // packages below, as DESEQ2 and QUARTO_REPORT are.
+    //
+    // There is no biocontainer for gprofiler2 -- the quay.io/biocontainers
+    // repository does not exist (zero tags), so the image previously named here
+    // could never be pulled and this process could never run. gprofiler2 is a
+    // CRAN package, hence conda-forge.
+    conda 'conda-forge::r-gprofiler2=0.2.3 conda-forge::r-ggplot2'
 
     input:
     val organism

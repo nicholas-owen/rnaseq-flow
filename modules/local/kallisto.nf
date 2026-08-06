@@ -1,7 +1,7 @@
 process KALLISTO_QUANT {
     tag "$meta.id"
     label 'process_medium'
-    container 'quay.io/biocontainers/kallisto:0.48.0--h1591592_0'
+    container 'quay.io/biocontainers/kallisto:0.48.0--h15996b6_2'
 
     input:
     tuple val(meta), path(reads)

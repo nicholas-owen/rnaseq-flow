@@ -1,7 +1,7 @@
 process RSEQC {
     tag "$meta.id"
     label 'process_medium'
-    container 'quay.io/biocontainers/rseqc:5.0.1--py38h24c8516_2'
+    container 'quay.io/biocontainers/rseqc:5.0.1--py39hf95cd2a_1'
 
     input:
     tuple val(meta), path(bam), path(bai)
