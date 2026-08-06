@@ -77,6 +77,21 @@ read_de <- function(files, prefix) {
   }))
 }
 
+# Figures are written as both SVG and PNG by the upstream scripts. Prefer the
+# SVG: it is vector, so it stays sharp at any zoom, and for these plots (few
+# points) it is no larger than the raster copy. Its text is rendered as glyph
+# outlines rather than <text> elements, so it is not selectable or searchable —
+# sharpness, not text fidelity, is what the SVG buys here.
+# Falls back to the PNG when only that exists — an older results directory, or
+# a figure whose device failed — and returns nothing when neither is present.
+fig_path <- function(dir, name) {
+  for (ext in c(".svg", ".png")) {
+    f <- file.path(dir, paste0(name, ext))
+    if (file.exists(f)) return(f)
+  }
+  character(0)
+}
+
 # An interactive table with consistent defaults.
 nice_table <- function(df, caption = NULL) {
   DT::datatable(df, rownames = FALSE, filter = "top", caption = caption,
@@ -221,9 +236,8 @@ ggplotly(p, tooltip = "text")
 ### Sample similarity and top variable genes
 
 ```{r deseq2-images, eval=have_deseq2, out.width="80%"}
-imgs <- c(file.path(deseq2_dir, "pca_plot.png"),
-          file.path(deseq2_dir, "heatmap_top_var.png"))
-imgs <- imgs[file.exists(imgs)]
+imgs <- c(fig_path(deseq2_dir, "pca_plot"),
+          fig_path(deseq2_dir, "heatmap_top_var"))
 if (length(imgs)) knitr::include_graphics(imgs)
 ```
 
@@ -314,8 +328,8 @@ ggplotly(p, tooltip = "text")
 ### Sample similarity
 
 ```{r edger-images, eval=have_edger, out.width="60%"}
-mds <- file.path(edger_dir, "mds_plot.png")
-if (file.exists(mds)) knitr::include_graphics(mds)
+mds <- fig_path(edger_dir, "mds_plot")
+if (length(mds)) knitr::include_graphics(mds)
 ```
 
 ### Results table
@@ -404,8 +418,11 @@ DT::formatSignif(dt, intersect(c("pval", "padj"), names(gsea)), digits = 3)
 ```
 
 ```{r gsea-plots, eval=have_gsea, out.width="80%"}
-gplots <- list.files(gsea_dir, "^gsea_plot_.*\\.png$", full.names = TRUE)
-if (length(gplots)) knitr::include_graphics(gplots)
+# Prefer the SVG copies; fall back to any contrast that only has a PNG.
+gplots <- list.files(gsea_dir, "^gsea_plot_.*\\.svg$", full.names = TRUE)
+pngs   <- list.files(gsea_dir, "^gsea_plot_.*\\.png$", full.names = TRUE)
+gplots <- c(gplots, pngs[!sub("\\.png$", "", pngs) %in% sub("\\.svg$", "", gplots)])
+if (length(gplots)) knitr::include_graphics(sort(gplots))
 ```
 
 ## gProfiler

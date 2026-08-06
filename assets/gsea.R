@@ -33,6 +33,24 @@ build_ranks <- function(values, ids) {
     sort(values, decreasing = TRUE)
 }
 
+# Write one figure as both PNG and SVG. `draw` renders the plot and is called
+# once per device. SVG uses grDevices::svg() rather than ggsave(..., ".svg"),
+# because ggsave() delegates SVG to the svglite package, which the pipeline
+# containers do not carry, whereas svg() needs only cairo, which they do. The
+# report embeds the SVG; the PNG is kept for slides, email and documents.
+# Mirrors save_figure() in deseq2.R / edger.R.
+FIG_RES <- 150   # px per inch for the raster copy
+
+save_figure <- function(dir, name, draw, width = 7, height = 7) {
+    png(file.path(dir, paste0(name, ".png")),
+        width = width, height = height, units = "in", res = FIG_RES)
+    draw()
+    dev.off()
+    svg(file.path(dir, paste0(name, ".svg")), width = width, height = height)
+    draw()
+    dev.off()
+}
+
 # 1. Load Pathways
 pathways <- fgsea::gmtPathways(gmt_file)
 # Union of all genes across the gene sets, used to pick the ranking identifier
@@ -80,6 +98,15 @@ for (f in res_files) {
     message(sprintf("  ranking by %s - %d of %d genes overlap the gene sets",
                     best, max(overlaps), length(ranks)))
 
+    # The ranked list fgsea was run on. gsea_stats_*.csv carries the per-pathway
+    # results, but the enrichment figure also needs the ranking itself -- and
+    # which identifier it is keyed by (symbol or gene ID) is decided above at
+    # run time, so it cannot be reconstructed from the DE table alone.
+    write.csv(data.frame(id = names(ranks), rank_stat = as.numeric(ranks),
+                         ranked_by = best, stringsAsFactors = FALSE),
+              file.path("gsea_output", paste0("gsea_ranks_", contrast_name, ".csv")),
+              row.names = FALSE)
+
     # Zero overlap would make fgsea error (or return nothing); skip with a
     # diagnostic instead of failing the run or emitting a silent empty table.
     if (length(ranks) < 1 || max(overlaps) < 1) {
@@ -120,8 +147,12 @@ for (f in res_files) {
     # -integer(0) selects *zero* columns and writes an empty table.)
     fgseaResTidy$leadingEdge <- vapply(fgseaResTidy$leadingEdge, paste,
                                        character(1), collapse = "/")
+    # row.names = FALSE: the row names here are just 1..N, which write.csv()
+    # would emit as a leading column with a blank header. The pathway identifier
+    # is already a named column.
     write.csv(fgseaResTidy,
-              file = file.path("gsea_output", paste0("gsea_stats_", contrast_name, ".csv")))
+              file = file.path("gsea_output", paste0("gsea_stats_", contrast_name, ".csv")),
+              row.names = FALSE)
     
     # Plot top pathways
     topPathwaysUp <- fgseaResTidy %>% filter(ES > 0) %>% head(10) %>% pull(pathway)
@@ -129,9 +160,9 @@ for (f in res_files) {
     topPathways <- c(topPathwaysUp, topPathwaysDown)
     
     if (length(topPathways) > 0) {
-        png(file.path("gsea_output", paste0("gsea_plot_", contrast_name, ".png")), width=800, height=600)
-        p <- plotGseaTable(pathways[topPathways], ranks, fgseaRes, gseaParam = 0.5)
-        print(p)
-        dev.off()
+        save_figure("gsea_output", paste0("gsea_plot_", contrast_name),
+                    function() print(plotGseaTable(pathways[topPathways], ranks,
+                                                   fgseaRes, gseaParam = 0.5)),
+                    width = 8.3, height = 6.25)
     }
 }

@@ -54,18 +54,30 @@ if (!is.na(gene_info_path) && nzchar(gene_info_path) &&
                          error = function(e) NULL)
 }
 annotate_genes <- function(df) {
-    # Prepend gene_name + gene_biotype, matched on the row names (gene IDs);
-    # falls back to a version-insensitive match for any unmatched IDs, then to a
-    # gene_name match (for a symbol-keyed --matrix input, whose row names are
-    # already symbols rather than gene IDs).
-    if (is.null(geneinfo)) return(df)
+    # Prepend gene_id + gene_name + gene_biotype, matched on the row names (gene
+    # IDs); falls back to a version-insensitive match for any unmatched IDs, then
+    # to a gene_name match (for a symbol-keyed --matrix input, whose row names are
+    # already symbols rather than gene IDs -- in that mode gene_id carries those
+    # symbols, since they are the key the matrix is actually indexed by).
+    #
+    # gene_id is emitted as a named column and the callers write with
+    # row.names = FALSE. Previously the IDs were left as row names, which
+    # write.csv() emits as a leading column with an empty header: the
+    # authoritative identifier was the one field without a label, read.csv()
+    # renamed it to 'X', pandas to 'Unnamed: 0', and a reader skimming the sheet
+    # saw gene_name as the first real column. Gene symbols are neither unique nor
+    # stable across annotation releases (two Ensembl IDs can share a symbol, and
+    # symbols get renamed), so the stable ID has to be plainly labelled.
+    ids <- rownames(df)
+    if (is.null(geneinfo)) return(cbind(gene_id = ids, df))
     strip <- function(x) sub("\\.[0-9]+$", "", x)
-    m  <- match(rownames(df), geneinfo$gene_id)
+    m  <- match(ids, geneinfo$gene_id)
     na <- is.na(m)
-    if (any(na)) m[na] <- match(strip(rownames(df)[na]), strip(geneinfo$gene_id))
+    if (any(na)) m[na] <- match(strip(ids[na]), strip(geneinfo$gene_id))
     na <- is.na(m)
-    if (any(na)) m[na] <- match(rownames(df)[na], geneinfo$gene_name)
-    cbind(gene_name    = geneinfo$gene_name[m],
+    if (any(na)) m[na] <- match(ids[na], geneinfo$gene_name)
+    cbind(gene_id      = ids,
+          gene_name    = geneinfo$gene_name[m],
           gene_biotype = geneinfo$gene_biotype[m],
           df)
 }
@@ -82,6 +94,45 @@ draw_volcano <- function(lfc, pval, padj, title) {
          main = title)
     abline(v = c(-1, 1), lty = 2, col = "#868e96")
     if (any(sig)) abline(h = -log10(max(pval[sig])), lty = 2, col = "#868e96")
+}
+
+# ---------------------------------------------------------------------------
+# Write one figure as both PNG and SVG.
+#
+# `draw` is a function of no arguments that renders the plot. It is called once
+# per device, because a plot can only be written while its device is open: a
+# ggplot object must be print()ed inside it, base and grid (pheatmap) plots are
+# simply drawn.
+#
+# SVG is written with grDevices::svg() rather than ggsave(..., ".svg"):
+# ggsave() delegates SVG to the svglite package, which none of the pipeline
+# containers carry (verified on the DESeq2, edgeR and gProfiler images), while
+# svg() needs only cairo, which all of them have. Both devices are given the
+# same inch dimensions so the raster and vector copies are identical in layout.
+#
+# The SVG is what the Quarto report embeds: it is vector, so it stays sharp at
+# any zoom. Note that cairo renders text as glyph outlines, not <text> elements
+# -- so the labels are not selectable, searchable, or editable in Illustrator or
+# Inkscape. That makes the file font-independent (it renders identically
+# everywhere, with no substitution risk) at the cost of post-editing. Producing
+# editable text would need the svglite package, which none of the pipeline
+# containers carry; a user who wants it can swap the device in the reproduce
+# script. The PNG is kept for pasting into email, slides and documents, and for
+# anything that cannot consume SVG.
+#
+# NOTE: kept identical in deseq2.R and edger.R (as annotate_genes and
+# draw_volcano already are). Edit both together.
+# ---------------------------------------------------------------------------
+FIG_RES <- 150   # px per inch for the raster copy
+
+save_figure <- function(dir, name, draw, width = 7, height = 7) {
+    png(file.path(dir, paste0(name, ".png")),
+        width = width, height = height, units = "in", res = FIG_RES)
+    draw()
+    dev.off()
+    svg(file.path(dir, paste0(name, ".svg")), width = width, height = height)
+    draw()
+    dev.off()
 }
 
 # ---------------------------------------------------------------------------
@@ -336,7 +387,15 @@ p <- ggplot(pcaData, aes(PC1, PC2, color = condition, label = name)) +
   coord_fixed() +
   theme_bw()
 
-ggsave(file.path("deseq2_output", "pca_plot.png"), plot = p)
+save_figure("deseq2_output", "pca_plot", function() print(p))
+
+# The plotted coordinates, so the PCA can be redrawn (or restyled) without
+# rerunning DESeq2. percentVar is carried as columns because it belongs to the
+# axis labels, not to any single sample.
+pca_out <- pcaData
+pca_out$percentVar_PC1 <- percentVar[1]
+pca_out$percentVar_PC2 <- percentVar[2]
+write.csv(pca_out, file.path("deseq2_output", "pca_data.csv"), row.names = FALSE)
 
 # Heatmap of the 20 most variable genes (variance computed with base R so no
 # extra package dependency is needed).
@@ -347,12 +406,24 @@ df <- as.data.frame(colData(dds)[, c("condition")])
 rownames(df) <- colnames(mat)
 colnames(df) <- "condition"
 
+# The variance-stabilised values behind the heatmap, annotated like the results
+# tables. check.names = FALSE keeps sample names verbatim. Written whether or
+# not pheatmap is available, so the data exists even if the figure does not.
+write.csv(annotate_genes(data.frame(mat, check.names = FALSE)),
+          file.path("deseq2_output", "heatmap_top_var.csv"), row.names = FALSE)
+# The column annotation (sample -> condition), so the heatmap is reproducible
+# from these two files alone.
+write.csv(data.frame(sample = rownames(df), condition = df$condition),
+          file.path("deseq2_output", "heatmap_top_var_annotation.csv"),
+          row.names = FALSE)
+
 if (have_pheatmap) {
-    png(file.path("deseq2_output", "heatmap_top_var.png"))
-    pheatmap::pheatmap(mat, annotation_col = df, show_rownames = TRUE)
-    dev.off()
+    save_figure("deseq2_output", "heatmap_top_var",
+                function() pheatmap::pheatmap(mat, annotation_col = df,
+                                              show_rownames = TRUE),
+                width = 8, height = 7)
 } else {
-    message("pheatmap not available - skipping heatmap_top_var.png")
+    message("pheatmap not available - skipping heatmap_top_var.png/.svg")
 }
 
 # 6. Contrasts
@@ -397,18 +468,25 @@ run_contrast <- function(condA, condB) {
     res_df <- res_df[order(res_df$pvalue), ]
 
     filename <- paste0("deseq2_results_", condA, "_vs_", condB, ".csv")
+    # row.names = FALSE: annotate_genes() has already promoted the row names to
+    # an explicit gene_id column, so writing them again would duplicate the IDs
+    # under a blank header.
     write.csv(annotate_genes(res_df),
-              file = file.path("deseq2_output", filename))
+              file = file.path("deseq2_output", filename), row.names = FALSE)
 
-    png(file.path("deseq2_output", paste0("maplot_", condA, "_vs_", condB, ".png")))
-    plotMA(res, main = paste(condA, "vs", condB, "(apeglm-shrunk LFC)"),
-           ylim = c(-2, 2))
-    dev.off()
+    # No separate CSV for the MA and volcano plots: both are drawn entirely from
+    # baseMean / log2FoldChange / pvalue / padj, every one of which is already a
+    # column of the deseq2_results_*.csv written just above. Duplicating a
+    # whole-transcriptome table twice more would add nothing.
+    save_figure("deseq2_output", paste0("maplot_", condA, "_vs_", condB),
+                function() plotMA(res, main = paste(condA, "vs", condB,
+                                                    "(apeglm-shrunk LFC)"),
+                                  ylim = c(-2, 2)))
 
-    png(file.path("deseq2_output", paste0("volcano_", condA, "_vs_", condB, ".png")),
-        width = 760, height = 640)
-    draw_volcano(res$log2FoldChange, res$pvalue, res$padj, paste(condA, "vs", condB))
-    dev.off()
+    save_figure("deseq2_output", paste0("volcano_", condA, "_vs_", condB),
+                function() draw_volcano(res$log2FoldChange, res$pvalue, res$padj,
+                                        paste(condA, "vs", condB)),
+                width = 8, height = 6.5)
 }
 
 pairs <- combn(cond_levels, 2)

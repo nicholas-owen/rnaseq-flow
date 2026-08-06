@@ -67,11 +67,24 @@ for (f in res_files) {
             
             if (!is.null(gostres) && !is.null(gostres$result)) {
                 # Save Data
-                write.csv(apply(gostres$result,2,as.character), file = file.path("gprofiler_output", paste0("gprofiler_", label, "_", contrast_name, ".csv")))
+                # row.names = FALSE: the row names here are just 1..N, which
+                # write.csv() would emit as a leading column with a blank
+                # header. The term identifier is already a named column.
+                write.csv(apply(gostres$result,2,as.character), file = file.path("gprofiler_output", paste0("gprofiler_", label, "_", contrast_name, ".csv")), row.names = FALSE)
                 
                 # Plot
+                # PNG + SVG. ggsave() is used for the raster copy but cannot
+                # write SVG here (it delegates that to the svglite package,
+                # which this container does not carry), so the vector copy goes
+                # through grDevices::svg(), which needs only cairo. The data
+                # behind this plot is the gprofiler_*.csv written just above.
                 p <- gostplot(gostres, capped = TRUE, interactive = FALSE)
-                ggsave(file.path("gprofiler_output", paste0("gostplot_", label, "_", contrast_name, ".png")), plot = p, width = 10, height = 6)
+                fig <- file.path("gprofiler_output",
+                                 paste0("gostplot_", label, "_", contrast_name))
+                ggsave(paste0(fig, ".png"), plot = p, width = 10, height = 6)
+                svg(paste0(fig, ".svg"), width = 10, height = 6)
+                print(p)
+                dev.off()
             }
         }
     }

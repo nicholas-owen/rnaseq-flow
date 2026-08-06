@@ -50,18 +50,30 @@ if (!is.na(gene_info_path) && nzchar(gene_info_path) &&
                          error = function(e) NULL)
 }
 annotate_genes <- function(df) {
-    # Prepend gene_name + gene_biotype, matched on the row names (gene IDs);
-    # falls back to a version-insensitive match for any unmatched IDs, then to a
-    # gene_name match (for a symbol-keyed --matrix input, whose row names are
-    # already symbols rather than gene IDs).
-    if (is.null(geneinfo)) return(df)
+    # Prepend gene_id + gene_name + gene_biotype, matched on the row names (gene
+    # IDs); falls back to a version-insensitive match for any unmatched IDs, then
+    # to a gene_name match (for a symbol-keyed --matrix input, whose row names are
+    # already symbols rather than gene IDs -- in that mode gene_id carries those
+    # symbols, since they are the key the matrix is actually indexed by).
+    #
+    # gene_id is emitted as a named column and the callers write with
+    # row.names = FALSE. Previously the IDs were left as row names, which
+    # write.csv() emits as a leading column with an empty header: the
+    # authoritative identifier was the one field without a label, read.csv()
+    # renamed it to 'X', pandas to 'Unnamed: 0', and a reader skimming the sheet
+    # saw gene_name as the first real column. Gene symbols are neither unique nor
+    # stable across annotation releases (two Ensembl IDs can share a symbol, and
+    # symbols get renamed), so the stable ID has to be plainly labelled.
+    ids <- rownames(df)
+    if (is.null(geneinfo)) return(cbind(gene_id = ids, df))
     strip <- function(x) sub("\\.[0-9]+$", "", x)
-    m  <- match(rownames(df), geneinfo$gene_id)
+    m  <- match(ids, geneinfo$gene_id)
     na <- is.na(m)
-    if (any(na)) m[na] <- match(strip(rownames(df)[na]), strip(geneinfo$gene_id))
+    if (any(na)) m[na] <- match(strip(ids[na]), strip(geneinfo$gene_id))
     na <- is.na(m)
-    if (any(na)) m[na] <- match(rownames(df)[na], geneinfo$gene_name)
-    cbind(gene_name    = geneinfo$gene_name[m],
+    if (any(na)) m[na] <- match(ids[na], geneinfo$gene_name)
+    cbind(gene_id      = ids,
+          gene_name    = geneinfo$gene_name[m],
           gene_biotype = geneinfo$gene_biotype[m],
           df)
 }
@@ -78,6 +90,45 @@ draw_volcano <- function(lfc, pval, fdr, title) {
          main = title)
     abline(v = c(-1, 1), lty = 2, col = "#868e96")
     if (any(sig)) abline(h = -log10(max(pval[sig])), lty = 2, col = "#868e96")
+}
+
+# ---------------------------------------------------------------------------
+# Write one figure as both PNG and SVG.
+#
+# `draw` is a function of no arguments that renders the plot. It is called once
+# per device, because a plot can only be written while its device is open: a
+# ggplot object must be print()ed inside it, base and grid (pheatmap) plots are
+# simply drawn.
+#
+# SVG is written with grDevices::svg() rather than ggsave(..., ".svg"):
+# ggsave() delegates SVG to the svglite package, which none of the pipeline
+# containers carry (verified on the DESeq2, edgeR and gProfiler images), while
+# svg() needs only cairo, which all of them have. Both devices are given the
+# same inch dimensions so the raster and vector copies are identical in layout.
+#
+# The SVG is what the Quarto report embeds: it is vector, so it stays sharp at
+# any zoom. Note that cairo renders text as glyph outlines, not <text> elements
+# -- so the labels are not selectable, searchable, or editable in Illustrator or
+# Inkscape. That makes the file font-independent (it renders identically
+# everywhere, with no substitution risk) at the cost of post-editing. Producing
+# editable text would need the svglite package, which none of the pipeline
+# containers carry; a user who wants it can swap the device in the reproduce
+# script. The PNG is kept for pasting into email, slides and documents, and for
+# anything that cannot consume SVG.
+#
+# NOTE: kept identical in deseq2.R and edger.R (as annotate_genes and
+# draw_volcano already are). Edit both together.
+# ---------------------------------------------------------------------------
+FIG_RES <- 150   # px per inch for the raster copy
+
+save_figure <- function(dir, name, draw, width = 7, height = 7) {
+    png(file.path(dir, paste0(name, ".png")),
+        width = width, height = height, units = "in", res = FIG_RES)
+    draw()
+    dev.off()
+    svg(file.path(dir, paste0(name, ".svg")), width = width, height = height)
+    draw()
+    dev.off()
 }
 
 # ---------------------------------------------------------------------------
@@ -325,10 +376,28 @@ fit <- glmQLFit(y, design)
 
 dir.create("edger_output", showWarnings = FALSE)
 
-# MDS Plot
-png(file.path("edger_output", "mds_plot.png"))
-plotMDS(y)
-dev.off()
+# MDS Plot. plotMDS() returns the computed coordinates invisibly, so run it once
+# with plot = FALSE to capture them for the CSV, then let save_figure() redraw
+# it per device.
+mds <- plotMDS(y, plot = FALSE)
+save_figure("edger_output", "mds_plot", function() plotMDS(y))
+
+# The plotted coordinates, so the MDS can be redrawn without rerunning edgeR.
+# var.explained is only present in newer edgeR, so it is added when available.
+# Matched on sample name rather than position: every input path orders the
+# columns by samples$sample, but a mismatch here would mislabel the plot
+# silently rather than fail.
+mds_out <- data.frame(sample    = colnames(y),
+                      condition = as.character(
+                          samples$condition[match(colnames(y), samples$sample)]),
+                      x         = as.numeric(mds$x),
+                      y         = as.numeric(mds$y),
+                      stringsAsFactors = FALSE)
+if (!is.null(mds$var.explained)) {
+    mds_out$var_explained_dim1 <- round(100 * mds$var.explained[1], 1)
+    mds_out$var_explained_dim2 <- round(100 * mds$var.explained[2], 1)
+}
+write.csv(mds_out, file.path("edger_output", "mds_data.csv"), row.names = FALSE)
 
 # 5. Contrasts.
 # Each contrast is built over the 'condition' coefficients of the design and
@@ -359,15 +428,22 @@ for (i in seq_len(ncol(pairs))) {
     res_table <- annotate_genes(topTags(test_res, n = Inf)$table)
 
     filename <- paste0("edger_results_", numerator, "_vs_", denominator, ".csv")
-    write.csv(res_table, file = file.path("edger_output", filename))
+    # row.names = FALSE: annotate_genes() has already promoted the row names to
+    # an explicit gene_id column, so writing them again would duplicate the IDs
+    # under a blank header.
+    write.csv(res_table, file = file.path("edger_output", filename),
+              row.names = FALSE)
 
-    png(file.path("edger_output", paste0("smear_", numerator, "_vs_", denominator, ".png")))
-    plotSmear(test_res, de.tags = rownames(res_table)[res_table$FDR < 0.05])
-    dev.off()
+    # No separate CSV for the smear and volcano plots: both are drawn entirely
+    # from logCPM / logFC / PValue / FDR, every one of which is already a column
+    # of the edger_results_*.csv written just above.
+    de_tags <- rownames(res_table)[res_table$FDR < 0.05]
+    save_figure("edger_output", paste0("smear_", numerator, "_vs_", denominator),
+                function() plotSmear(test_res, de.tags = de_tags))
 
-    png(file.path("edger_output", paste0("volcano_", numerator, "_vs_", denominator, ".png")),
-        width = 760, height = 640)
-    draw_volcano(res_table$logFC, res_table$PValue, res_table$FDR,
-                 paste(numerator, "vs", denominator))
-    dev.off()
+    save_figure("edger_output", paste0("volcano_", numerator, "_vs_", denominator),
+                function() draw_volcano(res_table$logFC, res_table$PValue,
+                                        res_table$FDR,
+                                        paste(numerator, "vs", denominator)),
+                width = 8, height = 6.5)
 }

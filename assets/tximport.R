@@ -66,7 +66,14 @@ txi <- tximport(
 
 # ---- 5. Save outputs ------------------------------------------------------
 saveRDS(txi, "txi.rds")
-write.csv(round(txi$counts), "tximport_gene_counts.csv")
+# Promote the gene IDs from the matrix row names to an explicit gene_id column,
+# for the same reason as the DE result tables: written as row names they land in
+# an unlabelled leading column that read.csv() renames to 'X' and pandas to
+# 'Unnamed: 0'. check.names = FALSE keeps the sample column names verbatim.
+counts_out <- data.frame(gene_id = rownames(txi$counts),
+                         round(txi$counts),
+                         check.names = FALSE, stringsAsFactors = FALSE)
+write.csv(counts_out, "tximport_gene_counts.csv", row.names = FALSE)
 
 message("tximport complete: ", nrow(txi$counts), " genes x ",
         ncol(txi$counts), " samples")
