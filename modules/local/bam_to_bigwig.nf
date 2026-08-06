@@ -1,7 +1,7 @@
 process BAM_TO_BIGWIG {
     tag "$meta.id"
     label 'process_medium'
-    container 'quay.io/biocontainers/deeptools:3.5.2--pydaf84f49_1'
+    container 'quay.io/biocontainers/deeptools:3.5.2--pyhdfd78af_1'
 
     input:
     tuple val(meta), path(bam), path(bai)

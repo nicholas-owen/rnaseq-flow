@@ -1,6 +1,10 @@
 process GTF2BED {
     label 'process_low'
-    container 'python:3.9-slim' // Helper container
+    // Not python:*-slim: those images omit procps, and Nextflow needs `ps` to
+    // collect task metrics -- without it the task fails with "Command 'ps'
+    // required by nextflow to collect task metrics cannot be found". The
+    // biocontainers image ships it and matches the registry used elsewhere here.
+    container 'quay.io/biocontainers/python:3.9--1'
 
     input:
     path gtf

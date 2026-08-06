@@ -5,7 +5,25 @@ process QUARTO_REPORT {
     // in nextflow.config). The report needs the Quarto CLI plus R with
     // ggplot2/dplyr/tidyr/jsonlite and the interactive plotly + DT packages;
     // rocker/verse does not carry plotly/DT, so a Conda-built image is used.
-    conda 'conda-forge::quarto conda-forge::r-base conda-forge::r-rmarkdown conda-forge::r-knitr conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tidyr conda-forge::r-jsonlite conda-forge::r-plotly conda-forge::r-dt'
+    //
+    // Quarto is pinned to 1.7.31. Left unpinned it resolved to 1.9.38, whose
+    // Wave-built image is incomplete: the Quarto CLI is a shell wrapper that
+    // execs a bundled Deno runtime, and the build ships neither
+    // bin/tools/x86_64/deno (only typst-gather survives there) nor
+    // share/version, so `quarto render` dies with
+    //   /opt/conda/bin/quarto: line 208: .../tools/x86_64/deno: No such file
+    // The R side of the same image is complete, so this is specific to how that
+    // Quarto version is packaged/pruned. 1.7.31 is the version nf-core's
+    // quartonotebook module ships, in an image built the same way, so it is
+    // known to survive this route.
+    //
+    // The R packages are deliberately left unpinned: they resolved correctly
+    // (plotly, DT and the rest were all present and working) and constraining
+    // them alongside an older Quarto only risks solver conflicts. Pinning the
+    // whole environment belongs with publishing a frozen image -- which is the
+    // real fix, and what nf-core does: build once, push to a registry, and
+    // reference it by digest rather than rebuilding per run.
+    conda 'conda-forge::quarto=1.7.31 conda-forge::r-base conda-forge::r-rmarkdown conda-forge::r-knitr conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tidyr conda-forge::r-jsonlite conda-forge::r-plotly conda-forge::r-dt'
 
     input:
     path "multiqc_data_dir"

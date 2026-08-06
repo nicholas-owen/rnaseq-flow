@@ -1,6 +1,8 @@
 process GTF2GENEINFO {
     label 'process_low'
-    container 'python:3.9-slim' // Helper container
+    // Not python:*-slim: those images omit procps, and Nextflow needs `ps` to
+    // collect task metrics (see modules/local/gtf2bed.nf).
+    container 'quay.io/biocontainers/python:3.9--1'
 
     input:
     path gtf
