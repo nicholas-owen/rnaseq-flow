@@ -149,13 +149,19 @@ with open('software_versions_mqc.yml', 'w') as fh:
     # A distinct id: MultiQC has its own built-in "Software Versions" section
     # (populated only from tools whose output embeds a version, i.e. FastQC and
     # fastp here), and reusing 'software_versions' risks colliding with it.
-    fh.write("id: 'rnaseq_flow_software_versions'\n")
-    fh.write("section_name: 'rnaseq-flow Software Versions'\n")
-    fh.write("description: 'Collected at run time from the tools each process actually invoked.'\n")
-    fh.write("plot_type: 'html'\n")
-    fh.write("data: |\n")
+    # NOTE the doubled backslashes below. This is a Groovy triple-quoted string,
+    # so a lone backslash-n is converted to a real newline before the script is
+    # ever written, and Python then sees an unterminated string literal. Any
+    # escape meant for Python must be doubled here, as the block above does.
+    # (That applies to comments too: this very note originally contained a lone
+    # backslash-n and broke the block it was explaining.)
+    fh.write("id: 'rnaseq_flow_software_versions'\\n")
+    fh.write("section_name: 'rnaseq-flow Software Versions'\\n")
+    fh.write("description: 'Collected at run time from the tools each process actually invoked.'\\n")
+    fh.write("plot_type: 'html'\\n")
+    fh.write("data: |\\n")
     for line in html:
-        fh.write("    " + line + "\n")
+        fh.write("    " + line + "\\n")
 
 print(f"Software versions: {len(rows)} tool(s) across "
       f"{len({r[0] for r in rows})} process(es)")

@@ -12,7 +12,15 @@ process QUARTO_REPORT {
     // solver conflicts. Pinning the whole environment belongs with publishing
     // a frozen image, which is what nf-core does: build once, push to a
     // registry, and reference it by digest rather than rebuilding per run.
-    conda 'conda-forge::quarto=1.7.31 conda-forge::r-base conda-forge::r-rmarkdown conda-forge::r-knitr conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tidyr conda-forge::r-jsonlite conda-forge::r-plotly conda-forge::r-dt'
+    // r-heatmaply draws the interactive top-variable-gene heatmap with
+    // dendrograms on both axes, which plotly alone cannot do. It pulls in
+    // seriation/vegan/dendextend, so it is the largest single addition here.
+    // Verified that heatmaply 1.6.0 works against the ggplot2 4.x this spec
+    // resolves to -- that pairing has broken in the past, so if the report ever
+    // starts failing in the heatmap chunk, check it first. The report falls back
+    // to a plain geom_tile heatmap when the package is absent, so an older image
+    // still renders.
+    conda 'conda-forge::quarto=1.7.31 conda-forge::r-base conda-forge::r-rmarkdown conda-forge::r-knitr conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tidyr conda-forge::r-jsonlite conda-forge::r-plotly conda-forge::r-dt conda-forge::r-heatmaply'
 
     input:
     path "multiqc_data_dir"

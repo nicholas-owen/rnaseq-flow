@@ -53,6 +53,11 @@ have_deseq2    <- length(deseq2_files)    > 0
 # the unshrunken fold change was published has no such column, so the shrinkage
 # comparison is skipped rather than failing.
 have_mle       <- FALSE
+# Likewise for the plotted coordinates behind the PCA and MDS figures, and for
+# the variance-stabilised matrix behind the heatmap.
+have_pca       <- FALSE
+have_mds       <- FALSE
+have_heatmap   <- FALSE
 have_edger     <- length(edger_files)     > 0
 have_gsea      <- length(gsea_files)      > 0
 have_gprofiler <- length(gprofiler_files) > 0
@@ -106,6 +111,21 @@ fig_path <- function(dir, name) {
     if (file.exists(f)) return(f)
   }
   character(0)
+}
+
+# Read a figure's data table. These live in the module's reproduce/ subfolder as
+# gzipped CSVs (read.csv decompresses transparently), which is where the figure
+# data moved when reproduce/ was introduced. Older results directories kept them
+# uncompressed beside the figures, so both layouts are accepted.
+repro_csv <- function(dir, name) {
+  for (f in c(file.path(dir, "reproduce", paste0(name, ".csv.gz")),
+              file.path(dir, paste0(name, ".csv")))) {
+    if (file.exists(f)) {
+      return(tryCatch(read.csv(f, stringsAsFactors = FALSE),
+                      error = function(e) NULL))
+    }
+  }
+  NULL
 }
 
 # An interactive table with consistent defaults.
@@ -219,6 +239,20 @@ deseq2$significant <- with(deseq2,
 deseq2$direction <- with(deseq2, ifelse(significant,
   ifelse(log2FoldChange > 0, "Up", "Down"), "Not significant"))
 have_mle <- "log2FoldChange_MLE" %in% names(deseq2)
+
+pca_df   <- repro_csv(deseq2_dir, "pca_data")
+have_pca <- !is.null(pca_df) && all(c("PC1", "PC2") %in% names(pca_df)) &&
+            nrow(pca_df) > 0
+
+hm_df  <- repro_csv(deseq2_dir, "heatmap_top_var")
+hm_ann <- repro_csv(deseq2_dir, "heatmap_top_var_annotation")
+# Needs at least a 2x2 block of samples x genes for the clustering below.
+HM_META      <- c("gene_id", "gene_name", "gene_biotype")
+have_heatmap <- !is.null(hm_df) && nrow(hm_df) > 1 &&
+                length(setdiff(names(hm_df), HM_META)) > 1
+# heatmaply draws the dendrograms; without it the heatmap falls back to a plain
+# geom_tile grid, which keeps the same ordering but shows no trees.
+have_heatmaply <- requireNamespace("heatmaply", quietly = TRUE)
 ```
 
 ### Effect-size shrinkage
@@ -322,14 +356,142 @@ ggplotly(p, tooltip = "text")
 
 ### Sample similarity and top variable genes
 
+Replicates of a condition should group together. Distance in a PCA is only
+meaningful if both axes are on the same scale, so the aspect ratio is locked —
+what looks like a big separation on PC1 really is one.
+
+```{r deseq2-pca, eval=(have_deseq2 && have_pca), fig.width=7, fig.height=6}
+pv <- function(col) if (col %in% names(pca_df)) pca_df[[col]][1] else NA
+lab <- function(axis, pct) if (is.na(pct)) axis else
+                             paste0(axis, ": ", pct, "% variance")
+
+pca_df$.text <- paste0(
+  if ("name" %in% names(pca_df)) pca_df$name else rownames(pca_df),
+  if ("condition" %in% names(pca_df)) paste0("<br>condition: ", pca_df$condition) else "",
+  "<br>PC1: ", round(pca_df$PC1, 2),
+  "<br>PC2: ", round(pca_df$PC2, 2))
+
+p <- ggplot(pca_df, aes(PC1, PC2, text = .text))
+if ("condition" %in% names(pca_df)) {
+  p <- p + geom_point(aes(colour = condition), size = 3)
+} else {
+  p <- p + geom_point(size = 3)
+}
+p <- p +
+  labs(x = lab("PC1", pv("percentVar_PC1")),
+       y = lab("PC2", pv("percentVar_PC2")), colour = NULL) +
+  theme_bw(base_size = 11)
+
+# coord_fixed() does not survive the ggplot -> plotly conversion, so the equal
+# aspect is set on the plotly object instead, which does hold.
+ggplotly(p, tooltip = "text") %>%
+  plotly::layout(yaxis = list(scaleanchor = "x", scaleratio = 1))
+```
+
+```{r deseq2-pca-note, eval=(have_deseq2 && !have_pca), results="asis"}
+cat("\n*No PCA coordinates were found (`reproduce/pca_data.csv.gz`), so the",
+    "static figure below is shown instead.*\n")
+```
+
+The heatmap below shows the 20 most variable genes across all samples, on the
+variance-stabilised scale, with the condition of each sample as a colour bar
+along the top. Rows and columns are ordered by the same clustering the published
+figure uses — Euclidean distance, complete linkage, no scaling — so the layout
+matches it exactly. Hover for the gene, the sample and its value.
+
+```{r deseq2-heatmap, eval=(have_deseq2 && have_heatmap && have_heatmaply), fig.width=8, fig.height=7}
+mat <- as.matrix(hm_df[, setdiff(names(hm_df), HM_META), drop = FALSE])
+rownames(mat) <- if ("gene_name" %in% names(hm_df)) {
+  ifelse(!is.na(hm_df$gene_name) & nzchar(hm_df$gene_name),
+         hm_df$gene_name, hm_df$gene_id)
+} else hm_df$gene_id
+
+# The condition bar, aligned to the matrix columns.
+side <- NULL
+if (!is.null(hm_ann) && all(c("sample", "condition") %in% names(hm_ann))) {
+  side <- data.frame(condition = as.character(hm_ann$condition),
+                     row.names = hm_ann$sample)
+  side <- side[colnames(mat), , drop = FALSE]
+}
+
+# distfun / hclustfun are stated rather than left to heatmaply's defaults, so
+# the ordering matches draw_heatmap() in deseq2.R and therefore the published
+# figure. scale = "none" for the same reason: these are absolute vst values.
+heatmaply::heatmaply(
+  mat,
+  col_side_colors = side,
+  distfun   = function(x) dist(x, method = "euclidean"),
+  hclustfun = function(x) hclust(x, method = "complete"),
+  scale     = "none",
+  colors    = colorRampPalette(c("#f4f6fb", "#1f4e79"))(256),
+  showticklabels = c(TRUE, TRUE),
+  key.title = "vst",
+  plot_method = "plotly")
+```
+
+```{r deseq2-heatmap-tiles, eval=(have_deseq2 && have_heatmap && !have_heatmaply), fig.width=8, fig.height=7}
+# Fallback when heatmaply is not in the image: same data and same ordering, but
+# drawn as a plain tile grid with no dendrograms.
+mat <- as.matrix(hm_df[, setdiff(names(hm_df), HM_META), drop = FALSE])
+# Label rows by gene symbol where the annotation supplied one, falling back to
+# the id. The static figure uses ids throughout; both are in the hover.
+rownames(mat) <- if ("gene_name" %in% names(hm_df)) {
+  ifelse(!is.na(hm_df$gene_name) & nzchar(hm_df$gene_name),
+         hm_df$gene_name, hm_df$gene_id)
+} else hm_df$gene_id
+
+# Same clustering parameters as draw_heatmap() in deseq2.R. hclust is
+# deterministic, so stating them reproduces the published ordering exactly.
+mat <- mat[hclust(dist(mat, method = "euclidean"), method = "complete")$order,
+           hclust(dist(t(mat), method = "euclidean"), method = "complete")$order,
+           drop = FALSE]
+
+cond <- if (!is.null(hm_ann) && all(c("sample", "condition") %in% names(hm_ann))) {
+  setNames(as.character(hm_ann$condition), hm_ann$sample)
+} else NULL
+
+long <- as.data.frame(as.table(mat), stringsAsFactors = FALSE)
+names(long) <- c("gene", "sample", "value")
+long$gene   <- factor(long$gene,   levels = rownames(mat))
+long$sample <- factor(long$sample, levels = colnames(mat))
+long$text <- paste0(
+  long$gene,
+  if (!is.null(cond)) paste0("<br>", long$sample, " (", cond[as.character(long$sample)], ")")
+  else                paste0("<br>", long$sample),
+  "<br>vst: ", round(long$value, 2))
+
+# The condition is folded into the column label rather than drawn as a separate
+# annotation bar: plotly would need a stacked subplot for that, which is a lot
+# of machinery for one row of colour.
+xlabs <- if (!is.null(cond)) {
+  setNames(paste0(colnames(mat), " (", cond[colnames(mat)], ")"), colnames(mat))
+} else setNames(colnames(mat), colnames(mat))
+
+p <- ggplot(long, aes(sample, gene, fill = value, text = text)) +
+  geom_tile(colour = "#ffffff", linewidth = 0.4) +
+  scale_x_discrete(labels = xlabs) +
+  # A sequential scale, because these are absolute variance-stabilised counts
+  # with no meaningful midpoint. (The reproduce script exposes SCALE if you
+  # would rather see row z-scores.)
+  scale_fill_gradient(low = "#f4f6fb", high = "#1f4e79", name = "vst") +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.grid  = element_blank())
+
+ggplotly(p, tooltip = "text")
+```
+
 ```{r deseq2-images, eval=have_deseq2, out.width="80%"}
-imgs <- c(fig_path(deseq2_dir, "pca_plot"),
-          fig_path(deseq2_dir, "heatmap_top_var"))
+# Static fallbacks only: each figure is drawn interactively above when the data
+# behind it is available. Both copies are published regardless.
+imgs <- c(if (!have_pca)     fig_path(deseq2_dir, "pca_plot"),
+          if (!have_heatmap) fig_path(deseq2_dir, "heatmap_top_var"))
 if (length(imgs)) knitr::include_graphics(imgs)
 ```
 
-The PCA plot shows sample clustering — replicates of a condition should group
-together. The heatmap shows the 20 most variable genes across all samples.
+Sample labels on the PCA are in the hover rather than printed beside each point,
+which is what made them overlap in the static figure.
 
 ### Results table
 
@@ -370,6 +532,10 @@ edger$significant <- with(edger,
   !is.na(FDR) & FDR < PADJ_CUT & abs(logFC) > LFC_CUT)
 edger$direction <- with(edger, ifelse(significant,
   ifelse(logFC > 0, "Up", "Down"), "Not significant"))
+
+mds_df   <- repro_csv(edger_dir, "mds_data")
+have_mds <- !is.null(mds_df) && all(c("x", "y") %in% names(mds_df)) &&
+            nrow(mds_df) > 0
 ```
 
 ### Significant genes per contrast
@@ -384,6 +550,42 @@ edger %>%
             .groups = "drop") %>%
   knitr::kable(caption = sprintf(
     "A gene is significant at FDR < %.2f and |logFC| > %g.", PADJ_CUT, LFC_CUT))
+```
+
+### Fold change vs abundance
+
+The interactive counterpart of the `smear_*` plots in `edger_output/`. Each
+point is a gene: average abundance across all samples on the x axis, fold change
+on the y. Low-abundance genes spread out to the left, which is the usual place
+for large but poorly-supported fold changes.
+
+Unlike DESeq2 above, these fold changes are **not shrunk** — edgeR's
+quasi-likelihood test moderates the dispersion rather than the effect size, so
+what you see is the raw estimate.
+
+```{r edger-ma, eval=have_edger, fig.width=9, fig.height=5}
+ed  <- edger %>% filter(!is.na(logCPM), !is.na(logFC))
+ns  <- ed %>% filter(!significant)
+sig <- ed %>% filter(significant)
+if (nrow(ns) > MAX_NS_POINTS) ns <- ns[sample(nrow(ns), MAX_NS_POINTS), ]
+ed  <- bind_rows(sig, ns) %>%
+  mutate(text = paste0(gene_name, " (", gene_id, ")",
+                       "<br>logCPM: ", round(logCPM, 2),
+                       "<br>logFC: ", round(logFC, 2),
+                       "<br>FDR: ", signif(FDR, 3)))
+
+p <- ggplot(ed, aes(logCPM, logFC, colour = direction, text = text)) +
+  geom_point(size = 0.6, alpha = 0.5) +
+  geom_hline(yintercept = 0, colour = "#868e96", linewidth = 0.3) +
+  geom_hline(yintercept = c(-LFC_CUT, LFC_CUT), linetype = "dashed",
+             colour = "#868e96", linewidth = 0.3) +
+  facet_wrap(~ contrast, ncol = 2) +
+  scale_colour_manual(values = c("Up" = "#c2255c", "Down" = "#1c7ed6",
+                                 "Not significant" = "#ced4da")) +
+  labs(x = "average abundance (logCPM)", y = "log2 fold change", colour = NULL) +
+  theme_bw(base_size = 11)
+
+ggplotly(p, tooltip = "text")
 ```
 
 ### Volcano plots
@@ -414,7 +616,39 @@ ggplotly(p, tooltip = "text")
 
 ### Sample similarity
 
-```{r edger-images, eval=have_edger, out.width="60%"}
+edgeR's MDS places samples by the leading log fold change between them — the
+same question as the PCA above, asked a different way. Both axes are the same
+kind of distance, so the aspect ratio is locked here too.
+
+```{r edger-mds, eval=(have_edger && have_mds), fig.width=7, fig.height=6}
+vex <- function(col) if (col %in% names(mds_df)) mds_df[[col]][1] else NA
+lab <- function(dim, pct) if (is.na(pct)) paste("Leading logFC dim", dim) else
+                             paste0("Leading logFC dim ", dim, ": ", pct, "%")
+
+mds_df$.text <- paste0(
+  if ("sample" %in% names(mds_df)) mds_df$sample else rownames(mds_df),
+  if ("condition" %in% names(mds_df)) paste0("<br>condition: ", mds_df$condition) else "",
+  "<br>dim 1: ", round(mds_df$x, 3),
+  "<br>dim 2: ", round(mds_df$y, 3))
+
+p <- ggplot(mds_df, aes(x, y, text = .text))
+if ("condition" %in% names(mds_df)) {
+  p <- p + geom_point(aes(colour = condition), size = 3)
+} else {
+  p <- p + geom_point(size = 3)
+}
+p <- p +
+  labs(x = lab(1, vex("var_explained_dim1")),
+       y = lab(2, vex("var_explained_dim2")), colour = NULL) +
+  theme_bw(base_size = 11)
+
+ggplotly(p, tooltip = "text") %>%
+  plotly::layout(yaxis = list(scaleanchor = "x", scaleratio = 1))
+```
+
+```{r edger-images, eval=(have_edger && !have_mds), out.width="60%"}
+# Fallback only: the interactive MDS above replaces this when the coordinates
+# are available in reproduce/.
 mds <- fig_path(edger_dir, "mds_plot")
 if (length(mds)) knitr::include_graphics(mds)
 ```
@@ -485,10 +719,10 @@ is enriched in the first condition of the contrast.
 if (!have_gsea) cat("\n*No GSEA results were produced (no `--gmt` supplied).*\n")
 ```
 
-```{r gsea-table, eval=have_gsea}
+```{r gsea-load, eval=have_gsea, include=FALSE}
 gsea <- bind_rows(lapply(gsea_files, function(f) {
   d <- read.csv(f, stringsAsFactors = FALSE)
-  d$X <- NULL
+  d$X <- NULL   # older results carried an unnamed index column
   d$contrast <- sub("\\.csv$", "", sub("gsea_stats_", "", basename(f)))
   d
 }))
@@ -498,6 +732,57 @@ gsea <- gsea[, keep, drop = FALSE]
 if ("NES" %in% names(gsea)) gsea$NES <- round(gsea$NES, 3)
 if ("ES"  %in% names(gsea)) gsea$ES  <- round(gsea$ES, 3)
 gsea <- gsea[order(gsea$padj), ]
+# fgsea sets NES/padj to NA for pathways whose p-value could not be estimated,
+# so the plot needs both present.
+gsea_ok <- nrow(gsea) > 0 && all(c("NES", "padj", "pathway") %in% names(gsea)) &&
+           any(!is.na(gsea$NES) & !is.na(gsea$padj))
+```
+
+### Top enriched gene sets
+
+The `gsea_plot_*` figures in `gsea_output/` are fgsea's own table-with-sparklines
+layout, which has no interactive equivalent. This is the readable substitute:
+the most significant gene sets per contrast, ordered by enrichment score. A
+positive NES means the set is enriched in the first condition of the contrast.
+
+```{r gsea-dotplot, eval=(have_gsea && gsea_ok), fig.width=9, fig.height=6}
+MAX_GSEA_SETS <- 20   # per contrast, by adjusted p-value
+
+gs <- gsea %>%
+  filter(!is.na(NES), !is.na(padj)) %>%
+  group_by(contrast) %>%
+  slice_min(padj, n = MAX_GSEA_SETS, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(
+    # Long MSigDB / GO names dominate the panel otherwise.
+    label = ifelse(nchar(pathway) > 55, paste0(substr(pathway, 1, 52), "..."),
+                   pathway),
+    label = factor(label, levels = unique(label[order(NES)])),
+    text  = paste0(pathway,
+                   "<br>NES: ", round(NES, 3),
+                   "<br>padj: ", signif(padj, 3),
+                   if ("size" %in% names(gsea)) paste0("<br>genes: ", size) else ""))
+
+p <- ggplot(gs, aes(NES, label, colour = padj, text = text)) +
+  geom_vline(xintercept = 0, colour = "#868e96", linewidth = 0.3) +
+  geom_point(aes(size = if ("size" %in% names(gs)) size else 3)) +
+  facet_wrap(~ contrast, ncol = 1, scales = "free_y") +
+  scale_colour_gradient(low = "#c2255c", high = "#ced4da", name = "padj") +
+  scale_size_continuous(range = c(2, 6), guide = "none") +
+  labs(x = "normalised enrichment score (NES)", y = NULL) +
+  theme_bw(base_size = 10)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r gsea-dotplot-note, eval=(have_gsea && !gsea_ok), results="asis"}
+cat("\n*No gene sets with an estimable enrichment score were returned,",
+    "so the summary plot is omitted.*\n")
+```
+
+### Results table
+
+```{r gsea-table, eval=have_gsea}
 dt <- DT::datatable(gsea, rownames = FALSE, filter = "top",
         caption = "fgsea results across all contrasts.",
         options = list(pageLength = 10, scrollX = TRUE))
