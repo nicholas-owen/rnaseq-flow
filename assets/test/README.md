@@ -8,8 +8,10 @@ end to end on a laptop or a memory-limited WSL instance.
 The genome is 12 Mb, so a STAR index builds in about 2 GB of RAM and a minute or
 two. Human and mouse need far more — mostly for index building, where a
 splice-aware HISAT2 index alone needs ~204 GB for human. Every downstream stage
-supports yeast: `--organism scerevisiae` is valid for gProfiler, and MSigDB has
-*Saccharomyces cerevisiae* gene sets via `--download_gmt`.
+supports yeast: `--organism scerevisiae` is valid for gProfiler, and MSigDB
+gene sets are available for *Saccharomyces cerevisiae* via `--download_gmt`
+(see the caveat under [GSEA](#gsea-optional) — they are human sets mapped by
+orthology, not yeast-native ones).
 
 ## The data
 
@@ -114,9 +116,39 @@ If you would rather not pass the config, the same caps as explicit flags:
 --max_cpus 4 --max_memory 12.GB --max_time 4.h
 ```
 
-Add `--download_gmt` to step 1 and `--gmt refs/yeast/gmt/hallmark.gmt` to step 3
-to include GSEA. Note `--download_gmt` needs outbound HTTPS: from msigdbr 24 the
-gene sets are fetched at run time rather than bundled.
+### GSEA (optional)
+
+Add `--download_gmt` to step 1 and `--gmt refs/yeast/gmt/c5_go_bp.gmt` to
+step 3. Step 1 already runs under `-profile test_yeast`, which sets
+`organism = 'scerevisiae'`, so the gene sets come back for yeast without any
+extra flag. `--download_gmt` on its own does nothing — it is handled inside the
+download workflow, which only runs when `--download_refs` is given.
+
+`--download_gmt` needs outbound HTTPS: from msigdbr 24 the gene sets are
+fetched at run time rather than bundled.
+
+**Use `c5_go_bp.gmt` (GO biological process), not `hallmark.gmt`.** Hallmark is
+50 human-defined sets; projected onto yeast orthologs, few of them retain enough
+genes to test. `gsea.R` warns below 15 overlapping genes and skips a contrast
+entirely at zero, so hallmark can produce an empty GSEA step that looks like a
+failure. GO:BP has far more sets and much better overlap. Either way, check the
+run log for the
+
+```
+ranking by <gene symbol|gene ID> - N of M genes overlap the gene sets
+```
+
+line: that number tells you whether the GMT is usable before you look at any
+result.
+
+> **These are not yeast-native gene sets.** msigdbr maps the human MSigDB
+> collections to other species by orthology (`db_species = "HS"`, the default —
+> see `assets/download_gmt.R`). That is fine for exercising the GSEA step, which
+> is what this test dataset is for, but the resulting enrichments are a weak
+> basis for biology: many human sets have no meaningful yeast counterpart, and
+> ortholog mapping loses genes in both directions. For yeast GSEA that is meant
+> to be interpreted, build a GMT from SGD's own GO annotations
+> (`org.Sc.sgd.db`, or the SGD GO slim) instead.
 
 ## What to check
 

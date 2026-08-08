@@ -49,6 +49,10 @@ gsea_files      <- list_csvs(gsea_dir,      "^gsea_stats_.*\\.csv$")
 gprofiler_files <- list_csvs(gprofiler_dir, "^gprofiler_(UP|DOWN)_.*\\.csv$")
 
 have_deseq2    <- length(deseq2_files)    > 0
+# Set in deseq2-load once the table is read. A results directory produced before
+# the unshrunken fold change was published has no such column, so the shrinkage
+# comparison is skipped rather than failing.
+have_mle       <- FALSE
 have_edger     <- length(edger_files)     > 0
 have_gsea      <- length(gsea_files)      > 0
 have_gprofiler <- length(gprofiler_files) > 0
@@ -56,7 +60,19 @@ have_gprofiler <- length(gprofiler_files) > 0
 mqc_hits <- list.files(pattern = "multiqc_data.json", recursive = TRUE,
                        full.names = TRUE)
 mqc_json <- if (length(mqc_hits)) mqc_hits[1] else NA_character_
-have_mqc <- !is.na(mqc_json)
+
+# The general-statistics table is read from MultiQC's own flat TSV rather than
+# from multiqc_data.json. The JSON nests each module's per-sample metrics as
+# objects, and its exact shape has changed between MultiQC versions: parsing it
+# with bind_rows() yielded a frame of nested data-frame columns, which DT cannot
+# render -- every reader got a "Requested unknown parameter" popup and a table of
+# meaningless values. multiqc_general_stats.txt is already one row per sample and
+# is stable across versions.
+gs_hits <- list.files(pattern = "multiqc_general_stats.txt", recursive = TRUE,
+                      full.names = TRUE)
+mqc_gs  <- if (length(gs_hits)) gs_hits[1] else NA_character_
+
+have_mqc <- !is.na(mqc_json) || !is.na(mqc_gs)
 
 # ---- Significance thresholds (shared throughout the report) ----------------
 PADJ_CUT       <- 0.05   # adjusted-p / FDR cutoff
@@ -140,10 +156,26 @@ if (have_mqc) {
 
 ```{r qc-load, include=FALSE}
 stats_df <- NULL
-if (have_mqc) {
+if (!is.na(mqc_gs)) {
   stats_df <- tryCatch({
-    mqc <- fromJSON(mqc_json)
-    bind_rows(mqc$report_general_stats_data, .id = "Sample")
+    d <- read.delim(mqc_gs, check.names = FALSE, stringsAsFactors = FALSE,
+                    na.strings = c("", "NA"))
+    # The provenance column is injected as MultiQC custom content, so its raw id
+    # carries two layers of scaffolding. Name it plainly.
+    names(d) <- sub(".*source_fastq$", "Source FASTQ", names(d))
+    # MultiQC encodes the source module into every other column name as
+    # "<Module>_mqc-generalstats-<module_key>-<metric>". Keep the module and the
+    # metric, drop the machinery in between.
+    names(d) <- sub("_mqc-generalstats-.*?-", ": ", names(d), perl = TRUE)
+    # A sample only has values for the modules that saw it -- FastQC reports per
+    # FASTQ, STAR per sample -- so entirely empty columns are dropped rather than
+    # shown as a wall of NA.
+    keep <- vapply(d, function(x) any(!is.na(x)), logical(1))
+    d <- d[, keep, drop = FALSE]
+    # Full double precision is noise in a summary table.
+    num <- vapply(d, is.numeric, logical(1))
+    d[num] <- lapply(d[num], function(x) signif(x, 4))
+    d
   }, error = function(e) NULL)
 }
 qc_ok <- !is.null(stats_df) && nrow(stats_df) > 0
@@ -186,7 +218,62 @@ deseq2$significant <- with(deseq2,
   !is.na(padj) & padj < PADJ_CUT & abs(log2FoldChange) > LFC_CUT)
 deseq2$direction <- with(deseq2, ifelse(significant,
   ifelse(log2FoldChange > 0, "Up", "Down"), "Not significant"))
+have_mle <- "log2FoldChange_MLE" %in% names(deseq2)
 ```
+
+### Effect-size shrinkage
+
+`log2FoldChange` in the table below is the **apeglm-shrunken** estimate. Shrinkage
+pulls fold changes toward zero where the evidence is weak — low counts, high
+dispersion — so that a gene with three reads cannot outrank a well-measured one
+on effect size alone. These two panels are the same contrast before and after:
+the left is the raw maximum-likelihood fit, the right is what the rest of this
+report uses. Most of the difference should be at the left-hand (low-count) end;
+if the panels look alike, shrinkage changed little and the raw estimates were
+already stable.
+
+```{r deseq2-ma, eval=(have_deseq2 && have_mle), fig.width=9, fig.height=5}
+md  <- deseq2 %>% filter(!is.na(baseMean), baseMean > 0, !is.na(log2FoldChange))
+ns  <- md %>% filter(!significant)
+sig <- md %>% filter(significant)
+# Same treatment as the volcano: keep every significant gene, thin the dense
+# non-significant cloud so the embedded widget stays light.
+if (nrow(ns) > MAX_NS_POINTS) ns <- ns[sample(nrow(ns), MAX_NS_POINTS), ]
+
+md <- bind_rows(sig, ns) %>%
+  tidyr::pivot_longer(c(log2FoldChange_MLE, log2FoldChange),
+                      names_to = "estimate", values_to = "lfc") %>%
+  mutate(
+    estimate = factor(ifelse(estimate == "log2FoldChange_MLE",
+                             "Unshrunken (MLE)", "apeglm-shrunken"),
+                      levels = c("Unshrunken (MLE)", "apeglm-shrunken")),
+    text = paste0(gene_name, " (", gene_id, ")",
+                  "<br>mean count: ", signif(baseMean, 3),
+                  "<br>log2FC: ", round(lfc, 2),
+                  "<br>padj: ", signif(padj, 3)))
+
+p <- ggplot(md, aes(baseMean, lfc, colour = direction, text = text)) +
+  geom_point(size = 0.6, alpha = 0.5) +
+  geom_hline(yintercept = 0, colour = "#868e96", linewidth = 0.3) +
+  scale_x_log10() +
+  facet_grid(contrast ~ estimate) +
+  scale_colour_manual(values = c("Up" = "#c2255c", "Down" = "#1c7ed6",
+                                 "Not significant" = "#ced4da")) +
+  labs(x = "mean of normalised counts", y = "log2 fold change", colour = NULL) +
+  theme_bw(base_size = 11)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r deseq2-ma-note, eval=(have_deseq2 && !have_mle), results="asis"}
+cat("\n*These results predate the unshrunken fold-change column",
+    "(`log2FoldChange_MLE`), so the shrinkage comparison cannot be drawn.",
+    "Re-running DESeq2 will add it.*\n")
+```
+
+Colouring marks significance, which comes from the **unshrunken** Wald test in
+both panels — shrinkage changes the effect-size estimate, not the test. That is
+why a gene can move noticeably between panels without changing colour.
 
 ### Significant genes per contrast
 
@@ -434,7 +521,7 @@ terms and pathways, separately for the up- and down-regulated genes.
 if (!have_gprofiler) cat("\n*No gProfiler results were produced in this run.*\n")
 ```
 
-```{r gprofiler-table, eval=have_gprofiler}
+```{r gprofiler-load, eval=have_gprofiler, include=FALSE}
 wanted <- c("contrast", "direction", "source", "term_id", "term_name",
             "p_value", "term_size", "intersection_size")
 gpr <- bind_rows(lapply(gprofiler_files, function(f) {
@@ -444,15 +531,63 @@ gpr <- bind_rows(lapply(gprofiler_files, function(f) {
   d$contrast  <- sub("^(UP|DOWN)_", "", base)
   d[, intersect(wanted, names(d)), drop = FALSE]
 }))
-if ("p_value" %in% names(gpr)) {
-  gpr$p_value <- suppressWarnings(as.numeric(gpr$p_value))
-  gpr <- gpr[order(gpr$p_value), ]
-}
-if (nrow(gpr) > MAX_TABLE_ROWS) gpr <- head(gpr, MAX_TABLE_ROWS)
-dt <- DT::datatable(gpr, rownames = FALSE, filter = "top",
+# The CSV is written with every column as character, so the numeric ones have
+# to be restored before anything can be plotted or sorted by them.
+for (nm in intersect(c("p_value", "term_size", "intersection_size"), names(gpr)))
+  gpr[[nm]] <- suppressWarnings(as.numeric(gpr[[nm]]))
+if ("p_value" %in% names(gpr)) gpr <- gpr[order(gpr$p_value), ]
+gpr_ok <- nrow(gpr) > 0 && "p_value" %in% names(gpr)
+```
+
+### Enriched terms
+
+Each point is an enriched term, arranged by source and coloured by it, with the
+strongest enrichments highest. Hover for the term name, its identifier, and how
+many of your genes it captured. This is the interactive counterpart of the
+`gostplot_*` Manhattan plots written to `gprofiler_output/`.
+
+```{r gprofiler-plot, eval=(have_gprofiler && gpr_ok), fig.width=9, fig.height=6}
+# Laid out like gProfiler's own Manhattan plot: terms grouped along x by source,
+# -log10 p up the y axis. The x position is a rank within each panel rather than
+# anything meaningful, which is true of gostplot as well -- it exists to spread
+# the terms out, so the axis is left unlabelled.
+gp <- gpr %>%
+  filter(!is.na(p_value)) %>%
+  arrange(contrast, direction, source, p_value) %>%
+  group_by(contrast, direction) %>%
+  mutate(x = row_number()) %>%
+  ungroup() %>%
+  mutate(
+    neglog10p = -log10(pmax(p_value, 1e-300)),
+    panel     = paste0(contrast, " — ", direction),
+    text      = paste0(term_name, " (", term_id, ")",
+                       "<br>source: ", source,
+                       "<br>p: ", signif(p_value, 3),
+                       "<br>genes: ", intersection_size, " of ", term_size))
+
+p <- ggplot(gp, aes(x, neglog10p, colour = source, text = text)) +
+  geom_point(aes(size = intersection_size), alpha = 0.75) +
+  facet_wrap(~ panel, scales = "free_x", ncol = 2) +
+  scale_size_continuous(range = c(1.5, 6), guide = "none") +
+  labs(x = NULL, y = "-log10 p-value", colour = NULL) +
+  theme_bw(base_size = 11) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r gprofiler-plot-note, eval=(have_gprofiler && !gpr_ok), results="asis"}
+cat("\n*gProfiler returned no terms to plot for this run.*\n")
+```
+
+### Results table
+
+```{r gprofiler-table, eval=have_gprofiler}
+gpr_tbl <- if (nrow(gpr) > MAX_TABLE_ROWS) head(gpr, MAX_TABLE_ROWS) else gpr
+dt <- DT::datatable(gpr_tbl, rownames = FALSE, filter = "top",
         caption = "gProfiler over-representation of the up/down gene lists.",
         options = list(pageLength = 10, scrollX = TRUE))
-if ("p_value" %in% names(gpr)) dt <- DT::formatSignif(dt, "p_value", digits = 3)
+if ("p_value" %in% names(gpr_tbl)) dt <- DT::formatSignif(dt, "p_value", digits = 3)
 dt
 ```
 

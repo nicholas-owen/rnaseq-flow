@@ -123,7 +123,7 @@ draw_volcano <- function(lfc, pval, padj, title, padj_cut = 0.05, lfc_cut = 1) {
 # NOTE: kept identical in deseq2.R and edger.R (as annotate_genes and
 # draw_volcano already are). Edit both together.
 # ---------------------------------------------------------------------------
-FIG_RES <- 150   # px per inch for the raster copy
+FIG_RES <- 300   # px per inch for the raster copy. 300 is the usual journal minimum for halftone / combination figures. Affects the PNG only -- the SVG is vector, so resolution is meaningless there.
 
 save_figure <- function(dir, name, draw, width = 7, height = 7) {
     png(file.path(dir, paste0(name, ".png")),
@@ -435,22 +435,31 @@ emit_function <- function(name, fn) {
 # file        path of the script to write
 # description one-line summary for the header
 # libraries   packages to attach (also reported as versions in the header)
-# contrasts   character vector, or NULL for a figure that is not per-contrast
+# selectors   named list of the values that pick which figure to draw, e.g.
+#             list(CONTRAST = c("A_vs_REF", "B_vs_REF")) or, where a figure is
+#             indexed by more than one thing, list(CONTRAST = ..., DIRECTION =
+#             c("UP", "DOWN")). Each becomes a constant defaulting to its first
+#             value, overridable by positional command-line arguments in the
+#             order given. NULL for a figure that is produced once per run.
 # constants   named list emitted as the editable settings block, in order
 # functions   named list of live functions to inline
 # inputs      R expressions (as strings) evaluating to the files it reads
 # body        the plotting code
 write_repro_script <- function(file, description, libraries = character(0),
-                               contrasts = NULL, constants = list(),
+                               selectors = NULL, constants = list(),
                                functions = list(), inputs = character(0),
                                body = character(0)) {
     rule <- paste0("# ", strrep("-", 74))
+    # Selector constants lead the settings block: they are what a reader changes
+    # most often, so they should be the first thing under the heading.
+    #
     # Every generated figure is prefixed, so a regenerated one is never mistaken
     # for the pipeline's own output. This matters because the settings above it
     # are editable: change a cutoff and the result is a different figure that
     # would otherwise carry the published figure's exact filename. Exposed as a
     # constant so anyone deliberately replacing a published figure can clear it.
-    constants <- c(constants, list(OUTPUT_PREFIX = "repro_"))
+    constants <- c(lapply(selectors, function(v) v[1]), constants,
+                   list(OUTPUT_PREFIX = "repro_"))
     # Tolerant version lookup: an optional package (pheatmap) may be absent, and
     # failing to record a version must never abort the analysis task.
     vers <- c(paste0("R ", getRversion()),
@@ -482,19 +491,25 @@ write_repro_script <- function(file, description, libraries = character(0),
         "#",
         "#   and click Source.")
 
-    if (!is.null(contrasts)) {
+    if (length(selectors)) {
         out <- c(out,
             "#",
-            "# To draw a different contrast, edit the CONTRAST setting below.",
-            "# From a terminal you can instead pass it as the first argument",
-            "# (this does not apply when sourcing the file in RStudio):",
+            paste0("# To draw a different ",
+                   paste(tolower(names(selectors)), collapse = " or "),
+                   ", edit the settings below. From a terminal you can instead"),
+            "# pass them as arguments, in this order (this does not apply when",
+            "# sourcing the file in RStudio):",
             "#",
-            paste0("#     Rscript ", basename(file), " ", contrasts[1]),
+            paste0("#     Rscript ", basename(file), " ",
+                   paste(vapply(selectors, function(v) v[1], character(1)),
+                         collapse = " ")),
             "#",
-            "# Contrasts available in this folder. Copy one of these lines over",
-            "# the CONTRAST setting below:",
-            "#",
-            paste0("#     CONTRAST <- ", vapply(contrasts, emit_value, character(1))))
+            "# Values available in this folder. Copy a line over the matching",
+            "# setting below:",
+            "#")
+        for (nm in names(selectors))
+            out <- c(out, paste0("#     ", nm, " <- ",
+                                 vapply(selectors[[nm]], emit_value, character(1))))
     }
 
     out <- c(out,
@@ -519,13 +534,16 @@ write_repro_script <- function(file, description, libraries = character(0),
     if (length(libraries))
         out <- c(out, paste0("suppressMessages(library(", libraries, "))"))
 
-    if (!is.null(contrasts)) {
+    if (length(selectors)) {
         out <- c(out, "",
-            "# An optional first argument overrides CONTRAST, so the pipeline can",
-            "# drive this same script without editing it.",
-            ".args <- commandArgs(trailingOnly = TRUE)",
-            "if (length(.args) >= 1L && nzchar(.args[1])) CONTRAST <- .args[1]",
-            paste0(".CONTRASTS <- ", emit_value(contrasts)))
+            "# Optional arguments override the settings above, in this order, so",
+            "# the pipeline can drive this same script without editing it.",
+            ".args <- commandArgs(trailingOnly = TRUE)")
+        for (i in seq_along(selectors))
+            out <- c(out, sprintf(
+                "if (length(.args) >= %dL && nzchar(.args[%d])) %s <- .args[%d]",
+                i, i, names(selectors)[i], i))
+        out <- c(out, paste0(".SELECTORS <- ", emit_value(selectors)))
     }
 
     if (length(inputs)) {
@@ -537,10 +555,12 @@ write_repro_script <- function(file, description, libraries = character(0),
             "    .msg <- paste0(\"cannot find: \", paste(.missing, collapse = \", \"),",
             "                   \"\\n  Run this script with the working directory set\",",
             "                   \" to its own folder.\")")
-        if (!is.null(contrasts))
+        if (length(selectors))
             out <- c(out,
-            "    .msg <- paste0(.msg, \"\\n  Contrasts available here: \",",
-            "                   paste(.CONTRASTS, collapse = \", \"))")
+            "    .msg <- paste0(.msg, \"\\n  Values available here:\")",
+            "    for (.n in names(.SELECTORS))",
+            "        .msg <- paste0(.msg, \"\\n    \", .n, \" : \",",
+            "                       paste(.SELECTORS[[.n]], collapse = \", \"))")
         out <- c(out,
             "    stop(.msg, call. = FALSE)",
             "}")
@@ -723,7 +743,7 @@ write_repro_script(
     file        = file.path(REPRO_DIR, "mds_plot.R"),
     description = "edgeR MDS plot: samples in two dimensions of leading log2 fold change.",
     libraries   = "limma",
-    constants   = list(WIDTH = 7, HEIGHT = 7, FIG_RES = 150),
+    constants   = list(WIDTH = 7, HEIGHT = 7, FIG_RES = FIG_RES),
     functions   = list(save_figure = save_figure),
     inputs      = '"mds_plot.rds"',
     body        = c(
@@ -739,9 +759,8 @@ if (length(repro_contrasts)) {
         file        = file.path(REPRO_DIR, "smear.R"),
         description = "edgeR smear plot: log fold change vs average abundance.",
         libraries   = "edgeR",
-        contrasts   = repro_contrasts,
-        constants   = list(CONTRAST = repro_contrasts[1], FDR_CUT = 0.05,
-                           WIDTH = 7, HEIGHT = 7, FIG_RES = 150),
+        selectors   = list(CONTRAST = repro_contrasts),
+        constants   = list(FDR_CUT = 0.05, WIDTH = 7, HEIGHT = 7, FIG_RES = FIG_RES),
         functions   = list(save_figure = save_figure),
         inputs      = c('paste0("edger_results_", CONTRAST, ".rds")',
                         'paste0("edger_results_", CONTRAST, ".csv.gz")'),
@@ -760,9 +779,9 @@ if (length(repro_contrasts)) {
     write_repro_script(
         file        = file.path(REPRO_DIR, "volcano.R"),
         description = "edgeR volcano plot: log2 fold change vs -log10 p-value.",
-        contrasts   = repro_contrasts,
-        constants   = list(CONTRAST = repro_contrasts[1], FDR_CUT = 0.05,
-                           LFC_CUT = 1, WIDTH = 8, HEIGHT = 6.5, FIG_RES = 150),
+        selectors   = list(CONTRAST = repro_contrasts),
+        constants   = list(FDR_CUT = 0.05, LFC_CUT = 1,
+                           WIDTH = 8, HEIGHT = 6.5, FIG_RES = FIG_RES),
         functions   = list(draw_volcano = draw_volcano, save_figure = save_figure),
         inputs      = 'paste0("edger_results_", CONTRAST, ".csv.gz")',
         body        = c(
