@@ -63,7 +63,13 @@ module_order:
   - rseqc
   - featureCounts
 
-# Keep the software-versions table at the very bottom.
+# Keep the software-versions tables at the very bottom.
+#   rnaseq_flow_software_versions - the pipeline's own aggregated table, built
+#     in modules/local/multiqc.nf from every process's versions.yml.
+#   software_versions - MultiQC's built-in section, which only lists the tools
+#     whose own output embeds a version (FastQC, fastp).
 report_section_order:
-  software_versions:
+  rnaseq_flow_software_versions:
     order: -1000
+  software_versions:
+    order: -1001

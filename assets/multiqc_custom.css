@@ -96,6 +96,26 @@ a:hover, a:focus { color: var(--rf-blue); }
 .btn-default { border-color: var(--rf-line); }
 
 /* ---- Tables -------------------------------------------------------------- */
+
+/* MultiQC paints the contents of a data cell at NEGATIVE z-index:
+ *     .mqc_table .wrapper { position: relative; z-index: -10; }
+ *     .mqc_table .bar     { position: absolute; z-index:  -1; }
+ *     .mqc_table tbody tr td .wrapper .val { z-index: -1; }
+ * That only renders while every ancestor of the table is transparent, because
+ * a negatively-stacked element paints *behind* any ancestor background.
+ *
+ * The section-panel rule above gives .mqc-section an opaque white background,
+ * which covered every value and every coloured bar: General Statistics looked
+ * completely empty apart from the columns that have no .wrapper (Sample Name,
+ * Source FASTQ). Restoring the wrapper to the normal stacking order fixes it
+ * without giving up the panel styling.
+ *
+ * MultiQC does exactly this itself in its print stylesheet, commented "make
+ * sure table cell contents show up" -- so the reset is the sanctioned remedy,
+ * not a hack.
+ */
+.mqc_table .wrapper { z-index: 0; }
+
 .table > thead > tr > th,
 .mqc_table thead th,
 table.dataTable thead th {

@@ -18,7 +18,7 @@ that your **rnaseq-flow** setup is working.
 
 ## 1. What you'll need
 
-- **Nextflow 25.10.0+** (strict language; verified on 26.04) and **Java 17–24**.
+- **Nextflow 25.10.0+** (strict language; verified on 26.04) and **Java 17–26**.
 - A **container engine**: Docker, Singularity/Apptainer, or Conda.
 - Command-line tools: `curl` (or `wget`), `seqtk` (for read subsampling),
   `column` and `awk` (for reading the run table).

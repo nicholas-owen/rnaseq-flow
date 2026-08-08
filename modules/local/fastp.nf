@@ -20,6 +20,14 @@ process FASTP {
     /*
      * fastp supports both single-end and paired-end.
      * We determine the input type by checking the number of read files.
+     *
+     * The reads keep their own filenames. MultiQC's fastp parser takes the
+     * sample name from the --in1 path recorded in the JSON's command string
+     * rather than from the .json filename, so this reports under whatever the
+     * samplesheet pointed at -- typically a run accession. That is intentional:
+     * it preserves the link back to the source data. MULTIQC is given a
+     * sample-name mapping built from the samplesheet so the report still shows
+     * one row per sample; see modules/local/multiqc.nf.
      */
     if (meta.single_end) {
         """

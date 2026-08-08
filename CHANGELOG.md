@@ -12,6 +12,159 @@ No unreleased changes. Roadmap items are tracked in
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.
 
+## [1.5.0] - 2026-08-08
+
+A reproducibility release. Every figure the pipeline publishes can now be
+redrawn — and adapted — from the results directory alone, without rerunning
+anything, and the analysis report is largely interactive.
+
+### Added
+
+- **`reproduce/` folders.** Each analysis output directory now carries a
+  `reproduce/` subfolder holding everything needed to redraw any of its figures:
+  the R objects the plot calls consume, gzipped copies of the tables behind
+  them, and a standalone, commented R script per figure type. The scripts run
+  from a terminal or from RStudio, need only the files beside them, and expose
+  the settings worth changing — contrast, cutoffs, colours, dimensions — as
+  named constants at the top.
+
+  The guiding split is that the parent folder is for *reading* and `reproduce/`
+  is for *running*: parent CSVs stay uncompressed so they open by double-click,
+  while the `reproduce/` copies are gzipped, which R reads transparently.
+
+  Objects are saved only where a plot genuinely needs one, and always the
+  smallest that will do — the small `MDS` object rather than the whole
+  `DGEList`, for instance, which is ~28x larger at 2,000 genes and grows with
+  gene count. GSEA is the case that most needs it: `plotGseaTable` requires
+  gene-set *membership*, which lives in the GMT — a pipeline input, never
+  published with the results — so its figure cannot be rebuilt from the CSVs at
+  any price.
+
+  Figures are written with a `repro_` prefix and a matching `.info.txt`
+  recording the settings used, the environment that regenerated them and where
+  they came from, so a regenerated figure is never mistaken for the pipeline's
+  own once it leaves the folder.
+
+- **SVG alongside PNG for every figure**, at 300 dpi for the raster copy. SVG is
+  written with `grDevices::svg()` rather than `ggsave(..., ".svg")`, which
+  delegates to the `svglite` package that none of the pipeline containers carry.
+  The report embeds the SVG; the PNG remains for slides, email and anything that
+  cannot consume vector graphics.
+
+- **An interactive analysis report.** PCA, MDS, the top-variable-gene heatmap,
+  volcano, MA and enrichment plots are now plotly widgets with hover detail,
+  replacing static images where the underlying data is available; the static
+  copies are still published and are used as a fallback. The heatmap uses
+  heatmaply for dendrograms on both axes and a condition colour bar.
+
+  New panels: a **shrinkage diagnostic** showing the same contrast before and
+  after apeglm, a **fold change vs abundance** plot for edgeR, a **GSEA dot
+  plot** of the most significant gene sets, and a **gProfiler Manhattan plot**
+  of enriched terms — the last two being the enrichment results that previously
+  appeared in the report only as tables.
+
+- **`log2FoldChange_MLE`** in the DESeq2 result tables: the unshrunken
+  maximum-likelihood fold change, kept beside the apeglm-shrunken one so the
+  size of the shrinkage can be seen rather than inferred.
+
+- **`gene_id` as an explicit column** in every differential-expression and
+  enrichment table. The IDs were previously written as row names, which
+  `write.csv()` emits as a leading column with an *empty header* — so the
+  authoritative identifier was the one field without a label, `read.csv()`
+  renamed it to `X`, and a reader skimming the sheet saw `gene_name` first. Gene
+  symbols are neither unique nor stable across annotation releases, so the
+  stable identifier now carries a name.
+
+- **Aggregated software versions in the MultiQC report**, and published to
+  `pipeline_info/`. Every process's `versions.yml` was already being collected
+  into `software_versions.yml`, but MultiQC has no parser for a bare
+  `"PROCESS": {tool: version}` mapping, so it was silently ignored: the report
+  listed only FastQC and fastp, the two tools whose own output embeds a version.
+  All 17 tools now appear, and the file is published rather than existing only
+  inside the work directory.
+
+- **A Source FASTQ column** in MultiQC's General Statistics, mapping each
+  displayed sample back to the file it came from.
+
+### Changed
+
+- **MultiQC sample names are reconciled at display time.** FastQC names samples
+  after the FASTQ filename, fastp after the `--in1` path recorded in its JSON,
+  and STAR and featureCounts after the sample id — so General Statistics could
+  not merge them, and six samples appeared as 24 mostly-empty rows. MultiQC is
+  now given a mapping built from the samplesheet (`--replace-names`).
+
+  This is deliberately done in the reporting layer rather than by renaming the
+  reads: the published `fastqc/<accession>_fastqc.html` files and the paths in
+  `multiqc_sources.txt` are the run's provenance, and for public data the
+  accession is what ties results back to the archive.
+
+- **Figure data now lives in `reproduce/`** rather than beside the figures:
+  `pca_data.csv`, `mds_data.csv` and the heatmap matrix moved there and are
+  gzipped. The analysis tables stay where they were.
+
+- **A mistyped file path now fails at launch.** Nextflow stages a missing input
+  as a dangling symlink rather than refusing to start, so a wrong `--gmt`
+  surfaced at the GSEA step after alignment and differential expression had
+  already run. Eleven file and directory parameters are checked up front and all
+  bad paths reported at once.
+
+### Fixed
+
+- **gProfiler results were structurally corrupt whenever a direction had exactly
+  one enriched term.** The table was flattened with
+  `apply(result, 2, as.character)`, which returns a matrix for a multi-row
+  result but drops to a *named vector* at one row — so `write.csv()` wrote a
+  single column named `"x"` holding one value per field. Real data, unreadable
+  shape, no error. Only the list-columns are flattened now, which also keeps the
+  numeric columns numeric.
+
+- **`--download_gmt` published one directory too deep**, producing
+  `<outdir>/gmt/gmt/*.gmt` — so the path given in the documentation did not
+  exist.
+
+- **General Statistics rendered blank.** MultiQC paints data-cell contents at
+  negative z-index, which only works while every ancestor of the table is
+  transparent; the report theme gave `.mqc-section` an opaque background, which
+  painted over every value and every coloured bar. MultiQC applies the same
+  reset itself in its print stylesheet.
+
+- **The QC table in the analysis report** was built from `multiqc_data.json`,
+  whose nested per-module structure produced a frame of nested data-frame
+  columns that DT cannot render — every reader got a "Requested unknown
+  parameter" popup and a table of meaningless values. It now reads MultiQC's
+  flat `multiqc_general_stats.txt`, which is stable across MultiQC versions.
+
+- **The top-variable-gene heatmap had never rendered.** `r-pheatmap` was not
+  declared in the DESeq2 environment, and the plotting call is guarded by
+  `requireNamespace()`, so the figure was skipped with only a log message while
+  the report described it.
+
+- **A dangling `else` in the report** aborted rendering at the DESeq2 results
+  table. At top level R terminates the statement at the newline after the `if`
+  body, so the `else` never parsed.
+
+- **`versions.yml` from MULTIQC was malformed**, indented and containing a
+  literal `END_VERSIONS` line.
+
+### Notes
+
+- The interactive heatmap adds **heatmaply** to the report environment, which
+  pulls in `seriation`, `vegan`, `dendextend` and `viridis`. Verified against
+  the ggplot2 4.x the environment resolves to — that pairing has broken in the
+  past. The report falls back to a plain tile heatmap when the package is
+  absent, so an older image still renders.
+
+- Published figures draw every gene, with no downsampling: a published figure
+  must be identical every time it is made. The report's interactive equivalents
+  thin the non-significant cloud, where widget size matters and exact
+  reproducibility does not.
+
+- `isoform_switch.R` is **not** covered by the `reproduce/` conventions. Its
+  figures are written by the package itself, so they bypass the shared figure
+  writer and are PNG-only. It requires `--aligner salmon` and a transcript
+  FASTA, which no current test exercises, so the work would ship unverified.
+
 ## [1.4.3] - 2026-08-04
 
 A gene-set release. `--download_gmt` could not run at all — it requested a

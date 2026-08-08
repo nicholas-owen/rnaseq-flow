@@ -75,7 +75,7 @@ aligner indices, so you can go from nothing to results with three commands.
 ## Requirements
 
 - **Nextflow** `>=25.10.0` (`curl -s https://get.nextflow.io | bash`) — the pipeline uses the strict language (default parser from 25.10; verified on 26.04)
-- **Java** 11–21 (required by Nextflow)
+- **Java** 17–26 (required by Nextflow; 11 has not been supported since Nextflow 24)
 - A **container engine** — Docker *or* Singularity/Apptainer — or **Conda**.
   Every process declares its own container, so nothing else needs installing.
 

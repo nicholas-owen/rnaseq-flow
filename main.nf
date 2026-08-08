@@ -104,6 +104,32 @@ def checkParameters() {
         }
         log.info "Count-matrix input: skipping QC and alignment, entering at differential expression."
     }
+
+    // Fail-fast on file/directory parameters that do not exist. Nextflow stages
+    // a missing path as a dangling symlink rather than refusing to start, so the
+    // error surfaces only when the process that needs it runs: a mistyped --gmt
+    // failed at GSEA, after alignment and differential expression had already
+    // taken a quarter of an hour. Checking here costs nothing and reports every
+    // bad path at once.
+    //
+    // Skipped: values containing a glob (resolved later, and legitimately may
+    // match nothing yet) and remote URIs (s3://, https://, ...), which cannot be
+    // checked cheaply or offline.
+    def path_params = ['gmt', 'gtf', 'fasta', 'transcript_fasta', 'counts',
+                       'genome_fasta', 'star_index', 'hisat2_index',
+                       'salmon_index', 'kallisto_index', 'ctat_lib']
+    def bad_paths = path_params.findAll { p ->
+        def v = params[p]
+        if (!v) return false
+        def s = v.toString()
+        if (s.contains('://') || s.contains('*') || s.contains('?')) return false
+        !file(s).exists()
+    }
+    if (bad_paths) {
+        error "Path not found:\n" +
+              bad_paths.collect { p -> "  --${p} ${params[p]}" }.join('\n') +
+              "\nCheck each path exists and is readable from the launch directory."
+    }
 }
 
 /*
