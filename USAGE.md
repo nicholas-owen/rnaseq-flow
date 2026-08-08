@@ -9,7 +9,7 @@ running each of the three workflows. For output interpretation see
 ## 1. Installation
 
 ```bash
-# Install Nextflow (needs Java 11-21)
+# Install Nextflow (needs Java 17-26)
 curl -s https://get.nextflow.io | bash
 sudo mv nextflow /usr/local/bin/      # or add it to your PATH
 
