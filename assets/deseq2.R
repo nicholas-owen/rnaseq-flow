@@ -140,6 +140,57 @@ save_figure <- function(dir, name, draw, width = 7, height = 7) {
 }
 
 # ---------------------------------------------------------------------------
+# Shrinkage diagnostic: the same contrast before and after apeglm.
+#
+# DESeq2-specific, so deliberately NOT part of the block kept identical with
+# edger.R -- edgeR's quasi-likelihood test moderates the dispersion rather than
+# the effect size, so it has no equivalent.
+#
+# `df` is the annotated results table, which carries both log2FoldChange (the
+# apeglm-shrunken estimate the rest of the pipeline uses) and
+# log2FoldChange_MLE (the raw maximum-likelihood one). Significance comes from
+# the unshrunken Wald test in both panels -- shrinkage changes the estimate, not
+# the test -- which is why a gene can move between panels without changing
+# colour.
+#
+# Every gene is drawn, with no thinning: a published figure has to be the same
+# every time it is made, and sampling the non-significant cloud would make it
+# depend on the RNG. (The Quarto report thins its interactive version, where
+# widget size matters and exact reproducibility does not.)
+# ---------------------------------------------------------------------------
+draw_shrinkage_ma <- function(df, padj_cut = 0.05, lfc_cut = 1) {
+    if (!("log2FoldChange_MLE" %in% names(df))) return(NULL)
+    d <- df[!is.na(df$baseMean) & df$baseMean > 0 &
+            !is.na(df$log2FoldChange) & !is.na(df$log2FoldChange_MLE), , drop = FALSE]
+    if (!nrow(d)) return(NULL)
+
+    sig <- !is.na(d$padj) & d$padj < padj_cut & abs(d$log2FoldChange) > lfc_cut
+    dir <- ifelse(sig, ifelse(d$log2FoldChange > 0, "Up", "Down"), "Not significant")
+
+    # rbind rather than a pivot: tidyr is not in this container.
+    long <- rbind(
+        data.frame(baseMean = d$baseMean, lfc = d$log2FoldChange_MLE,
+                   direction = dir, estimate = "Unshrunken (MLE)",
+                   stringsAsFactors = FALSE),
+        data.frame(baseMean = d$baseMean, lfc = d$log2FoldChange,
+                   direction = dir, estimate = "apeglm-shrunken",
+                   stringsAsFactors = FALSE))
+    long$estimate <- factor(long$estimate,
+                            levels = c("Unshrunken (MLE)", "apeglm-shrunken"))
+
+    ggplot(long, aes(baseMean, lfc, colour = direction)) +
+        geom_point(size = 0.5, alpha = 0.5) +
+        geom_hline(yintercept = 0, colour = "#868e96", linewidth = 0.3) +
+        scale_x_log10() +
+        facet_wrap(~ estimate) +
+        scale_colour_manual(values = c("Up" = "#c2255c", "Down" = "#1c7ed6",
+                                       "Not significant" = "#ced4da")) +
+        labs(x = "mean of normalised counts", y = "log2 fold change",
+             colour = NULL) +
+        theme_bw(base_size = 11)
+}
+
+# ---------------------------------------------------------------------------
 # Count-matrix reader (--matrix mode).
 #
 # Reads a single pre-computed gene x sample count matrix and returns an integer
@@ -789,6 +840,15 @@ run_contrast <- function(condA, condB) {
                 function() draw_volcano(res$log2FoldChange, res$pvalue, res$padj,
                                         paste(condA, "vs", condB)),
                 width = 8, height = 6.5)
+
+    # Before/after apeglm, from the table just written -- so the figure, the
+    # reproduce script and the report's interactive version all draw the same
+    # thing from the same source.
+    shrink <- draw_shrinkage_ma(res_out)
+    if (!is.null(shrink)) {
+        save_figure("deseq2_output", paste0("shrinkage_ma_", condA, "_vs_", condB),
+                    function() print(shrink), width = 9, height = 5)
+    }
 }
 
 pairs <- combn(cond_levels, 2)
@@ -883,6 +943,29 @@ if (length(repro_contrasts)) {
             '                  function() plotMA(fits$res, ylim = YLIM,',
             '                                    main = paste(sub("_vs_", " vs ", CONTRAST),',
             '                                                 "(apeglm-shrunk LFC)")),',
+            '                  width = WIDTH, height = HEIGHT)'))
+
+    write_repro_script(
+        file        = file.path(REPRO_DIR, "shrinkage_ma.R"),
+        description = "DESeq2 shrinkage diagnostic: the same contrast before and after apeglm.",
+        libraries   = "ggplot2",
+        selectors   = list(CONTRAST = repro_contrasts),
+        constants   = list(PADJ_CUT = 0.05, LFC_CUT = 1, WIDTH = 9, HEIGHT = 5,
+                           FIG_RES = FIG_RES),
+        functions   = list(draw_shrinkage_ma = draw_shrinkage_ma,
+                           save_figure       = save_figure),
+        inputs      = 'paste0("deseq2_results_", CONTRAST, ".csv.gz")',
+        body        = c(
+            '# Both estimates are columns of the results table, so this needs no',
+            '# saved object: log2FoldChange is the apeglm-shrunken fold change and',
+            '# log2FoldChange_MLE the raw maximum-likelihood one.',
+            'res <- read.csv(paste0("deseq2_results_", CONTRAST, ".csv.gz"),',
+            '                stringsAsFactors = FALSE)',
+            '',
+            'save_and_document(paste0("shrinkage_ma_", CONTRAST),',
+            '                  function() print(draw_shrinkage_ma(res,',
+            '                                                     padj_cut = PADJ_CUT,',
+            '                                                     lfc_cut  = LFC_CUT)),',
             '                  width = WIDTH, height = HEIGHT)'))
 
     write_repro_script(

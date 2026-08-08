@@ -51,6 +51,41 @@ save_figure <- function(dir, name, draw, width = 7, height = 7) {
     dev.off()
 }
 
+# Dot plot of the most significant gene sets.
+#
+# plotGseaTable (below) shows the running enrichment for each pathway, which is
+# the classic view but has no interactive equivalent -- it is a gridExtra
+# composite. This is the readable summary: effect size and significance
+# together, one row per gene set. It is published as a figure in its own right
+# and reproduced by gsea_dotplot.R, and the Quarto report draws the same plot
+# interactively from the same table.
+#
+# `stats` is the tidied fgsea result. Pathways whose p-value could not be
+# estimated come back with NA for NES/padj and are dropped.
+draw_gsea_dotplot <- function(stats, top_n = 20, name_width = 55) {
+    d <- stats[!is.na(stats$NES) & !is.na(stats$padj), , drop = FALSE]
+    if (!nrow(d)) return(NULL)
+    d <- head(d[order(d$padj), , drop = FALSE], top_n)
+    # Long MSigDB / GO names otherwise dominate the panel.
+    d$label <- ifelse(nchar(d$pathway) > name_width,
+                      paste0(substr(d$pathway, 1, name_width - 3), "..."),
+                      d$pathway)
+    d$label <- factor(d$label, levels = d$label[order(d$NES)])
+
+    p <- ggplot(d, aes(NES, label, colour = padj)) +
+        geom_vline(xintercept = 0, colour = "#868e96", linewidth = 0.3)
+    # Sizing by gene-set size is informative but optional: a stats table without
+    # the column should still plot.
+    p <- if ("size" %in% names(d)) p + geom_point(aes(size = size)) +
+                                      scale_size_continuous(range = c(2, 6),
+                                                            guide = "none")
+         else                      p + geom_point(size = 3)
+    p +
+        scale_colour_gradient(low = "#c2255c", high = "#ced4da", name = "padj") +
+        labs(x = "normalised enrichment score (NES)", y = NULL) +
+        theme_bw(base_size = 10)
+}
+
 # 1. Load Pathways
 pathways <- fgsea::gmtPathways(gmt_file)
 # Union of all genes across the gene sets, used to pick the ranking identifier
@@ -445,6 +480,16 @@ for (f in res_files) {
         write_repro_csv(ranks_out,    paste0("gsea_ranks_", contrast_name))
         repro_contrasts <- c(repro_contrasts, contrast_name)
     }
+
+    # The dot plot is drawn from the stats table alone, so it does not depend on
+    # topPathways being non-empty the way plotGseaTable does.
+    dotplot <- draw_gsea_dotplot(fgseaResTidy)
+    if (!is.null(dotplot)) {
+        save_figure("gsea_output", paste0("gsea_dotplot_", contrast_name),
+                    function() print(dotplot), width = 8, height = 6)
+        if (!(contrast_name %in% repro_contrasts))
+            repro_contrasts <- c(repro_contrasts, contrast_name)
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -476,6 +521,28 @@ if (length(repro_contrasts)) {
             '                                                 gsea$ranks,',
             '                                                 gsea$fgseaRes,',
             '                                                 gseaParam = GSEA_PARAM)),',
+            '                  width = WIDTH, height = HEIGHT)'))
+
+    # The dot plot needs only the stats table, so unlike gsea_plot.R it depends
+    # on no saved object -- the gzipped CSV beside it is the whole input.
+    write_repro_script(
+        file        = file.path(REPRO_DIR, "gsea_dotplot.R"),
+        description = "GSEA dot plot: the most significant gene sets by enrichment score.",
+        libraries   = "ggplot2",
+        selectors   = list(CONTRAST = repro_contrasts),
+        constants   = list(TOP_N = 20, NAME_WIDTH = 55, WIDTH = 8, HEIGHT = 6,
+                           FIG_RES = FIG_RES),
+        functions   = list(draw_gsea_dotplot = draw_gsea_dotplot,
+                           save_figure       = save_figure),
+        inputs      = 'paste0("gsea_stats_", CONTRAST, ".csv.gz")',
+        body        = c(
+            'stats <- read.csv(paste0("gsea_stats_", CONTRAST, ".csv.gz"),',
+            '                  stringsAsFactors = FALSE)',
+            '',
+            'save_and_document(paste0("gsea_dotplot_", CONTRAST),',
+            '                  function() print(draw_gsea_dotplot(stats,',
+            '                                                     top_n = TOP_N,',
+            '                                                     name_width = NAME_WIDTH)),',
             '                  width = WIDTH, height = HEIGHT)'))
 
     message("reproduce/ written: ", paste(list.files(REPRO_DIR), collapse = ", "))
