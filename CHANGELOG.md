@@ -12,6 +12,70 @@ No unreleased changes. Roadmap items are tracked in
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.
 
+## [1.5.1] - 2026-08-09
+
+A fix release. The Salmon and Kallisto paths do not run in 1.5.0 — anyone using
+`--aligner salmon` or `--aligner kallisto` should upgrade.
+
+### Fixed
+
+- **`tximport` no longer tries to read inferential replicates.** `TXIMPORT`
+  failed on the Salmon path with `there is no package called 'jsonlite'`, and
+  would have failed identically on the Kallisto path for `rhdf5`. tximport reads
+  bootstrap / Gibbs samples by default, which pulls in a parser dependency that
+  neither container carries — while nothing downstream consumes them and neither
+  quantifier is asked to produce them in the first place (no `--numBootstraps`,
+  no `-b`). `assets/tximport.R` now passes `dropInfReps = TRUE`, which costs
+  nothing here and keeps both images minimal. If bootstraps are ever enabled for
+  uncertainty-aware methods such as fishpond/swish, this has to be revisited
+  along with those two packages.
+
+  This was a latent bug from the day the pseudo-aligner path was written: it had
+  never been run end to end.
+
+### Verified
+
+- **All four aligner paths now run end to end** on the yeast test dataset —
+  STAR, HISAT2, Salmon and Kallisto — through index building, quantification,
+  DESeq2 and edgeR, GSEA, gProfiler, MultiQC, the Quarto report and the
+  `reproduce/` folders. HISAT2, Salmon and Kallisto had never been exercised
+  before; running them is what surfaced the bug above.
+
+  The four agree on the biology: 667 genes called significant by all four, every
+  pairwise overlap at or above 83% of the smaller set, and the same strong
+  down-regulation bias in each. Notably the concordance does not split along the
+  genome-aligner / pseudo-aligner line — STAR agreed more closely with Salmon
+  than with HISAT2 on this data.
+
+### Documentation
+
+- **`assets/test/README.md` rewritten around all four aligners**: a table
+  mapping each `--aligner` to its index inputs, index parameter and count route;
+  full build-and-run commands for each; why three of the four pass
+  `--strandedness unstranded` (RSeQC needs a BAM, so `auto` cannot work without
+  one) while STAR is left on `auto` so the inference path stays exercised; and
+  an aligner-aware "what to check" including the cross-aligner concordance
+  table. The concordance figures are qualified with the subsampling that
+  produced them — 1 M read pairs drawn by `seqtk sample -s42` — since the
+  head-of-file fallback or a different depth will move the absolute counts
+  without anything being wrong.
+
+- **The GSEA gene-set path in that README is the corrected one.** References
+  downloaded before 1.5.0 published the GMTs one level too deep, at
+  `refs/<name>/gmt/gmt/`. A re-download writes the un-nested copy alongside the
+  old directory rather than replacing it, so both exist and both are readable —
+  which makes pointing at the wrong one quiet. Now called out explicitly.
+
+- **`to-fix.md`: M18 added** — no test dataset exercises alternative splicing,
+  DTU or isoform switching. The HISAT2 run's rMATS task completed and found one
+  exon-skipping event and zero of every other class, so rMATS's plumbing is
+  verified while its configuration (H7) is not: on this data a misconfigured
+  rMATS and a correct one both find nothing. The same wall applies to H11, M17
+  and `--diffsplice`. Fixing it needs a second small test dataset from a
+  splicing-capable organism. Two now-stale claims corrected alongside it — M17
+  and the suggested work order both still described the Salmon, Kallisto and
+  HISAT2 paths as never executed.
+
 ## [1.5.0] - 2026-08-08
 
 A reproducibility release. Every figure the pipeline publishes can now be
