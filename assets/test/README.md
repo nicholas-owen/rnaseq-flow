@@ -41,7 +41,13 @@ assets/test/fetch_yeast_test_data.sh test_data 250000   # smaller/faster
 Uses `seqtk` for a proper random subsample if it is installed; otherwise it takes
 the first N reads. That fallback is fine for a smoke test — every process still
 sees real data — but it is **not** a random sample, so don't draw biological
-conclusions from it. `seqtk` is in Ubuntu's universe repo if you want the real
+conclusions from it.
+
+The seqtk path is seeded (`-s42`, the same seed for both mates so pairs stay in
+step), so the subsample is reproducible: the same accessions at the same read
+count give the same reads on any machine. Which of the two paths was taken is
+worth noting before you compare against anyone else's numbers — the script
+prints it, and the two produce different data from the same input. `seqtk` is in Ubuntu's universe repo if you want the real
 thing:
 
 ```bash
@@ -85,30 +91,127 @@ quick way to tell whether it loaded: the STAR command should show
 The flags are repeated in full on each command below rather than held in a shell
 variable, so that copying any single command still works.
 
+Every route is three steps: download the references once, build the index for the
+aligner you want, then run the analysis. Step 1 is shared by all four.
+
 ```bash
 # 1. references  (yeast has no dna.primary_assembly; the downloader
-#    correctly falls back to dna.toplevel)
+#    correctly falls back to dna.toplevel). --download_gmt also fetches
+#    the gene sets -- see GSEA below.
 nextflow run main.nf --download_refs \
     --download_species saccharomyces_cerevisiae --download_release 116 \
+    --download_gmt \
     --outdir refs/yeast \
     -profile test_yeast,docker
+```
 
-# 2. index
+### All four aligner paths
+
+The pipeline supports two genome aligners, which produce BAMs and count genes
+with featureCounts, and two pseudo-aligners, which quantify transcripts and are
+summarised to gene level by tximport:
+
+| `--aligner` | index built from | index param | count route |
+| --- | --- | --- | --- |
+| `star` | genome + GTF | `--star_index` | BAM → featureCounts |
+| `hisat2` | genome + GTF | `--hisat2_index` | BAM → featureCounts |
+| `salmon` | transcripts + genome (decoys) | `--salmon_index` | tximport |
+| `kallisto` | transcripts | `--kallisto_index` | tximport |
+
+Only the BAM routes produce RSeQC, bigWig and rMATS output; the pseudo-aligner
+routes skip straight from quantification to differential expression. Everything
+downstream of the count matrix — DESeq2, edgeR, GSEA, gProfiler, MultiQC, the
+Quarto report and the `reproduce/` folders — is identical on all four.
+
+**STAR**
+
+```bash
 nextflow run main.nf --build_indices --aligner star \
     --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
     --gtf          refs/yeast/v116/*.gtf.gz \
-    --outdir idx/yeast \
+    --outdir idx/yeast_star \
     -profile test_yeast,docker
 
-# 3. analysis
 nextflow run main.nf \
     --input      test_data/samplesheet_yeast.csv \
     --aligner    star \
-    --star_index idx/yeast/star_index \
+    --star_index idx/yeast_star/star_index \
     --gtf        refs/yeast/v116/*.gtf.gz \
-    --outdir     results \
+    --gmt        refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir     results_star \
     -profile test_yeast,docker
 ```
+
+**HISAT2**
+
+```bash
+nextflow run main.nf --build_indices --aligner hisat2 \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --outdir idx/yeast_hisat2 \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input        test_data/samplesheet_yeast.csv \
+    --aligner      hisat2 \
+    --hisat2_index idx/yeast_hisat2/hisat2_index \
+    --strandedness unstranded \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --gmt          refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir       results_hisat2 \
+    -profile test_yeast,docker
+```
+
+**Salmon** — the index needs the cDNA FASTA *and* the genome, the latter only to
+build the decoy set.
+
+```bash
+nextflow run main.nf --build_indices --aligner salmon \
+    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
+    --genome_fasta     refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --outdir idx/yeast_salmon \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input        test_data/samplesheet_yeast.csv \
+    --aligner      salmon \
+    --salmon_index idx/yeast_salmon/salmon_index \
+    --strandedness unstranded \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --gmt          refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir       results_salmon \
+    -profile test_yeast,docker
+```
+
+**Kallisto** — transcripts only, no decoys.
+
+```bash
+nextflow run main.nf --build_indices --aligner kallisto \
+    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
+    --outdir idx/yeast_kallisto \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input          test_data/samplesheet_yeast.csv \
+    --aligner        kallisto \
+    --kallisto_index idx/yeast_kallisto/kallisto_index \
+    --strandedness   unstranded \
+    --gtf            refs/yeast/v116/*.gtf.gz \
+    --gmt            refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir         results_kallisto \
+    -profile test_yeast,docker
+```
+
+> **Why `--strandedness unstranded` on three of the four.** The default is
+> `auto`, which infers strandedness per sample with RSeQC — and RSeQC needs a
+> BAM. Salmon and Kallisto produce none, so `auto` cannot work there; Kallisto
+> logs a warning and runs library-type-agnostic. This dataset is unstranded, so
+> stating it explicitly is both correct and quieter. For a stranded library pass
+> `forward` or `reverse`. STAR is left on `auto` above so that the inference
+> path itself gets exercised at least once.
+
+The `--gtf` is required on the pseudo-aligner runs too: tximport needs it to
+build the transcript-to-gene map.
 
 If you would rather not pass the config, the same caps as explicit flags:
 
@@ -118,11 +221,18 @@ If you would rather not pass the config, the same caps as explicit flags:
 
 ### GSEA (optional)
 
-Add `--download_gmt` to step 1 and `--gmt refs/yeast/gmt/c5_go_bp.gmt` to
-step 3. Step 1 already runs under `-profile test_yeast`, which sets
-`organism = 'scerevisiae'`, so the gene sets come back for yeast without any
-extra flag. `--download_gmt` on its own does nothing — it is handled inside the
-download workflow, which only runs when `--download_refs` is given.
+`--download_gmt` is already on the reference command above, and `--gmt
+refs/yeast/gmt/c5_go_bp.gmt` on each of the four run commands. The download runs
+under `-profile test_yeast`, which sets `organism = 'scerevisiae'`, so the gene
+sets come back for yeast without any extra flag. `--download_gmt` on its own
+does nothing — it is handled inside the download workflow, which only runs when
+`--download_refs` is given.
+
+> **If you downloaded references before v1.5.0**, the gene sets were published
+> one level too deep, at `refs/yeast/gmt/gmt/c5_go_bp.gmt`. The path above is
+> the corrected one. A re-download writes the un-nested copy alongside the old
+> directory rather than replacing it, so check which one you are pointing at —
+> both will exist and both are readable, which makes the mistake quiet.
 
 `--download_gmt` needs outbound HTTPS: from msigdbr 24 the gene sets are
 fetched at run time rather than bundled.
@@ -152,13 +262,61 @@ result.
 
 ## What to check
 
-- `results/multiqc/multiqc_report.html` — every sample should appear under
-  FastQC, fastp, STAR, RSeQC and featureCounts.
-- `results/quarto_report/analysis_report.html` — PCA should separate YPD from
+Replace `results_*` below with whichever output directory you used.
+
+- `results_*/multiqc/multiqc_report.html` — every sample should appear, under
+  FastQC, fastp and the modules for the route you ran: STAR/HISAT2, RSeQC and
+  featureCounts for the genome aligners, Salmon for the Salmon run. Kallisto has
+  no MultiQC module, so that run shows only FastQC and fastp. All four should
+  also show the `sample_provenance` custom table mapping sample IDs back to run
+  accessions.
+- `results_*/quarto_report/analysis_report.html` — PCA should separate YPD from
   NaCl, and the DESeq2/edgeR volcano plots should be populated.
-- `results/deseq2_output/deseq2_results_NaCl_vs_REF.csv` — a salt-stress
+- `results_*/deseq2_output/deseq2_results_NaCl_vs_REF.csv` — a salt-stress
   response, so the usual osmotic-stress genes (`GRE2`, `HSP12`, `CTT1`, `STL1`)
   are a reasonable sanity check for the up-regulated set.
-- The `STAR_GENOME_GENERATE` log line reporting the genome length and the
-  `--genomeSAindexNbases` it derived — 10 for this genome, not STAR's mammalian
-  default of 14.
+- `results_*/deseq2_output/reproduce/` — each of the four routes should produce
+  the same set of standalone redraw scripts (5 for DESeq2, 3 for edgeR, 2 for
+  GSEA, 1 for gProfiler).
+- STAR only: the `STAR_GENOME_GENERATE` log line reporting the genome length and
+  the `--genomeSAindexNbases` it derived — 10 for this genome, not STAR's
+  mammalian default of 14.
+- HISAT2 only: the per-sample `results_hisat2/hisat2/*.summary.log` overall
+  alignment rate, ~96–98% on this data.
+
+### Cross-aligner concordance
+
+Running more than one route is the cheapest real test of the pipeline, because
+the four are independent implementations that should reach the same biology.
+Observed on this dataset (1 M read pairs, DESeq2, `padj < 0.05` and
+`|log2FC| > 1`):
+
+| route | genes tested | significant | up | down |
+| --- | --- | --- | --- | --- |
+| STAR | 5579 | 852 | 152 | 700 |
+| HISAT2 | 5773 | 833 | 132 | 701 |
+| Salmon | 5509 | 778 | 130 | 648 |
+| Kallisto | 5961 | 865 | 146 | 719 |
+
+667 genes were called significant by all four, every pairwise overlap was ≥83%
+of the smaller set, and all four reproduced the same strong down-regulation
+bias.
+
+> **These numbers come from a subsample, so treat them as a shape to match, not
+> targets to hit.** They were produced from the fetch script's default output:
+> 1 M read pairs per sample, drawn by `seqtk sample -s42` (seqtk 1.4) from raw
+> libraries of 3.5–9.8 M pairs. Because the seed is fixed, seqtk users at the
+> default depth should land very close to the table — but you will *not* match
+> it if seqtk was missing when you fetched (the script falls back to the first
+> N reads, a different set of reads entirely, and says so in its output), if you
+> passed a different read count, or if container versions have moved. Any of
+> those shifts the absolute counts without meaning anything is wrong.
+
+What matters is the agreement between routes, not the absolute counts: all four
+moving together is the expected result, whereas one route disagreeing sharply
+with the other three is worth investigating.
+
+Note that the overlaps do **not** split cleanly along the genome-aligner /
+pseudo-aligner line — STAR agreed more closely with Salmon than with HISAT2 on
+this data. That is not in itself a fault; the routes differ in multimapper
+handling and length correction, and 83% is still high concordance.
