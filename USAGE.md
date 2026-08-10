@@ -9,7 +9,7 @@ running each of the three workflows. For output interpretation see
 ## 1. Installation
 
 ```bash
-# Install Nextflow (needs Java 11-21)
+# Install Nextflow (needs Java 17-26)
 curl -s https://get.nextflow.io | bash
 sudo mv nextflow /usr/local/bin/      # or add it to your PATH
 
@@ -77,6 +77,12 @@ nextflow run main.nf \
 | `--download_release` | Ensembl release to pin, e.g. `102` (a leading `v` is accepted). Omit it for the rolling `current` release. **Pin a release for reproducible references.** |
 | `--download_gmt` | Also download Hallmark / C2 / C5 gene sets |
 | `--organism` | gProfiler-style organism ID; mapped to a scientific name for MSigDB |
+
+> **`--download_gmt` needs network access on the machine that runs it.** From
+> msigdbr 24 the gene sets are fetched over HTTPS on first use rather than being
+> bundled in the package, so this step will fail on a compute node with no
+> outbound route. Run the download workflow somewhere with internet access, then
+> pass the resulting file with `--gmt` on later runs.
 
 **Reproducibility — the versioned subfolder.** When `--download_release` is
 set, the reference files are written to a `v<release>` subfolder *under*
@@ -154,6 +160,57 @@ nextflow run main.nf --build_indices --aligner kallisto \
 | `all` | all of the above | all four |
 
 Indices are written under `--outdir`. FASTA/GTF inputs may be gzipped.
+
+### HISAT2 index memory — and when it silently degrades
+
+A **splice-aware** HISAT2 index (`hisat2-build --ss --exon`) is built from the
+splice sites and exons extracted from the GTF, and peak memory is driven by that
+graph, not by the genome. For a mammalian annotation it is very large. The
+pipeline estimates the requirement from the GTF rather than assuming a flat
+figure:
+
+```
+memory = 8 GB + 45 GB per GB of uncompressed GTF
+```
+
+| Species (Ensembl 116) | GTF (gz) | Estimated requirement |
+|---|---|---|
+| Human GRCh38 | 135 MB | **~204 GB** |
+| Mouse GRCm39 | 103 MB | ~158 GB |
+| Zebrafish GRCz11 | 17 MB | ~34 GB |
+| *C. elegans* / fly | 7–8 MB | ~15–16 GB |
+| Yeast R64 | 0.6 MB | ~9 GB |
+
+The estimate is then capped by `--max_memory`. **If the cap is below the
+estimate, `HISAT2_BUILD` does not fail — it drops `--ss`/`--exon` and builds a
+non-splice-aware index instead**, logging:
+
+```
+WARN  [HISAT2_BUILD] Only 128 GB available but ~204 GB is needed to build a
+  splice-aware index from Homo_sapiens.GRCh38.116.gtf.gz.
+  Building WITHOUT --ss/--exon. HISAT2 still aligns across junctions using its
+  own model, but sensitivity to novel junctions is reduced.
+```
+
+This is deliberate — an under-provisioned run produces a usable index rather
+than being killed by the OOM reaper — but it is easy to miss in a long log, and
+the resulting index is **not** equivalent. Check for that warning whenever you
+build a HISAT2 index for a mammalian genome.
+
+To force the splice-aware build, raise the ceiling *and* make sure a node that
+large exists:
+
+```bash
+nextflow run main.nf --build_indices --aligner hisat2 \
+    --genome_fasta genome.fa.gz --gtf annotation.gtf.gz \
+    --max_memory 204.GB --outdir indices/human -profile docker
+```
+
+`--hisat2_build_memory` overrides the estimate directly (e.g. `200.GB`) if you
+would rather set the figure yourself. Note this affects **index building only**:
+alignment with `--aligner hisat2` is unaffected, and building once on a
+high-memory machine then reusing the index with `--hisat2_index` avoids the
+problem entirely.
 
 ---
 
@@ -400,6 +457,7 @@ cannot run from a count matrix.
 | `-profile docker` | Run every process in its Docker container |
 | `-profile singularity` | Use Singularity/Apptainer (HPC-friendly) |
 | `-profile conda` | Create per-process Conda environments |
+| `-profile sge` | Submit to an SGE cluster (UCL Myriad/Kathleen/Young), with Singularity |
 
 Add `-resume` to continue from cached results after an interruption or a
 parameter tweak:
@@ -408,8 +466,108 @@ parameter tweak:
 nextflow run main.nf --input samplesheet.csv ... -profile docker -resume
 ```
 
-To submit to an HPC scheduler, add an executor block (SLURM example) to a
-custom config and pass it with `-c`:
+### Running on an SGE cluster (`-profile sge`)
+
+`conf/sge.config` targets the UCL Research Computing clusters. Use it alone — it
+already enables Singularity, so do **not** combine it with `-profile singularity`:
+
+```bash
+nextflow run main.nf -profile sge \
+    --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --outdir results
+```
+
+Run it from a login node inside `screen`/`tmux` (or as a small submitted job) so
+the Nextflow head process survives your session — it stays alive orchestrating
+jobs while the work runs on compute nodes.
+
+What the profile does: requests memory **per core** in the form SGE expects
+(`-l mem=<X>M`, multiplied by the slots in `-pe smp N`), requests node-local
+scratch (`-l tmpfs=`) and runs each task there, routes any job needing more than
+a standard node's 4.4 GB/core to the high-memory nodes (`-ac allow=IB`), and
+points the Apptainer cache and temp directory at `$HOME/Scratch`.
+
+**Check these before a large run:**
+
+- **`max_time`** is set to `48.h`, and `max_memory`/`max_cpus` to a Myriad
+  standard (D) node — 160 GB usable, 36 cores. Verify against the
+  [Myriad docs](https://www.rc.ucl.ac.uk/docs/Clusters/Myriad/) and your
+  entitlement; a request above the queue limit or a node's usable RAM is
+  *rejected at submission*, not queued.
+- **The generated `qsub` line.** On the first run, check the scheduler
+  directives Nextflow produced: `grep '^#\$' work/<hash>/.command.run`. Depending
+  on the Nextflow version and the site's configured complexes, Nextflow may emit
+  its own memory resource (`h_vmem`/`virtual_free`) alongside `-l mem=`. If the
+  cluster rejects that as an unknown resource, set
+  `executor.perJobMemLimit = true` or drop the extra directive.
+- **Wave** builds containers for the Conda-declared processes and needs outbound
+  HTTPS from the submit host.
+
+#### Building a HISAT2 index under `-profile sge`
+
+SGE allocates memory **per slot**, so what decides where a job can run is not
+the total but the memory-per-core ratio. Myriad's node classes:
+
+| Node | Cores | Usable RAM | Per core | tmpfs | Count |
+|---|---|---|---|---|---|
+| **D** (standard) | 36 | 160 GB | 4.4 GB | 1500 G | 342 |
+| **I, B** (high memory) | 36 | 1483 GB | 41.1 GB | 1500 G | 17 |
+| **T** | 64 | 755 GB | 11.7 GB | 420 G | 6 |
+
+Every process in this pipeline requests **≤ 4 GB/core** (`process_high` is 48 GB
+over 12 cores), so the whole workflow fits the 342 standard nodes comfortably.
+The one exception is mammalian HISAT2 index building:
+
+| Index build | Total | Cores | Per core | Can run on |
+|---|---|---|---|---|
+| STAR, any genome | 38 GB | 12 | 3.2 GB | D, T, I/B |
+| HISAT2 zebrafish | 34 GB | 12 | 2.8 GB | D, T, I/B |
+| **HISAT2 mouse** | 158 GB | 12 | 13.2 GB | **I/B only** |
+| **HISAT2 human** | 204 GB | 12 | 17.0 GB | **I/B only** |
+
+So a mammalian splice-aware index cannot run on a standard node *at any total* —
+it needs a high-memory (I/B) node.
+
+**The profile handles this for you; there is nothing to configure.** Two rules
+do the work:
+
+1. `HISAT2_BUILD` is exempted from the standard-node memory ceiling (its own
+   `resourceLimits` allows up to the I/B usable maximum), so the GTF-derived
+   estimate passes through instead of being clamped down to 160 GB.
+2. Any job needing more than a D node's 4.4 GB/core gets Myriad's node-type
+   selector appended automatically, so it queues against the high-memory nodes
+   rather than matching nothing:
+
+```
+-l mem=17408M -l tmpfs=50G -ac allow=IB
+```
+
+The result — verified for all four genomes, with no extra flags:
+
+| Genome | Estimate | Per core | Node | Index built |
+|---|---|---|---|---|
+| Human | 204 GB | 17.0 GB | I/B | **splice-aware** |
+| Mouse | 158 GB | 13.2 GB | I/B | **splice-aware** |
+| Zebrafish | 34 GB | 2.8 GB | D | splice-aware |
+| Yeast | 9 GB | 0.8 GB | D | splice-aware |
+
+Expect a longer queue wait for a mammalian build, since it is competing for 17
+nodes rather than 342. Everything else in the pipeline stays on the standard
+nodes under the normal 160 GB ceiling.
+
+If you would rather not wait, the alternatives are to build the index once and
+reuse it with `--hisat2_index` on every later run, or to use `--aligner star`
+(3.2 GB/core, so it runs on any standard node).
+
+> **Other sites:** the exemption assumes you can land on high-memory nodes. If
+> your account cannot, lower the `withName:HISAT2_BUILD` `resourceLimits` in
+> `conf/sge.config` to your largest node's usable RAM — the build will then
+> degrade to a non-splice-aware index (with a `WARN`) rather than queueing
+> against nothing.
+
+For a different scheduler, copy `conf/sge.config` as a starting point, or pass a
+minimal executor block with `-c` (SLURM example):
 
 ```groovy
 process.executor = 'slurm'

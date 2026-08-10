@@ -1,7 +1,13 @@
 process GSEA {
     label 'process_medium'
-    container 'quay.io/biocontainers/mulled-v2-ad9dd5f398966bf899ae05f8e7c54d0fb10c553f:10526027a00508e82d3e1cf2b82142279c93ea40-0'
-    // Contains fgsea, dplyr, ggplot2, tibble... using a mulled container for R 4+ and bioconductor-fgsea
+    // No fixed image: provisioned on the fly by Nextflow Wave from the Conda
+    // packages below, as DESEQ2 and QUARTO_REPORT are.
+    //
+    // This replaces a hand-written mulled-v2 hash that could not be resolved
+    // from quay.io, so GSEA could never actually run. Declaring the four
+    // packages assets/gsea.R loads is both verifiable and self-documenting:
+    // fgsea is Bioconductor (bioconda), the rest are CRAN (conda-forge).
+    conda 'bioconda::bioconductor-fgsea=1.28.0 conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tibble'
 
     input:
     path gmt

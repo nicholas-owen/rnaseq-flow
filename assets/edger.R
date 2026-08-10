@@ -50,34 +50,89 @@ if (!is.na(gene_info_path) && nzchar(gene_info_path) &&
                          error = function(e) NULL)
 }
 annotate_genes <- function(df) {
-    # Prepend gene_name + gene_biotype, matched on the row names (gene IDs);
-    # falls back to a version-insensitive match for any unmatched IDs, then to a
-    # gene_name match (for a symbol-keyed --matrix input, whose row names are
-    # already symbols rather than gene IDs).
-    if (is.null(geneinfo)) return(df)
+    # Prepend gene_id + gene_name + gene_biotype, matched on the row names (gene
+    # IDs); falls back to a version-insensitive match for any unmatched IDs, then
+    # to a gene_name match (for a symbol-keyed --matrix input, whose row names are
+    # already symbols rather than gene IDs -- in that mode gene_id carries those
+    # symbols, since they are the key the matrix is actually indexed by).
+    #
+    # gene_id is emitted as a named column and the callers write with
+    # row.names = FALSE. Previously the IDs were left as row names, which
+    # write.csv() emits as a leading column with an empty header: the
+    # authoritative identifier was the one field without a label, read.csv()
+    # renamed it to 'X', pandas to 'Unnamed: 0', and a reader skimming the sheet
+    # saw gene_name as the first real column. Gene symbols are neither unique nor
+    # stable across annotation releases (two Ensembl IDs can share a symbol, and
+    # symbols get renamed), so the stable ID has to be plainly labelled.
+    ids <- rownames(df)
+    if (is.null(geneinfo)) return(cbind(gene_id = ids, df))
     strip <- function(x) sub("\\.[0-9]+$", "", x)
-    m  <- match(rownames(df), geneinfo$gene_id)
+    m  <- match(ids, geneinfo$gene_id)
     na <- is.na(m)
-    if (any(na)) m[na] <- match(strip(rownames(df)[na]), strip(geneinfo$gene_id))
+    if (any(na)) m[na] <- match(strip(ids[na]), strip(geneinfo$gene_id))
     na <- is.na(m)
-    if (any(na)) m[na] <- match(rownames(df)[na], geneinfo$gene_name)
-    cbind(gene_name    = geneinfo$gene_name[m],
+    if (any(na)) m[na] <- match(ids[na], geneinfo$gene_name)
+    cbind(gene_id      = ids,
+          gene_name    = geneinfo$gene_name[m],
           gene_biotype = geneinfo$gene_biotype[m],
           df)
 }
 
 # Volcano plot: log2 fold change vs -log10 p-value, coloured by significance
 # (FDR < 0.05 and |logFC| > 1; up in red, down in blue, the rest grey).
-draw_volcano <- function(lfc, pval, fdr, title) {
+# padj is the adjusted p-value (DESeq2 padj, edgeR FDR). The cutoffs are
+# arguments rather than literals so that the generated reproduce/ scripts can
+# expose them as editable settings -- inlined with them hardcoded, a user could
+# change PADJ_CUT / LFC_CUT and see the figure not move.
+draw_volcano <- function(lfc, pval, padj, title, padj_cut = 0.05, lfc_cut = 1) {
     ok   <- !is.na(lfc) & !is.na(pval)
-    lfc  <- lfc[ok]; pval <- pval[ok]; fdr <- fdr[ok]
-    sig  <- !is.na(fdr) & fdr < 0.05 & abs(lfc) > 1
+    lfc  <- lfc[ok]; pval <- pval[ok]; padj <- padj[ok]
+    sig  <- !is.na(padj) & padj < padj_cut & abs(lfc) > lfc_cut
     cols <- ifelse(sig, ifelse(lfc > 0, "#c2255c", "#1c7ed6"), "#ced4da")
     plot(lfc, -log10(pval), pch = 20, cex = 0.55, col = cols,
          xlab = "log2 fold change", ylab = expression(-log[10] ~ italic(p)),
          main = title)
-    abline(v = c(-1, 1), lty = 2, col = "#868e96")
+    abline(v = c(-lfc_cut, lfc_cut), lty = 2, col = "#868e96")
     if (any(sig)) abline(h = -log10(max(pval[sig])), lty = 2, col = "#868e96")
+}
+
+# ---------------------------------------------------------------------------
+# Write one figure as both PNG and SVG.
+#
+# `draw` is a function of no arguments that renders the plot. It is called once
+# per device, because a plot can only be written while its device is open: a
+# ggplot object must be print()ed inside it, base and grid (pheatmap) plots are
+# simply drawn.
+#
+# SVG is written with grDevices::svg() rather than ggsave(..., ".svg"):
+# ggsave() delegates SVG to the svglite package, which none of the pipeline
+# containers carry (verified on the DESeq2, edgeR and gProfiler images), while
+# svg() needs only cairo, which all of them have. Both devices are given the
+# same inch dimensions so the raster and vector copies are identical in layout.
+#
+# The SVG is what the Quarto report embeds: it is vector, so it stays sharp at
+# any zoom. Note that cairo renders text as glyph outlines, not <text> elements
+# -- so the labels are not selectable, searchable, or editable in Illustrator or
+# Inkscape. That makes the file font-independent (it renders identically
+# everywhere, with no substitution risk) at the cost of post-editing. Producing
+# editable text would need the svglite package, which none of the pipeline
+# containers carry; a user who wants it can swap the device in the reproduce
+# script. The PNG is kept for pasting into email, slides and documents, and for
+# anything that cannot consume SVG.
+#
+# NOTE: kept identical in deseq2.R and edger.R (as annotate_genes and
+# draw_volcano already are). Edit both together.
+# ---------------------------------------------------------------------------
+FIG_RES <- 300   # px per inch for the raster copy. 300 is the usual journal minimum for halftone / combination figures. Affects the PNG only -- the SVG is vector, so resolution is meaningless there.
+
+save_figure <- function(dir, name, draw, width = 7, height = 7) {
+    png(file.path(dir, paste0(name, ".png")),
+        width = width, height = height, units = "in", res = FIG_RES)
+    draw()
+    dev.off()
+    svg(file.path(dir, paste0(name, ".svg")), width = width, height = height)
+    draw()
+    dev.off()
 }
 
 # ---------------------------------------------------------------------------
@@ -325,16 +380,303 @@ fit <- glmQLFit(y, design)
 
 dir.create("edger_output", showWarnings = FALSE)
 
-# MDS Plot
-png(file.path("edger_output", "mds_plot.png"))
-plotMDS(y)
-dev.off()
+# ---------------------------------------------------------------------------
+# reproduce/ : everything an end user needs to redraw any figure in this
+# directory without rerunning the pipeline -- the R objects the plot calls
+# consume, the tables behind them, and one script per figure type. Published
+# automatically, because the module emits edger_output as a whole directory.
+#
+# The guiding split is that the parent folder is for *reading* and reproduce/ is
+# for *running*. Parent CSVs therefore stay plain, so they open by double-click
+# in Excel; the reproduce/ copies are gzipped, which read.csv() handles
+# transparently and which matters once a results table is tens of MB. Anyone
+# wanting to eyeball that data uses the plain copy one directory up.
+# ---------------------------------------------------------------------------
+REPRO_DIR <- file.path("edger_output", "reproduce")
+dir.create(REPRO_DIR, showWarnings = FALSE, recursive = TRUE)
+
+# Write a data frame into reproduce/ as a gzipped CSV.
+write_repro_csv <- function(df, name) {
+    con <- gzfile(file.path(REPRO_DIR, paste0(name, ".csv.gz")), "w")
+    on.exit(close(con))
+    write.csv(df, con, row.names = FALSE)
+}
+
+# ---------------------------------------------------------------------------
+# Emitter for the reproduce/ scripts.
+#
+# Each generated script redraws exactly one figure from the artefacts beside
+# it. Two rules keep generated code correct:
+#
+#   * Helper functions are emitted by deparse()-ing the live function object,
+#     never hand-copied into a string. The copy in the script therefore cannot
+#     drift from the one the pipeline just used. deparse() drops comments --
+#     they are not part of a function object -- so the script carries its own
+#     header instead.
+#   * Every injected value goes through deparse() as well, so quoting and
+#     escaping are R's problem rather than ours. Nothing is pasted into code as
+#     a raw string.
+#
+# Generated scripts assume the working directory is their own folder. They
+# check their inputs up front and stop with the available contrasts listed,
+# rather than letting R emit a bare "cannot open file".
+# ---------------------------------------------------------------------------
+
+# Deparse a value into source text: handles quoting, escaping and vectors.
+emit_value <- function(x) paste(deparse(x), collapse = "\n")
+
+# Deparse a live function into `name <- function(...) {...}`.
+emit_function <- function(name, fn) {
+    src    <- deparse(fn)
+    src[1] <- paste0(name, " <- ", src[1])
+    src
+}
+
+# file        path of the script to write
+# description one-line summary for the header
+# libraries   packages to attach (also reported as versions in the header)
+# selectors   named list of the values that pick which figure to draw, e.g.
+#             list(CONTRAST = c("A_vs_REF", "B_vs_REF")) or, where a figure is
+#             indexed by more than one thing, list(CONTRAST = ..., DIRECTION =
+#             c("UP", "DOWN")). Each becomes a constant defaulting to its first
+#             value, overridable by positional command-line arguments in the
+#             order given. NULL for a figure that is produced once per run.
+# constants   named list emitted as the editable settings block, in order
+# functions   named list of live functions to inline
+# inputs      R expressions (as strings) evaluating to the files it reads
+# body        the plotting code
+write_repro_script <- function(file, description, libraries = character(0),
+                               selectors = NULL, constants = list(),
+                               functions = list(), inputs = character(0),
+                               body = character(0)) {
+    rule <- paste0("# ", strrep("-", 74))
+    # Selector constants lead the settings block: they are what a reader changes
+    # most often, so they should be the first thing under the heading.
+    #
+    # Every generated figure is prefixed, so a regenerated one is never mistaken
+    # for the pipeline's own output. This matters because the settings above it
+    # are editable: change a cutoff and the result is a different figure that
+    # would otherwise carry the published figure's exact filename. Exposed as a
+    # constant so anyone deliberately replacing a published figure can clear it.
+    constants <- c(lapply(selectors, function(v) v[1]), constants,
+                   list(OUTPUT_PREFIX = "repro_"))
+    # Tolerant version lookup: an optional package (pheatmap) may be absent, and
+    # failing to record a version must never abort the analysis task.
+    vers <- c(paste0("R ", getRversion()),
+              vapply(libraries, function(p)
+                  paste0(p, " ", tryCatch(as.character(packageVersion(p)),
+                                          error = function(e) "not installed")),
+                  character(1)))
+
+    out <- c(
+        "#!/usr/bin/env Rscript",
+        "#",
+        paste0("# ", description),
+        "#",
+        "# Redraws this figure from the files in this folder. It does not rerun",
+        "# the pipeline -- everything needed is here, so the folder can be copied",
+        "# anywhere and still work.",
+        "#",
+        "# It reads its inputs from the working directory, so that must be the",
+        "# folder this file is in.",
+        "#",
+        "#   From a terminal:",
+        "#",
+        "#     cd <the folder containing this script>",
+        paste0("#     Rscript ", basename(file)),
+        "#",
+        "#   In RStudio: open this file, then",
+        "#",
+        "#     Session > Set Working Directory > To Source File Location",
+        "#",
+        "#   and click Source.")
+
+    if (length(selectors)) {
+        out <- c(out,
+            "#",
+            paste0("# To draw a different ",
+                   paste(tolower(names(selectors)), collapse = " or "),
+                   ", edit the settings below. From a terminal you can instead"),
+            "# pass them as arguments, in this order (this does not apply when",
+            "# sourcing the file in RStudio):",
+            "#",
+            paste0("#     Rscript ", basename(file), " ",
+                   paste(vapply(selectors, function(v) v[1], character(1)),
+                         collapse = " ")),
+            "#",
+            "# Values available in this folder. Copy a line over the matching",
+            "# setting below:",
+            "#")
+        for (nm in names(selectors))
+            out <- c(out, paste0("#     ", nm, " <- ",
+                                 vapply(selectors[[nm]], emit_value, character(1))))
+    }
+
+    out <- c(out,
+        "#",
+        paste0("# Generated ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+               " by the rnaseq-flow pipeline."),
+        paste0("# The published figure was drawn with: ", paste(vers, collapse = "; ")),
+        "",
+        rule,
+        "# Settings -- edit these to adapt the figure.",
+        rule)
+
+    if (length(constants)) {
+        pad <- max(nchar(names(constants)))
+        out <- c(out, vapply(names(constants), function(n)
+            paste0(formatC(n, width = -pad), " <- ", emit_value(constants[[n]])),
+            character(1)))
+    }
+
+    out <- c(out, "", rule, "# No need to edit below here.", rule)
+
+    if (length(libraries))
+        out <- c(out, paste0("suppressMessages(library(", libraries, "))"))
+
+    if (length(selectors)) {
+        out <- c(out, "",
+            "# Optional arguments override the settings above, in this order, so",
+            "# the pipeline can drive this same script without editing it.",
+            ".args <- commandArgs(trailingOnly = TRUE)")
+        for (i in seq_along(selectors))
+            out <- c(out, sprintf(
+                "if (length(.args) >= %dL && nzchar(.args[%d])) %s <- .args[%d]",
+                i, i, names(selectors)[i], i))
+        out <- c(out, paste0(".SELECTORS <- ", emit_value(selectors)))
+    }
+
+    if (length(inputs)) {
+        out <- c(out, "",
+            "# Fail with something actionable rather than R's \"cannot open file\".",
+            paste0(".inputs  <- c(", paste(inputs, collapse = ",\n              "), ")"),
+            ".missing <- .inputs[!file.exists(.inputs)]",
+            "if (length(.missing)) {",
+            "    .msg <- paste0(\"cannot find: \", paste(.missing, collapse = \", \"),",
+            "                   \"\\n  Run this script with the working directory set\",",
+            "                   \" to its own folder.\")")
+        if (length(selectors))
+            out <- c(out,
+            "    .msg <- paste0(.msg, \"\\n  Values available here:\")",
+            "    for (.n in names(.SELECTORS))",
+            "        .msg <- paste0(.msg, \"\\n    \", .n, \" : \",",
+            "                       paste(.SELECTORS[[.n]], collapse = \", \"))")
+        out <- c(out,
+            "    stop(.msg, call. = FALSE)",
+            "}")
+    }
+
+    # Provenance, fixed at generation time, plus the settings to record.
+    out <- c(out, "",
+        paste0(".SETTINGS  <- ", emit_value(names(constants))),
+        paste0(".LIBS      <- ", emit_value(unname(libraries))),
+        paste0(".PIPELINE  <- ", emit_value("rnaseq-flow")),
+        paste0(".URL       <- ",
+               emit_value("https://github.com/nicholas-owen/rnaseq-flow")),
+        paste0(".GENERATED <- ",
+               emit_value(format(Sys.time(), "%Y-%m-%d %H:%M:%S"))),
+        paste0(".ORIGINAL  <- ", emit_value(paste(vers, collapse = "; "))))
+
+    out <- c(out, "",
+        "# Alongside each figure, record what was written, with which settings,",
+        "# and where it came from -- so a figure that leaves this folder can",
+        "# still be traced back and its settings checked.",
+        "write_info <- function(base) {",
+        "    .pad <- max(nchar(.SETTINGS))",
+        "    vals <- vapply(.SETTINGS, function(n)",
+        "        paste0(\"  \", formatC(n, width = -.pad), \" = \",",
+        "               paste(deparse(get(n)), collapse = \"\")), character(1))",
+        "    libs <- if (length(.LIBS))",
+        "        vapply(.LIBS, function(p) paste0(\"  \", p, \" \",",
+        "            tryCatch(as.character(packageVersion(p)),",
+        "                     error = function(e) \"not installed\")), character(1))",
+        "        else character(0)",
+        "    writeLines(c(",
+        "        paste0(\"Figure written : \", base, \".png\"),",
+        "        paste0(\"                 \", base, \".svg\"),",
+        "        paste0(\"Date           : \", format(Sys.time(), \"%Y-%m-%d %H:%M:%S\")),",
+        "        \"\",",
+        "        \"Settings used\",",
+        "        vals,",
+        "        \"\",",
+        "        \"Regenerated with\",",
+        "        paste0(\"  R \", getRversion()),",
+        "        libs,",
+        "        \"\",",
+        "        \"Provenance\",",
+        "        paste0(\"  Pipeline         : \", .PIPELINE),",
+        "        paste0(\"  Repository       : \", .URL),",
+        "        paste0(\"  Script generated : \", .GENERATED),",
+        "        paste0(\"  Published figure drawn with : \", .ORIGINAL),",
+        "        \"\",",
+        "        \"This figure was regenerated from the published data by a\",",
+        "        \"reproduce/ script. It is not the pipeline's own output: if the\",",
+        "        \"settings above have been edited, it will differ from the\",",
+        "        \"published figure of the same name in the parent folder.\"),",
+        "        paste0(base, \".info.txt\"))",
+        "}",
+        "",
+        "# Prefix the name, draw both formats, then write the .info.txt beside it.",
+        "save_and_document <- function(name, draw, width = 7, height = 7) {",
+        "    base <- paste0(OUTPUT_PREFIX, name)",
+        "    save_figure(\".\", base, draw, width = width, height = height)",
+        "    write_info(base)",
+        "    message(\"wrote \", base, \".png, \", base, \".svg and \", base, \".info.txt\")",
+        "    invisible(base)",
+        "}")
+
+    for (nm in names(functions))
+        out <- c(out, "", emit_function(nm, functions[[nm]]))
+
+    out <- c(out, "", body, "")
+    writeLines(out, file)
+    invisible(file)
+}
+
+# MDS Plot. plotMDS() returns the computed coordinates invisibly, so run it once
+# with plot = FALSE to capture them for the CSV, then let save_figure() redraw
+# it per device.
+mds <- plotMDS(y, plot = FALSE)
+save_figure("edger_output", "mds_plot", function() plotMDS(y))
+
+# The MDS object itself goes to reproduce/, not the DGEList: limma has a plot
+# method for the MDS class, so re-plotting this object reproduces the figure
+# exactly without recomputing distances -- verified as byte-identical PNG
+# output. A DGEList would carry the entire count matrix (~28x larger at 2000
+# genes, and the gap widens with gene count, since an MDS object scales only
+# with the number of samples).
+saveRDS(mds, file.path(REPRO_DIR, "mds_plot.rds"))
+
+# The plotted coordinates, so the MDS can be redrawn without rerunning edgeR.
+# var.explained is only present in newer edgeR, so it is added when available.
+# Matched on sample name rather than position: every input path orders the
+# columns by samples$sample, but a mismatch here would mislabel the plot
+# silently rather than fail.
+mds_out <- data.frame(sample    = colnames(y),
+                      condition = as.character(
+                          samples$condition[match(colnames(y), samples$sample)]),
+                      x         = as.numeric(mds$x),
+                      y         = as.numeric(mds$y),
+                      stringsAsFactors = FALSE)
+if (!is.null(mds$var.explained)) {
+    mds_out$var_explained_dim1 <- round(100 * mds$var.explained[1], 1)
+    mds_out$var_explained_dim2 <- round(100 * mds$var.explained[2], 1)
+}
+# Figure data, so it lives in reproduce/ rather than the parent folder: the
+# parent carries the analysis tables, reproduce/ carries what redraws a figure.
+write_repro_csv(mds_out, "mds_data")
 
 # 5. Contrasts.
 # Each contrast is built over the 'condition' coefficients of the design and
 # tested with glmQLFTest, so any covariates in the design are adjusted for.
 cond_levels <- levels(samples$condition)
 pairs <- combn(cond_levels, 2)
+
+# Contrasts actually produced, collected as the loop runs. The reproduce/
+# scripts list these in their headers as copy-pasteable CONTRAST lines, so the
+# list has to reflect what exists rather than what was theoretically possible
+# (a contrast whose coefficients are all zero is skipped below).
+repro_contrasts <- character(0)
 
 for (i in seq_len(ncol(pairs))) {
     c1 <- pairs[1, i]
@@ -358,16 +700,102 @@ for (i in seq_len(ncol(pairs))) {
     test_res  <- glmQLFTest(fit, contrast = contrast)
     res_table <- annotate_genes(topTags(test_res, n = Inf)$table)
 
-    filename <- paste0("edger_results_", numerator, "_vs_", denominator, ".csv")
-    write.csv(res_table, file = file.path("edger_output", filename))
+    stem <- paste0("edger_results_", numerator, "_vs_", denominator)
+    # row.names = FALSE: annotate_genes() has already promoted the row names to
+    # an explicit gene_id column, so writing them again would duplicate the IDs
+    # under a blank header.
+    write.csv(res_table, file = file.path("edger_output", paste0(stem, ".csv")),
+              row.names = FALSE)
 
-    png(file.path("edger_output", paste0("smear_", numerator, "_vs_", denominator, ".png")))
-    plotSmear(test_res, de.tags = rownames(res_table)[res_table$FDR < 0.05])
-    dev.off()
+    # reproduce/: the DGELRT that plotSmear consumes (and that a rewritten
+    # volcano would need), plus a gzipped copy of the results table. Both are
+    # named after the *data*, not the figure, because the smear and volcano
+    # scripts share them -- naming per figure would store the same object twice
+    # for every contrast.
+    saveRDS(test_res, file.path(REPRO_DIR, paste0(stem, ".rds")))
+    write_repro_csv(res_table, stem)
+    repro_contrasts <- c(repro_contrasts,
+                         paste0(numerator, "_vs_", denominator))
 
-    png(file.path("edger_output", paste0("volcano_", numerator, "_vs_", denominator, ".png")),
-        width = 760, height = 640)
-    draw_volcano(res_table$logFC, res_table$PValue, res_table$FDR,
-                 paste(numerator, "vs", denominator))
-    dev.off()
+    # No separate CSV for the smear and volcano plots: both are drawn entirely
+    # from logCPM / logFC / PValue / FDR, every one of which is already a column
+    # of the edger_results_*.csv written just above.
+    de_tags <- rownames(res_table)[res_table$FDR < 0.05]
+    save_figure("edger_output", paste0("smear_", numerator, "_vs_", denominator),
+                function() plotSmear(test_res, de.tags = de_tags))
+
+    save_figure("edger_output", paste0("volcano_", numerator, "_vs_", denominator),
+                function() draw_volcano(res_table$logFC, res_table$PValue,
+                                        res_table$FDR,
+                                        paste(numerator, "vs", denominator)),
+                width = 8, height = 6.5)
 }
+
+# ---------------------------------------------------------------------------
+# 6. reproduce/ scripts -- one per figure type, with the contrast in a single
+# constant at the top rather than a loop, so the code stays flat and literal
+# for readers who are not comfortable in R. The width/height constants match
+# what the pipeline used above, so a regenerated figure matches the published
+# one.
+# ---------------------------------------------------------------------------
+
+write_repro_script(
+    file        = file.path(REPRO_DIR, "mds_plot.R"),
+    description = "edgeR MDS plot: samples in two dimensions of leading log2 fold change.",
+    libraries   = "limma",
+    constants   = list(WIDTH = 7, HEIGHT = 7, FIG_RES = FIG_RES),
+    functions   = list(save_figure = save_figure),
+    inputs      = '"mds_plot.rds"',
+    body        = c(
+        '# The saved MDS object already holds the computed coordinates, so this',
+        '# redraws the figure without recomputing distances from the counts.',
+        'mds <- readRDS("mds_plot.rds")',
+        '',
+        'save_and_document("mds_plot", function() plotMDS(mds),',
+        '                  width = WIDTH, height = HEIGHT)'))
+
+if (length(repro_contrasts)) {
+    write_repro_script(
+        file        = file.path(REPRO_DIR, "smear.R"),
+        description = "edgeR smear plot: log fold change vs average abundance.",
+        libraries   = "edgeR",
+        selectors   = list(CONTRAST = repro_contrasts),
+        constants   = list(FDR_CUT = 0.05, WIDTH = 7, HEIGHT = 7, FIG_RES = FIG_RES),
+        functions   = list(save_figure = save_figure),
+        inputs      = c('paste0("edger_results_", CONTRAST, ".rds")',
+                        'paste0("edger_results_", CONTRAST, ".csv.gz")'),
+        body        = c(
+            '# The test object supplies the plot; the results table supplies which',
+            '# genes to highlight, so the FDR cutoff above is a real setting.',
+            'test_res <- readRDS(paste0("edger_results_", CONTRAST, ".rds"))',
+            'res      <- read.csv(paste0("edger_results_", CONTRAST, ".csv.gz"),',
+            '                     stringsAsFactors = FALSE)',
+            'de_tags  <- res$gene_id[!is.na(res$FDR) & res$FDR < FDR_CUT]',
+            '',
+            'save_and_document(paste0("smear_", CONTRAST),',
+            '                  function() plotSmear(test_res, de.tags = de_tags),',
+            '                  width = WIDTH, height = HEIGHT)'))
+
+    write_repro_script(
+        file        = file.path(REPRO_DIR, "volcano.R"),
+        description = "edgeR volcano plot: log2 fold change vs -log10 p-value.",
+        selectors   = list(CONTRAST = repro_contrasts),
+        constants   = list(FDR_CUT = 0.05, LFC_CUT = 1,
+                           WIDTH = 8, HEIGHT = 6.5, FIG_RES = FIG_RES),
+        functions   = list(draw_volcano = draw_volcano, save_figure = save_figure),
+        inputs      = 'paste0("edger_results_", CONTRAST, ".csv.gz")',
+        body        = c(
+            '# Drawn entirely from the results table -- no R object needed.',
+            'res <- read.csv(paste0("edger_results_", CONTRAST, ".csv.gz"),',
+            '                stringsAsFactors = FALSE)',
+            '',
+            'save_and_document(paste0("volcano_", CONTRAST),',
+            '                  function() draw_volcano(res$logFC, res$PValue,',
+            '                                          res$FDR,',
+            '                                          sub("_vs_", " vs ", CONTRAST),',
+            '                                          padj_cut = FDR_CUT,',
+            '                                          lfc_cut  = LFC_CUT),',
+            '                  width = WIDTH, height = HEIGHT)'))
+}
+
+message("reproduce/ written: ", paste(list.files(REPRO_DIR), collapse = ", "))

@@ -91,7 +91,11 @@ switches <- extractTopSwitches(
 )
 
 dir.create("isoform_switch_output", showWarnings = FALSE)
-write.csv(switches, file.path("isoform_switch_output", "isoform_switches.csv"))
+# row.names = FALSE: extractTopSwitches() already returns gene_id / isoform_id
+# as named columns, so the row names are just 1..N and write.csv() would emit
+# them as a leading column with a blank header.
+write.csv(switches, file.path("isoform_switch_output", "isoform_switches.csv"),
+          row.names = FALSE)
 
 # 6. Plots
 # Generate plots for top 10 genes

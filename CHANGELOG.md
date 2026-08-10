@@ -7,10 +7,366 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Roadmap items are tracked in
+No unreleased changes. Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.
+
+## [1.5.1] - 2026-08-09
+
+A fix release. The Salmon and Kallisto paths do not run in 1.5.0 — anyone using
+`--aligner salmon` or `--aligner kallisto` should upgrade.
+
+### Fixed
+
+- **`tximport` no longer tries to read inferential replicates.** `TXIMPORT`
+  failed on the Salmon path with `there is no package called 'jsonlite'`, and
+  would have failed identically on the Kallisto path for `rhdf5`. tximport reads
+  bootstrap / Gibbs samples by default, which pulls in a parser dependency that
+  neither container carries — while nothing downstream consumes them and neither
+  quantifier is asked to produce them in the first place (no `--numBootstraps`,
+  no `-b`). `assets/tximport.R` now passes `dropInfReps = TRUE`, which costs
+  nothing here and keeps both images minimal. If bootstraps are ever enabled for
+  uncertainty-aware methods such as fishpond/swish, this has to be revisited
+  along with those two packages.
+
+  This was a latent bug from the day the pseudo-aligner path was written: it had
+  never been run end to end.
+
+### Verified
+
+- **All four aligner paths now run end to end** on the yeast test dataset —
+  STAR, HISAT2, Salmon and Kallisto — through index building, quantification,
+  DESeq2 and edgeR, GSEA, gProfiler, MultiQC, the Quarto report and the
+  `reproduce/` folders. HISAT2, Salmon and Kallisto had never been exercised
+  before; running them is what surfaced the bug above.
+
+  The four agree on the biology: 667 genes called significant by all four, every
+  pairwise overlap at or above 83% of the smaller set, and the same strong
+  down-regulation bias in each. Notably the concordance does not split along the
+  genome-aligner / pseudo-aligner line — STAR agreed more closely with Salmon
+  than with HISAT2 on this data.
+
+### Documentation
+
+- **`assets/test/README.md` rewritten around all four aligners**: a table
+  mapping each `--aligner` to its index inputs, index parameter and count route;
+  full build-and-run commands for each; why three of the four pass
+  `--strandedness unstranded` (RSeQC needs a BAM, so `auto` cannot work without
+  one) while STAR is left on `auto` so the inference path stays exercised; and
+  an aligner-aware "what to check" including the cross-aligner concordance
+  table. The concordance figures are qualified with the subsampling that
+  produced them — 1 M read pairs drawn by `seqtk sample -s42` — since the
+  head-of-file fallback or a different depth will move the absolute counts
+  without anything being wrong.
+
+- **The GSEA gene-set path in that README is the corrected one.** References
+  downloaded before 1.5.0 published the GMTs one level too deep, at
+  `refs/<name>/gmt/gmt/`. A re-download writes the un-nested copy alongside the
+  old directory rather than replacing it, so both exist and both are readable —
+  which makes pointing at the wrong one quiet. Now called out explicitly.
+
+- **`to-fix.md`: M18 added** — no test dataset exercises alternative splicing,
+  DTU or isoform switching. The HISAT2 run's rMATS task completed and found one
+  exon-skipping event and zero of every other class, so rMATS's plumbing is
+  verified while its configuration (H7) is not: on this data a misconfigured
+  rMATS and a correct one both find nothing. The same wall applies to H11, M17
+  and `--diffsplice`. Fixing it needs a second small test dataset from a
+  splicing-capable organism. Two now-stale claims corrected alongside it — M17
+  and the suggested work order both still described the Salmon, Kallisto and
+  HISAT2 paths as never executed.
+
+## [1.5.0] - 2026-08-08
+
+A reproducibility release. Every figure the pipeline publishes can now be
+redrawn — and adapted — from the results directory alone, without rerunning
+anything, and the analysis report is largely interactive.
+
+### Added
+
+- **`reproduce/` folders.** Each analysis output directory now carries a
+  `reproduce/` subfolder holding everything needed to redraw any of its figures:
+  the R objects the plot calls consume, gzipped copies of the tables behind
+  them, and a standalone, commented R script per figure type. The scripts run
+  from a terminal or from RStudio, need only the files beside them, and expose
+  the settings worth changing — contrast, cutoffs, colours, dimensions — as
+  named constants at the top.
+
+  The guiding split is that the parent folder is for *reading* and `reproduce/`
+  is for *running*: parent CSVs stay uncompressed so they open by double-click,
+  while the `reproduce/` copies are gzipped, which R reads transparently.
+
+  Objects are saved only where a plot genuinely needs one, and always the
+  smallest that will do — the small `MDS` object rather than the whole
+  `DGEList`, for instance, which is ~28x larger at 2,000 genes and grows with
+  gene count. GSEA is the case that most needs it: `plotGseaTable` requires
+  gene-set *membership*, which lives in the GMT — a pipeline input, never
+  published with the results — so its figure cannot be rebuilt from the CSVs at
+  any price.
+
+  Figures are written with a `repro_` prefix and a matching `.info.txt`
+  recording the settings used, the environment that regenerated them and where
+  they came from, so a regenerated figure is never mistaken for the pipeline's
+  own once it leaves the folder.
+
+- **SVG alongside PNG for every figure**, at 300 dpi for the raster copy. SVG is
+  written with `grDevices::svg()` rather than `ggsave(..., ".svg")`, which
+  delegates to the `svglite` package that none of the pipeline containers carry.
+  The report embeds the SVG; the PNG remains for slides, email and anything that
+  cannot consume vector graphics.
+
+- **An interactive analysis report.** PCA, MDS, the top-variable-gene heatmap,
+  volcano, MA and enrichment plots are now plotly widgets with hover detail,
+  replacing static images where the underlying data is available; the static
+  copies are still published and are used as a fallback. The heatmap uses
+  heatmaply for dendrograms on both axes and a condition colour bar.
+
+  New panels: a **shrinkage diagnostic** showing the same contrast before and
+  after apeglm, a **fold change vs abundance** plot for edgeR, a **GSEA dot
+  plot** of the most significant gene sets, and a **gProfiler Manhattan plot**
+  of enriched terms — the last two being the enrichment results that previously
+  appeared in the report only as tables.
+
+- **`log2FoldChange_MLE`** in the DESeq2 result tables: the unshrunken
+  maximum-likelihood fold change, kept beside the apeglm-shrunken one so the
+  size of the shrinkage can be seen rather than inferred.
+
+- **`gene_id` as an explicit column** in every differential-expression and
+  enrichment table. The IDs were previously written as row names, which
+  `write.csv()` emits as a leading column with an *empty header* — so the
+  authoritative identifier was the one field without a label, `read.csv()`
+  renamed it to `X`, and a reader skimming the sheet saw `gene_name` first. Gene
+  symbols are neither unique nor stable across annotation releases, so the
+  stable identifier now carries a name.
+
+- **Aggregated software versions in the MultiQC report**, and published to
+  `pipeline_info/`. Every process's `versions.yml` was already being collected
+  into `software_versions.yml`, but MultiQC has no parser for a bare
+  `"PROCESS": {tool: version}` mapping, so it was silently ignored: the report
+  listed only FastQC and fastp, the two tools whose own output embeds a version.
+  All 17 tools now appear, and the file is published rather than existing only
+  inside the work directory.
+
+- **A Source FASTQ column** in MultiQC's General Statistics, mapping each
+  displayed sample back to the file it came from.
+
+### Changed
+
+- **MultiQC sample names are reconciled at display time.** FastQC names samples
+  after the FASTQ filename, fastp after the `--in1` path recorded in its JSON,
+  and STAR and featureCounts after the sample id — so General Statistics could
+  not merge them, and six samples appeared as 24 mostly-empty rows. MultiQC is
+  now given a mapping built from the samplesheet (`--replace-names`).
+
+  This is deliberately done in the reporting layer rather than by renaming the
+  reads: the published `fastqc/<accession>_fastqc.html` files and the paths in
+  `multiqc_sources.txt` are the run's provenance, and for public data the
+  accession is what ties results back to the archive.
+
+- **Figure data now lives in `reproduce/`** rather than beside the figures:
+  `pca_data.csv`, `mds_data.csv` and the heatmap matrix moved there and are
+  gzipped. The analysis tables stay where they were.
+
+- **A mistyped file path now fails at launch.** Nextflow stages a missing input
+  as a dangling symlink rather than refusing to start, so a wrong `--gmt`
+  surfaced at the GSEA step after alignment and differential expression had
+  already run. Eleven file and directory parameters are checked up front and all
+  bad paths reported at once.
+
+### Fixed
+
+- **gProfiler results were structurally corrupt whenever a direction had exactly
+  one enriched term.** The table was flattened with
+  `apply(result, 2, as.character)`, which returns a matrix for a multi-row
+  result but drops to a *named vector* at one row — so `write.csv()` wrote a
+  single column named `"x"` holding one value per field. Real data, unreadable
+  shape, no error. Only the list-columns are flattened now, which also keeps the
+  numeric columns numeric.
+
+- **`--download_gmt` published one directory too deep**, producing
+  `<outdir>/gmt/gmt/*.gmt` — so the path given in the documentation did not
+  exist.
+
+- **General Statistics rendered blank.** MultiQC paints data-cell contents at
+  negative z-index, which only works while every ancestor of the table is
+  transparent; the report theme gave `.mqc-section` an opaque background, which
+  painted over every value and every coloured bar. MultiQC applies the same
+  reset itself in its print stylesheet.
+
+- **The QC table in the analysis report** was built from `multiqc_data.json`,
+  whose nested per-module structure produced a frame of nested data-frame
+  columns that DT cannot render — every reader got a "Requested unknown
+  parameter" popup and a table of meaningless values. It now reads MultiQC's
+  flat `multiqc_general_stats.txt`, which is stable across MultiQC versions.
+
+- **The top-variable-gene heatmap had never rendered.** `r-pheatmap` was not
+  declared in the DESeq2 environment, and the plotting call is guarded by
+  `requireNamespace()`, so the figure was skipped with only a log message while
+  the report described it.
+
+- **A dangling `else` in the report** aborted rendering at the DESeq2 results
+  table. At top level R terminates the statement at the newline after the `if`
+  body, so the `else` never parsed.
+
+- **`versions.yml` from MULTIQC was malformed**, indented and containing a
+  literal `END_VERSIONS` line.
+
+### Notes
+
+- The interactive heatmap adds **heatmaply** to the report environment, which
+  pulls in `seriation`, `vegan`, `dendextend` and `viridis`. Verified against
+  the ggplot2 4.x the environment resolves to — that pairing has broken in the
+  past. The report falls back to a plain tile heatmap when the package is
+  absent, so an older image still renders.
+
+- Published figures draw every gene, with no downsampling: a published figure
+  must be identical every time it is made. The report's interactive equivalents
+  thin the non-significant cloud, where widget size matters and exact
+  reproducibility does not.
+
+- `isoform_switch.R` is **not** covered by the `reproduce/` conventions. Its
+  figures are written by the package itself, so they bypass the shared figure
+  writer and are PNG-only. It requires `--aligner salmon` and a transcript
+  FASTA, which no current test exercises, so the work would ship unverified.
+
+## [1.4.3] - 2026-08-04
+
+A gene-set release. `--download_gmt` could not run at all — it requested a
+package from a channel that has never carried it — and the fix is paired with an
+upgrade to the current MSigDB gene sets.
+
+### Changed
+
+- **msigdbr upgraded from 7.5.1 to 26.1.0**, so `--download_gmt` now produces
+  current MSigDB gene sets (release 2026.1) rather than the 2022 vintage that
+  7.5.1 shipped. This required migrating `assets/download_gmt.R` to the API
+  introduced in msigdbr 10.0.0: the `msigdbr()` argument `category` became
+  `collection`, and the output column `gs_subcat` became `gs_subcollection`
+  (the values, e.g. `"GO:BP"`, are unchanged). The script now asserts
+  `msigdbr >= 10` up front and fails with an explicit message, rather than
+  erroring deep inside a `tryCatch` and writing empty gene sets.
+
+  Gene sets are still taken from the human MSigDB and mapped to other species by
+  orthology (msigdbr's `db_species = "HS"` default), preserving previous
+  behaviour. MSigDB's native mouse collections are left as a deliberate future
+  choice rather than a silent change of results.
+
+  **Note:** from msigdbr 24 the gene sets are fetched over HTTPS on first use
+  instead of being bundled in the package, so `--download_gmt` now needs outbound
+  network access on whichever machine runs it.
+
+### Removed
+
+- **Runtime package installation in `download_gmt.R`.** The script tried
+  `BiocManager::install("msigdbr")` if the package was missing — which could
+  never have worked, since msigdbr is a CRAN package, not a Bioconductor one. A
+  process that installs its own dependencies at run time is neither reproducible
+  nor guaranteed a network or a writable library path; the environment is now
+  the process definition's responsibility, and a missing package fails with a
+  clear message.
+
+### Fixed
+
+- **`--download_gmt` could not run at all.** `DOWNLOAD_GMT` requested
+  `bioconda::r-msigdbr`, but msigdbr is a CRAN package and has never existed in
+  the bioconda channel, so the environment could not be solved. It is now
+  `conda-forge::r-msigdbr`. (Both this and the `BiocManager` call above stem from
+  the same mistaken assumption that msigdbr is a Bioconductor package.)
+
+- **A scientific name passed to `--organism` was always rejected.** The organism
+  resolver lower-cased its input to compare against its alias table, then
+  returned that lower-cased string when no alias matched — so `"Danio rerio"`
+  became `"danio rerio"` and failed the lookup against msigdbr's `species_name`,
+  even though the species is available. Only the gProfiler-style codes and
+  common names ever worked, despite the scientific name being documented.
+  Matching is now case-insensitive against both msigdbr's scientific and common
+  name columns, and always resolves to msigdbr's own capitalisation.
+
+- **`download_gmt.R` reported success when it had downloaded nothing.** Each
+  collection was wrapped in a `tryCatch` that logged the error and continued, and
+  the script then printed "Download complete." and exited 0 regardless. It now
+  tracks what was actually written, still tolerates one collection being
+  unavailable, and exits non-zero with the underlying failures if no gene sets
+  were retrieved at all.
+
+## [1.4.2] - 2026-08-04
+
+An HPC-execution release: rnaseq-flow can now be submitted to an SGE cluster
+with `-profile sge`, tuned for the UCL Research Computing clusters. No change to
+any analysis step — this release only affects how and where jobs are run.
+
+### Added
+
+- **SGE / UCL Myriad execution profile — `-profile sge`.** A new
+  `conf/sge.config` submits every process to an SGE cluster with Singularity,
+  registered as a profile in `nextflow.config`. Derived from the nf-core
+  institutional config for UCL Myriad (Chris Wyatt, Fernando Duarte; MIT) and
+  adapted to rnaseq-flow's resource profile:
+  - Memory is requested **per core** in the form SGE expects (`-l mem=<X>M`,
+    multiplied by the slots in `-pe smp N`) and **rounded up**. Groovy's `/` on
+    integral types returns a BigDecimal, so a request that does not divide
+    evenly — `STAR_GENOME_GENERATE` at 38 GB / 12 cpus, most `HISAT2_BUILD`
+    sizes — would otherwise emit a fractional value such as
+    `-l mem=3242.6666666667M`, which the scheduler rejects.
+  - `params.max_time` is set to `48.h`. The pipeline default of `240.h` becomes
+    `-l h_rt=240:00:00`, above the queue limit, so every job would be rejected
+    at submission.
+  - Node-local scratch is both requested (`-l tmpfs=`, sized per process label)
+    and used (`scratch = '$TMPDIR'`), keeping the heavy RNA-seq I/O off the
+    shared filesystem.
+  - Jobs are routed to the right **node class** automatically. Because SGE
+    allocates memory per slot, what decides where a job can run is the
+    memory-per-core ratio, not the total: a Myriad standard (D) node offers
+    4.4 GB/core, so anything above that matches no D node whatever its total.
+    Every process here sits at ≤ 4 GB/core except mammalian HISAT2 index
+    building (17.0 GB/core for human, 13.2 for mouse), which now has
+    `-ac allow=IB` appended and queues against the high-memory nodes instead.
+  - **A mammalian HISAT2 index is splice-aware by default.** `HISAT2_BUILD` is
+    given its own `resourceLimits` so it is exempt from the standard-node memory
+    ceiling; its GTF-derived estimate (~204 GB for human) passes through
+    unclamped rather than being reduced to 160 GB, which would have silently
+    dropped `--ss`/`--exon`. The exemption is scoped to that one process, so no
+    other job can request high-memory-node resources. Sites without high-memory
+    access should lower it — see the note in `conf/sge.config`.
+  - The Apptainer cache and temp directories are pointed at `$HOME/Scratch`.
+
+- **Institutional-config parameters are declared in the schema.**
+  `config_profile_description` / `_contact` / `_url` are the nf-core convention
+  for site configs, and `conf/sge.config` sets them — but the unknown-parameter
+  check rejected any parameter absent from `nextflow_schema.json`, so
+  `-profile sge` failed immediately with "Unknown parameter(s)". They are now
+  declared in a hidden `institutional_config_options` group, which also lets any
+  other institutional config be layered on with `-c`. `--help` learned to honour
+  the schema's `hidden` flag, so these stay out of the printed parameter list.
+
+### Fixed
+
+- **GSEA results are now reproducible.** `fgsea()` dispatches to the multilevel
+  algorithm, which estimates its p-values by Monte Carlo sampling, and nothing
+  seeded it — so the same ranked list gave different p-values, and a different
+  pathway order, on every run (including on `-resume`). `gsea.R` now seeds the
+  generator once per contrast, so each contrast is reproducible on its own
+  regardless of how many contrasts a run has or the order they are processed in.
+
+- **GSEA no longer discards the leading edge.** The `leadingEdge` column — the
+  genes driving each enrichment, and the part of a GSEA result that actually
+  gets followed up — was deleted before the results were written. It is now
+  collapsed to a `/`-delimited string and kept. This also removes a latent trap
+  in the column-dropping idiom: `-which(names(x) %in% "leadingEdge")` evaluates
+  to `-integer(0)` if the column is ever absent, which selects *zero* columns
+  and writes an empty table.
+
+- **gProfiler over-representation now tests against the right background.**
+  `gprofiler.R` queried with `domain_scope = "annotated"` and no custom
+  background, so a contrast's significant genes were tested against every gene
+  g:Profiler holds an annotation for, rather than against the genes that were
+  actually measured. That inflates enrichment significance across the board and
+  most severely for tissue-specific categories — the ones an RNA-seq experiment
+  is usually looking for. The background is now the tested gene universe (the
+  rows of the DESeq2 result table, i.e. everything surviving expression
+  filtering), passed as `custom_bg` with `domain_scope = "custom_annotated"`.
+  **Enrichment results from earlier versions will differ, and should be
+  regarded as over-optimistic.**
 
 ## [1.4.0] - 2026-07-17
 

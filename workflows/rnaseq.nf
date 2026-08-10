@@ -391,7 +391,12 @@ workflow RNASEQ {
               file("${projectDir}/assets/multiqc_logo.png") ],
             ch_versions.unique().collectFile(name: 'software_versions.yml'),
             [],
-            ch_multiqc_files.collect()
+            ch_multiqc_files.collect(),
+            // The samplesheet is passed so MULTIQC can map each tool's own
+            // sample naming onto the sample ids; see the note in the module.
+            // Only a CSV samplesheet carries that mapping -- a glob input has
+            // no sample column, so nothing is staged and MultiQC is left alone.
+            params.input && params.input.endsWith('.csv') ? file(params.input) : []
         )
         ch_versions = ch_versions.mix(MULTIQC.out.versions.first())
         ch_multiqc_data = MULTIQC.out.data

@@ -5,7 +5,14 @@ process DESEQ2 {
     // nextflow.config). lfcShrink(type="apeglm") needs the apeglm package,
     // which the deseq2-only biocontainer does not carry -- apeglm is a DESeq2
     // 'Suggests' dependency, so it is not pulled into that image.
-    conda 'bioconda::bioconductor-deseq2=1.38.0 bioconda::bioconductor-apeglm'
+    //
+    // r-pheatmap draws the top-variable-gene heatmap. deseq2.R guards its use
+    // with requireNamespace() and skips the heatmap when it is absent, so
+    // omitting it here did not fail the run -- it silently produced no
+    // heatmap_top_var.png while the report still described one. It is left
+    // unpinned so the solver can pick the build matching the R version that
+    // DESeq2 1.38.0 pulls in.
+    conda 'bioconda::bioconductor-deseq2=1.38.0 bioconda::bioconductor-apeglm conda-forge::r-pheatmap'
 
     input:
     path samplesheet
@@ -33,6 +40,7 @@ process DESEQ2 {
     "${task.process}":
         deseq2: \$(Rscript -e "library(DESeq2); cat(as.character(packageVersion('DESeq2')))")
         apeglm: \$(Rscript -e "cat(as.character(packageVersion('apeglm')))")
+        pheatmap: \$(Rscript -e "cat(as.character(packageVersion('pheatmap')))" 2>/dev/null || echo "not installed")
     END_VERSIONS
     """
 

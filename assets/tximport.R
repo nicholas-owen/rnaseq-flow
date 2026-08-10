@@ -61,12 +61,33 @@ txi <- tximport(
   files,
   type            = if (aligner == "salmon") "salmon" else "kallisto",
   tx2gene         = tx2gene,
-  ignoreTxVersion = TRUE   # match ENST00000456328.2 <-> ENST00000456328
+  ignoreTxVersion = TRUE,  # match ENST00000456328.2 <-> ENST00000456328
+  # Inferential replicates (bootstrap / Gibbs samples) are not imported.
+  #
+  # Neither quantifier is asked for them -- no --numBootstraps for Salmon, no
+  # -b for kallisto -- and nothing downstream consumes them: DESeq2, edgeR and
+  # DEXSeq all work from the counts and length offsets. But tximport tries to
+  # read them by default, and that pulls in dependencies the containers do not
+  # carry: for Salmon it parses aux_info/meta_info.json and needs `jsonlite`
+  # (which is what failed), and for kallisto it reads abundance.h5 and needs
+  # `rhdf5`. Skipping them costs nothing here and keeps both images minimal.
+  #
+  # If bootstraps are ever enabled -- see H5 in to-fix.md, uncertainty-aware
+  # methods such as fishpond/swish need them -- this has to be revisited along
+  # with the two packages above.
+  dropInfReps     = TRUE
 )
 
 # ---- 5. Save outputs ------------------------------------------------------
 saveRDS(txi, "txi.rds")
-write.csv(round(txi$counts), "tximport_gene_counts.csv")
+# Promote the gene IDs from the matrix row names to an explicit gene_id column,
+# for the same reason as the DE result tables: written as row names they land in
+# an unlabelled leading column that read.csv() renames to 'X' and pandas to
+# 'Unnamed: 0'. check.names = FALSE keeps the sample column names verbatim.
+counts_out <- data.frame(gene_id = rownames(txi$counts),
+                         round(txi$counts),
+                         check.names = FALSE, stringsAsFactors = FALSE)
+write.csv(counts_out, "tximport_gene_counts.csv", row.names = FALSE)
 
 message("tximport complete: ", nrow(txi$counts), " genes x ",
         ncol(txi$counts), " samples")

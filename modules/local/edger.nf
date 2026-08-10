@@ -1,7 +1,10 @@
 process EDGER {
     label 'process_medium'
     // Biocontainer with EdgeR
-    container 'quay.io/biocontainers/bioconductor-edger:3.42.0--r43hdfd78af_0'
+    // 3.42.0 was never published as a biocontainer; 3.42.4 is the nearest real
+    // build of the same minor series. Deliberately not 4.x: edgeR 4 changed the
+    // glmQLFit default (legacy=FALSE), which would silently shift every result.
+    container 'quay.io/biocontainers/bioconductor-edger:3.42.4--r43hf17093f_0'
 
     input:
     path samplesheet
