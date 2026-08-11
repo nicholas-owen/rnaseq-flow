@@ -82,6 +82,14 @@ aligner indices, so you can go from nothing to results with three commands.
 Run with one of the bundled profiles: `-profile docker`, `-profile singularity`
 or `-profile conda`.
 
+> **No internet access?** Several containers are provisioned at run time by
+> Nextflow Wave, which contacts an external service, so the pipeline does not run
+> as-is in a TRE or air-gapped environment. A complete offline container bundle
+> is published on Zenodo —
+> [doi.org/10.5281/zenodo.21880329](https://doi.org/10.5281/zenodo.21880329) —
+> and used with `-profile tre`. See
+> [USAGE.md](USAGE.md#running-without-internet-access-tre--air-gapped).
+
 ---
 
 ## Quick start
@@ -322,6 +330,7 @@ silently ignored.
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CITATIONS.md](CITATIONS.md) | Every tool with its publication, plus a methods-paragraph template |
 | [CITATIONS.html](CITATIONS.html) | The citations page as a styled HTML report (open in a browser) |
+| [Zenodo bundle](https://doi.org/10.5281/zenodo.21880329) | Offline Singularity container bundle for TRE / air-gapped use |
 
 ---
 

@@ -7,7 +7,19 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-No unreleased changes. Roadmap items are tracked in
+### Documentation
+
+- **Running without internet access.** `USAGE.md` gains a TRE / air-gapped
+  section: Wave provisions several containers by contacting an external service
+  at run time, so the pipeline does not run as configured in a secure
+  environment. An offline bundle of all 27 Singularity images is published on
+  Zenodo ([10.5281/zenodo.21880329](https://doi.org/10.5281/zenodo.21880329))
+  and used with `-profile tre`, which disables Wave and pins the seven
+  Conda-declared processes to the bundled images. Covers verification, the
+  release pinning, and the point that references and gene sets travel
+  separately — the bundle carries software, not data.
+
+Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include
 contamination / rRNA screening, a `--contrasts` parameter, an Arriba fusion
 caller and a bundled CI test profile.

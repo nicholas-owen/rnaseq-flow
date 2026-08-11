@@ -458,6 +458,7 @@ cannot run from a count matrix.
 | `-profile singularity` | Use Singularity/Apptainer (HPC-friendly) |
 | `-profile conda` | Create per-process Conda environments |
 | `-profile sge` | Submit to an SGE cluster (UCL Myriad/Kathleen/Young), with Singularity |
+| `-profile tre` | Air-gapped running: disables Wave, pins every image to the offline bundle ([below](#running-without-internet-access-tre--air-gapped)) |
 
 Add `-resume` to continue from cached results after an interruption or a
 parameter tweak:
@@ -573,6 +574,69 @@ minimal executor block with `-c` (SLURM example):
 process.executor = 'slurm'
 process.queue    = 'normal'
 ```
+
+### Running without internet access (TRE / air-gapped)
+
+Trusted Research Environments, secure enclaves and air-gapped HPC block outbound
+network access, and the pipeline will not run there as configured: **Wave
+provisions several containers on the fly by contacting an external service at run
+time.** Nothing about that can be tuned — it has to be switched off, and every
+image supplied locally.
+
+A prepared bundle of every container the pipeline uses is published on Zenodo:
+
+> **rnaseq-flow v1.5.1 — offline Singularity container bundle**
+> <https://doi.org/10.5281/zenodo.21880329>
+
+It holds 27 Singularity images (~7 GB), a `tre.config` profile, and a README.
+Download it outside the TRE, transfer it in by whatever route your environment
+allows, then:
+
+```bash
+tar -xf rnaseq-flow-1.5.1-singularity.tar
+export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.5.1
+```
+
+```bash
+nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
+    -profile tre,sge \
+    --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --outdir results
+```
+
+The `tre` profile disables Wave and pins the seven Conda-declared processes
+(DESeq2, edgeR/tximport, DEXSeq, GSEA, gProfiler, `--download_gmt`, and the
+Quarto report) to the images in the bundle. Combine it with whichever executor
+profile you need — `tre,sge` above, or `tre` alone for a local run.
+
+Verify the download before transferring it, since a truncated 7 GB file fails in
+confusing ways much later:
+
+```bash
+sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
+```
+
+**Points worth knowing:**
+
+- **The bundle is pinned to a release.** Container references are resolved per
+  release, so use the 1.5.1 bundle with pipeline 1.5.1. A mismatch surfaces as a
+  process failing to find its image, not as a clear version error.
+- **The `tre` profile only works with the bundle.** The seven Conda-built images
+  are named locally to it and resolve nowhere online, so the profile is not
+  usable on its own.
+- **References and gene sets are separate.** The bundle carries software, not
+  data. Run `--download_refs` and `--download_gmt` outside the TRE and transfer
+  the reference directory in alongside it — and keep
+  `reference_metadata.json` with those files, since it is what lets a run
+  report which reference set it used.
+- **Do not use `-profile conda` in a TRE.** It resolves and installs
+  environments at run time, which needs both Conda and reachable channels. The
+  containers exist precisely to avoid that.
+
+If your environment has an internal container registry (Harbor, Artifactory,
+Nexus) rather than a shared filesystem, push the bundle's images there and
+override the registry prefix instead of using `NXF_SINGULARITY_CACHEDIR`.
 
 ---
 
