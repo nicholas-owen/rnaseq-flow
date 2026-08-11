@@ -95,7 +95,8 @@ references/human/
 │   ├── Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz   # genome FASTA
 │   ├── Homo_sapiens.GRCh38.102.gtf.gz                   # annotation (note the .102.)
 │   ├── Homo_sapiens.GRCh38.cdna.all.fa.gz               # transcriptome (--transcript_fasta)
-│   └── download_log.txt                                 # provenance log
+│   ├── download_log.txt                                 # provenance log (human-readable)
+│   └── reference_metadata.json                          # provenance record (machine-readable)
 └── gmt/                                              # if --download_gmt
     ├── hallmark.gmt
     ├── c2_curated.gmt   c2_kegg.gmt   c2_reactome.gmt
@@ -107,6 +108,17 @@ straight into `--outdir` (no `v<release>` subfolder). `download_log.txt` always
 records the resolved release, the assembly name, all three filenames and the
 exact `--download_release` value that reproduces the set — so a `current`
 download stays interpretable after Ensembl moves on.
+
+`reference_metadata.json` carries the same provenance in machine-readable form:
+source, requested and resolved release, assembly, annotation version, and each
+file's URL, size and SHA-256. It travels with the reference files, which is the
+point — **the download is the only moment some of this can be known.** An
+Ensembl GTF's own header gives the assembly, the assembly accession and the
+genebuild date, but never the release it was published in, and the trailing
+number in its filename is an annotation version rather than the release
+(release-116 ships `Saccharomyces_cerevisiae.R64-1-1.63.gtf.gz`). Keep the file
+alongside the references and a later run can still say exactly where they came
+from; delete it and that is unrecoverable.
 
 > **Which GTF?** Ensembl publishes several annotations per species (`abinitio`,
 > `chr`, `chr_patch_hapl_scaff`, and the canonical one). Only the canonical GTF

@@ -25,6 +25,13 @@ process QUARTO_REPORT {
     input:
     path "multiqc_data_dir"
     path qmd_template
+    // Staged under a fixed name so the .qmd can find it regardless of what the
+    // incoming file is called. Records how the run was configured -- aligner,
+    // references, gene sets -- none of which the report can otherwise know.
+    path "run_manifest.json"
+    // Inlined into the title block. Staged rather than referenced by path so
+    // the report stays a single self-contained file.
+    path "rnaseq-flow_logo.svg"
     path deseq2_dir       // deseq2_output/  (or [] when DE did not run)
     path edger_dir        // edger_output/   (or [] when DE did not run)
     path gsea_dir         // gsea_output/    (or [] when GSEA did not run)

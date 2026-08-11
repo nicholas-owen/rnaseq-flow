@@ -53,7 +53,9 @@ import sys
 import os
 import re
 import gzip
+import json
 import time
+import hashlib
 import datetime
 
 import requests
@@ -63,6 +65,12 @@ ENSEMBL_REST = "https://rest.ensembl.org"
 
 RETRIES = 4
 BACKOFF = 5  # seconds, multiplied by attempt number
+
+# Machine-readable companion to download_log.txt, written beside the reference
+# files. The log is for a person reading the run; this is for anything that has
+# to report where a reference set came from later -- see write_metadata().
+METADATA_FILE = "reference_metadata.json"
+METADATA_SCHEMA_VERSION = 1
 
 
 def log(log_file, msg):
@@ -124,20 +132,37 @@ def verify_gzip(path, log_file):
 
 
 def download_file(url, outfile, log_file):
+    """Download `url` to `outfile` and return a provenance record for it.
+
+    The SHA-256 is accumulated from the chunks as they are written, so it costs
+    no extra pass over the data. It records the identity of the bytes actually
+    received, which is what lets a later run confirm that the file beside it is
+    still the one this log describes.
+    """
     log(log_file, f"Downloading: {url}")
     for attempt in range(1, RETRIES + 1):
         try:
+            # Re-created per attempt: a retry rewrites the file from scratch, so
+            # a digest carried over from a failed attempt would describe bytes
+            # that are no longer on disk.
+            digest = hashlib.sha256()
             with _get(url, stream=True) as r:
                 expect = r.headers.get("Content-Length")
                 with open(outfile, "wb") as f:
                     for chunk in r.iter_content(chunk_size=1 << 20):
                         f.write(chunk)
+                        digest.update(chunk)
             got = os.path.getsize(outfile)
             if expect is not None and int(expect) != got:
                 raise IOError(f"truncated: expected {expect} bytes, got {got}")
             verify_gzip(outfile, log_file)
             log(log_file, f"  saved {outfile} ({got} bytes, gzip OK)")
-            return
+            return {
+                "file": os.path.basename(outfile),
+                "url": url,
+                "bytes": got,
+                "sha256": digest.hexdigest(),
+            }
         except SystemExit:
             raise
         except Exception as e:  # noqa: BLE001
@@ -235,7 +260,8 @@ def download_ensembl(species, outdir, log_file, release):
     assembly = m.group("asm")
     asm = re.escape(assembly)
     log(log_file, f"  assembly: {assembly}")
-    download_file(dna_url + genome_fn, os.path.join(outdir, genome_fn), log_file)
+    genome_rec = download_file(dna_url + genome_fn,
+                               os.path.join(outdir, genome_fn), log_file)
 
     # ---- annotation GTF -----------------------------------------------------
     # Ensembl ships several GTFs per species directory, e.g. GRCh38 release-116:
@@ -277,7 +303,14 @@ def download_ensembl(species, outdir, log_file, release):
             "GTF for a different assembly) makes the index, the counts and the "
             "gene symbols disagree about what the reference is.")
     gtf_fn = hits[0]
-    download_file(gtf_url + gtf_fn, os.path.join(outdir, gtf_fn), log_file)
+    gtf_rec = download_file(gtf_url + gtf_fn, os.path.join(outdir, gtf_fn), log_file)
+
+    # The trailing number in the GTF name is Ensembl's annotation version, which
+    # is not the release (see the module docstring: release-116 ships
+    # ...R64-1-1.63.gtf.gz). It is worth recording precisely because nothing in
+    # the file itself carries it and it cannot be recovered afterwards.
+    ann_m = re.match(rf'^{sp}\.{asm}\.(?P<ver>\d+)\.gtf\.gz$', gtf_fn)
+    annotation_version = ann_m.group("ver") if ann_m else None
 
     # ---- transcriptome (cDNA) FASTA ----------------------------------------
     # Needed by --build_indices for Salmon and Kallisto, and by
@@ -293,7 +326,8 @@ def download_ensembl(species, outdir, log_file, release):
     cdna_pat = rf'href="({sp}\.{asm}\.cdna\.all\.fa\.gz)"'
     cdna_fn = pick_one(cdna_pat, cdna_text, f"cDNA FASTA for assembly '{assembly}'",
                        cdna_url, log_file)
-    download_file(cdna_url + cdna_fn, os.path.join(outdir, cdna_fn), log_file)
+    cdna_rec = download_file(cdna_url + cdna_fn,
+                             os.path.join(outdir, cdna_fn), log_file)
 
     # ---- provenance ---------------------------------------------------------
     # Record the resolved release so a 'current' download stays interpretable
@@ -308,6 +342,39 @@ def download_ensembl(species, outdir, log_file, release):
     log(log_file, f"  transcriptome   : {cdna_fn}")
     log(log_file, "")
     log(log_file, "Reuse this exact set with:  --download_release " + release)
+
+    return {
+        "source": "ensembl",
+        "release": release,
+        "assembly": assembly,
+        "annotation_version": annotation_version,
+        "files": {
+            "genome": genome_rec,
+            "annotation": gtf_rec,
+            "transcriptome": cdna_rec,
+        },
+    }
+
+
+def write_metadata(outdir, log_file, meta):
+    """Write the machine-readable provenance sidecar beside the references.
+
+    `download_log.txt` stays the human record; this is the one other tools read.
+
+    It exists because the download is the *only* moment this information can be
+    known. An Ensembl GTF's header carries the assembly, the assembly accession
+    and the genebuild date, but not the release it was published in, and the
+    trailing number in its filename is an annotation version rather than the
+    release -- so nothing about a reference file on disk identifies the release
+    it came from. Recorded here, a run pointed at these files later can still
+    report where they came from instead of falling back to "user-supplied,
+    release not recorded".
+    """
+    path = os.path.join(outdir, METADATA_FILE)
+    with open(path, "w") as fh:
+        json.dump(meta, fh, indent=2)
+        fh.write("\n")
+    log(log_file, f"Wrote provenance record: {METADATA_FILE}")
 
 
 def main():
@@ -327,13 +394,18 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     log_file = os.path.join(outdir, "download_log.txt")
 
+    # Timezone-aware for the JSON record: a bare local timestamp is ambiguous
+    # once the file travels with the reference set. The log keeps its existing
+    # naive format so its output is unchanged.
+    started = datetime.datetime.now().astimezone()
+
     log(log_file, f"Download started at: {datetime.datetime.now()}")
     log(log_file, f"Species: {species}")
     log(log_file, f"Source: {source}")
     log(log_file, f"Ensembl release: {release}")
 
     if source == "ensembl":
-        download_ensembl(species, outdir, log_file, release)
+        meta = download_ensembl(species, outdir, log_file, release)
     elif source == "ncbi":
         die(log_file,
             "source 'ncbi' is not implemented. Reliable NCBI downloads need the "
@@ -343,6 +415,21 @@ def main():
         die(log_file, f"unknown source '{source}'. Supported: ensembl")
 
     log(log_file, f"Download complete at: {datetime.datetime.now()}")
+
+    # Written last, so the sidecar's presence means the whole set downloaded and
+    # verified. Every failure path above exits non-zero via die().
+    write_metadata(outdir, log_file, {
+        "schema_version": METADATA_SCHEMA_VERSION,
+        "generated_by": "rnaseq-flow/download_refs.py",
+        "downloaded_at": started.isoformat(timespec="seconds"),
+        "completed_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "species": species,
+        # What was asked for ('current' or a number) alongside what it resolved
+        # to: 'current' stops being meaningful the moment Ensembl moves on, so
+        # both are needed to interpret the set afterwards.
+        "release_requested": release,
+        **meta,
+    })
 
 
 if __name__ == "__main__":
