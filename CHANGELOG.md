@@ -7,6 +7,26 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **A machine-readable provenance record for downloaded reference sets.**
+  `--download_refs` now writes `reference_metadata.json` beside the reference
+  files, alongside the existing human-readable `download_log.txt`: source,
+  requested and resolved Ensembl release, assembly, annotation version, and each
+  file's URL, byte count and SHA-256. The checksums are accumulated from the
+  download stream, so they cost no extra pass over the data.
+
+  The download is the only moment some of this can be known. An Ensembl GTF's
+  header carries the assembly, the assembly accession and the genebuild date,
+  but not the release it was published in — and the trailing number in the
+  filename is an annotation version, not the release (release-116 ships
+  `Saccharomyces_cerevisiae.R64-1-1.63.gtf.gz`). Recorded at download time and
+  kept with the files, a later run can report exactly which reference set it
+  used instead of falling back to "user-supplied, release not recorded".
+
+  Groundwork for surfacing run provenance in the analysis report, where a reader
+  of the HTML alone currently cannot tell what was aligned or against what.
+
 ### Documentation
 
 - **Running without internet access.** `USAGE.md` gains a TRE / air-gapped

@@ -22,6 +22,11 @@ process DOWNLOAD_REFS {
     path "references/*.cdna.all.fa.gz" , emit: transcript_fasta
     path "references/*.gtf.gz"         , emit: gtf
     path "references/download_log.txt" , emit: log
+    // Machine-readable provenance for the set: source, resolved release,
+    // assembly, annotation version, and each file's URL, size and SHA-256.
+    // Written last by the script, so its presence means everything downloaded
+    // and verified.
+    path "references/reference_metadata.json", emit: metadata
     path "versions.yml"                , emit: versions
 
     script:
@@ -43,6 +48,7 @@ process DOWNLOAD_REFS {
     touch references/Homo_sapiens.GRCh38.115.gtf.gz
     touch references/Homo_sapiens.GRCh38.cdna.all.fa.gz
     touch references/download_log.txt
+    touch references/reference_metadata.json
     touch versions.yml
     """
 }
