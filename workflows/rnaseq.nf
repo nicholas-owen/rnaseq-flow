@@ -43,6 +43,234 @@ def resolveDesign(samplesheet) {
 }
 
 /*
+ * Resolve where the annotation came from, for the analysis report.
+ *
+ * `--download_refs` writes reference_metadata.json beside the files it fetches
+ * (assets/download_refs.py). An analysis run never downloads anything -- main.nf
+ * makes --download_refs, --build_indices and the analysis run mutually exclusive
+ * branches -- so that record has to be *found on disk* next to the GTF rather
+ * than handed over in a channel.
+ *
+ * Always returns a map with the same keys and an `origin` of:
+ *   'pipeline_download' - a sidecar was found and it describes this annotation
+ *   'user_supplied'     - no sidecar, or one that describes something else
+ *
+ * Fields that could not be established are null, and `note` says why. Callers
+ * should render those as "not recorded" rather than omitting them or guessing:
+ * an Ensembl GTF's header carries the assembly, the accession and the genebuild
+ * date but never the release, and the trailing number in the filename is an
+ * annotation version rather than the release (release-116 ships
+ * Saccharomyces_cerevisiae.R64-1-1.63.gtf.gz). A release inferred from a
+ * filename is a false record that outlives the run and cannot afterwards be
+ * told apart from a true one.
+ */
+def resolveReferenceProvenance(gtf) {
+    def base = [
+        origin            : 'user_supplied',
+        file              : null,
+        dir               : null,
+        bytes             : null,
+        species           : null,
+        source            : null,
+        release           : null,
+        release_requested : null,
+        assembly          : null,
+        annotation_version: null,
+        downloaded_at     : null,
+        url               : null,
+        sha256            : null,
+        note              : null,
+    ]
+
+    if (!gtf) {
+        return base + [note: 'no --gtf supplied']
+    }
+
+    // file() returns a *list* when the argument globs, and the documented usage
+    // does exactly that (--gtf refs/yeast/v116/*.gtf.gz). Anything other than a
+    // single match leaves us unable to say which file this is about.
+    def resolved = file(gtf)
+    if (resolved instanceof List) {
+        if (resolved.size() != 1) {
+            return base + [note: "--gtf matched ${resolved.size()} files; cannot identify one annotation"]
+        }
+        resolved = resolved[0]
+    }
+    if (!resolved.exists()) {
+        return base + [note: 'annotation not found on disk']
+    }
+
+    def found = base + [file : resolved.name,
+                        dir  : resolved.parent?.toString(),
+                        bytes: resolved.size()]
+
+    def sidecar = file("${resolved.parent}/reference_metadata.json")
+    if (!sidecar.exists()) {
+        return found + [note: 'no reference_metadata.json beside the annotation']
+    }
+
+    def meta = null
+    try {
+        meta = new groovy.json.JsonSlurper().parseText(sidecar.text)
+    } catch (Exception e) {
+        return found + [note: "reference_metadata.json could not be read: ${e.message}"]
+    }
+
+    // The sidecar must be shown to describe *this* file. A reference directory
+    // someone has added a hand-fetched GTF to would otherwise have confident,
+    // wrong provenance attached to it -- worse than reporting nothing.
+    def ann = meta instanceof Map ? meta.files?.annotation : null
+    if (!(ann instanceof Map) || !ann.file) {
+        return found + [note: 'reference_metadata.json has no annotation record']
+    }
+    if (ann.file != resolved.name) {
+        return found + [note: "reference_metadata.json describes '${ann.file}', not this annotation"]
+    }
+    // Size, not checksum: hashing a multi-gigabyte GTF on the head node would
+    // add real time to the launch of every run. The name-plus-size pair is a
+    // cheap discriminator, and the recorded sha256 is carried through for
+    // anyone who wants to verify deliberately.
+    if (ann.bytes != null && resolved.size() != ann.bytes) {
+        return found + [note: "annotation is ${resolved.size()} bytes but " +
+                              "reference_metadata.json records ${ann.bytes}; treating as user-supplied"]
+    }
+
+    return found + [
+        origin            : 'pipeline_download',
+        species           : meta.species,
+        source            : meta.source,
+        release           : meta.release,
+        release_requested : meta.release_requested,
+        assembly          : meta.assembly,
+        annotation_version: meta.annotation_version,
+        downloaded_at     : meta.downloaded_at,
+        url               : ann.url,
+        sha256            : ann.sha256,
+    ]
+}
+
+/*
+ * Describe a GMT gene-set file, as far as it can be described.
+ *
+ * GMT is a bare tab-separated format with no header, so a gene-set file carries
+ * no version, no build date and no provenance of any kind -- the first line is
+ * already a pathway. The collection name can only be taken from the filename,
+ * which is inference, and is flagged as such. `--download_gmt` does not yet
+ * record what it fetched (msigdbr knows its own version at download time but
+ * writes no metadata), so `version` is always null for now.
+ */
+def describeGeneSets(gmt) {
+    def base = [path: null, file: null, bytes: null, collection: null,
+                collection_inferred: false, version: null, note: null]
+
+    if (!gmt) {
+        return base + [note: 'no --gmt supplied; GSEA did not run']
+    }
+
+    def resolved = file(gmt)
+    if (resolved instanceof List) {
+        if (resolved.size() != 1) {
+            return base + [path: gmt.toString(),
+                           note: "--gmt matched ${resolved.size()} files"]
+        }
+        resolved = resolved[0]
+    }
+    if (!resolved.exists()) {
+        return base + [path: gmt.toString(), note: 'gene-set file not found on disk']
+    }
+
+    return base + [
+        path               : resolved.toString(),
+        file               : resolved.name,
+        bytes              : resolved.size(),
+        collection         : resolved.name.replaceFirst(/\.gmt$/, ''),
+        collection_inferred: true,
+        note               : 'GMT files carry no version metadata; the collection is read from the filename',
+    ]
+}
+
+/*
+ * Assemble the run manifest: the record of *how this run was configured*,
+ * for the analysis report.
+ *
+ * The report is the artefact that travels -- it gets emailed to people with no
+ * access to the run directory or the command line. Without this it cannot say
+ * what was aligned, against what, or with which gene sets, because none of that
+ * reaches the reporting step otherwise.
+ *
+ * This is deliberately a record of *configuration*, not of outcome: it is built
+ * before any process runs, so it describes what was asked for. What actually
+ * got produced is something the report already establishes for itself, from
+ * which result directories exist. Keeping the two apart avoids the manifest
+ * claiming a stage ran when it failed or was skipped.
+ */
+def buildRunManifest(design) {
+    def from_counts = params.counts != null
+
+    def quantification = null
+    if (from_counts) {
+        quantification = 'supplied count matrix'
+    } else if (params.aligner == 'star' || params.aligner == 'hisat2') {
+        quantification = 'featureCounts, gene level from BAM'
+    } else if (params.aligner == 'salmon' || params.aligner == 'kallisto') {
+        quantification = 'tximport, transcript quantification summarised to gene level'
+    }
+
+    def index = null
+    if (params.aligner == 'star')          index = params.star_index
+    else if (params.aligner == 'hisat2')   index = params.hisat2_index
+    else if (params.aligner == 'salmon')   index = params.salmon_index
+    else if (params.aligner == 'kallisto') index = params.kallisto_index
+
+    // Only the optional analyses actually switched on, so the report can list
+    // them without a row of "false" for everything nobody asked for.
+    def optional = []
+    if (params.isoform_switch) optional.add('isoform switching (IsoformSwitchAnalyzeR)')
+    if (params.dtu)            optional.add('differential transcript usage (DEXSeq)')
+    if (params.diffsplice)     optional.add('differential splicing (edgeR diffSplice)')
+    if (params.ctat_lib)       optional.add('fusion calling (STAR-Fusion)')
+
+    return [
+        schema_version: 1,
+        pipeline: [
+            name            : workflow.manifest.name,
+            version         : workflow.manifest.version,
+            home_page       : workflow.manifest.homePage,
+            // null for a local run; set when launched with `nextflow run <repo> -r <rev>`.
+            revision        : workflow.revision,
+            commit_id       : workflow.commitId,
+            run_name        : workflow.runName,
+            session_id      : workflow.sessionId?.toString(),
+            nextflow_version: nextflow.version?.toString(),
+            started_at      : workflow.start?.toString(),
+            profile         : workflow.profile,
+            container_engine: workflow.containerEngine,
+            // The verbatim invocation. Structured fields above are what the
+            // report renders; this is the fallback that answers questions the
+            // schema did not anticipate.
+            command_line    : workflow.commandLine,
+        ],
+        analysis: [
+            entry         : from_counts ? 'count matrix' : 'sequencing reads',
+            aligner       : from_counts ? null : params.aligner,
+            quantification: quantification,
+            strandedness  : from_counts ? null : params.strandedness,
+            design        : design,
+            organism      : params.organism,
+            stop_at       : params.stop_at,
+            optional      : optional,
+        ],
+        references: [
+            annotation      : resolveReferenceProvenance(params.gtf),
+            genome_fasta    : params.genome_fasta?.toString(),
+            transcript_fasta: params.transcript_fasta?.toString(),
+            index           : index?.toString(),
+        ],
+        gene_sets: describeGeneSets(params.gmt),
+    ]
+}
+
+/*
  * Main workflow
  */
 workflow RNASEQ {
@@ -403,6 +631,26 @@ workflow RNASEQ {
     }
 
     //
+    // Run manifest: how this run was configured, for the report.
+    //
+    // The design is resolved here only when the input is a samplesheet -- a
+    // glob input has no condition column to read one from.
+    //
+    // collectFile writes the JSON and hands back its path, so the record stays
+    // inside Nextflow's staging rather than being written to disk on the side;
+    // storeDir also publishes it to pipeline_info/, where it is independently
+    // useful to anything scripting across runs. .first() makes it a value
+    // channel, matching the other inputs to QUARTO_REPORT.
+    def manifest_design = params.input && params.input.toString().endsWith('.csv')
+        ? resolveDesign(params.input)
+        : null
+    ch_run_manifest = channel
+        .of(groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson(buildRunManifest(manifest_design))))
+        .collectFile(name: 'run_manifest.json', storeDir: "${params.tracedir}")
+        .first()
+
+    //
     // MODULE: Quarto analysis report
     //
     // Always runs; the DE/enrichment result directories are passed when those
@@ -411,6 +659,8 @@ workflow RNASEQ {
     QUARTO_REPORT (
         ch_multiqc_data,
         file("${projectDir}/assets/analysis_report.qmd"),
+        ch_run_manifest,
+        file("${projectDir}/assets/rnaseq-flow_logo.svg"),
         ch_quarto_deseq2,
         ch_quarto_edger,
         ch_quarto_gsea,
