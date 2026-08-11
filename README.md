@@ -24,6 +24,7 @@ that download and index them for you.
   - [Contents](#contents)
   - [Features](#features)
   - [Requirements](#requirements)
+  - [Profiles](#profiles)
   - [Quick start](#quick-start)
   - [The three run modes](#the-three-run-modes)
   - [Pipeline stages](#pipeline-stages)
@@ -79,8 +80,31 @@ aligner indices, so you can go from nothing to results with three commands.
 - A **container engine** — Docker *or* Singularity/Apptainer — or **Conda**.
   Every process declares its own container, so nothing else needs installing.
 
-Run with one of the bundled profiles: `-profile docker`, `-profile singularity`
-or `-profile conda`.
+---
+
+## Profiles
+
+**Every command needs a `-profile`.** It tells Nextflow how to obtain and run
+the software for each process — without one, the pipeline expects the tools to
+already be on your `PATH`, and they will not be.
+
+| Profile | Use it when |
+|---|---|
+| `docker` | Running locally and you have Docker. The usual choice on a laptop or workstation. |
+| `singularity` | Running on shared or HPC infrastructure, where Docker is normally unavailable. |
+| `conda` | No container engine at all. Slower, and environments are solved at run time — needs network access. |
+| `sge` | Submitting to an SGE cluster (UCL Myriad / Kathleen / Young). Enables Singularity itself, so use it **alone**. |
+| `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. |
+| `tre` | No internet access — a Trusted Research Environment or air-gapped HPC. Ships with the offline container bundle, not the repository (see below). |
+
+Combine them with a comma. The engine and the environment are separate choices:
+
+```bash
+-profile docker                 # local run
+-profile test_yeast,docker      # the test dataset, locally
+-profile sge                    # UCL cluster (Singularity already enabled)
+-profile tre,sge                # air-gapped cluster
+```
 
 > **No internet access?** Several containers are provisioned at run time by
 > Nextflow Wave, which contacts an external service, so the pipeline does not run
@@ -89,6 +113,9 @@ or `-profile conda`.
 > [doi.org/10.5281/zenodo.21880329](https://doi.org/10.5281/zenodo.21880329) —
 > and used with `-profile tre`. See
 > [USAGE.md](USAGE.md#running-without-internet-access-tre--air-gapped).
+
+Full details, including resource tuning and adapting `conf/sge.config` for
+another scheduler, are in [USAGE.md](USAGE.md#5-profiles--execution).
 
 ---
 
