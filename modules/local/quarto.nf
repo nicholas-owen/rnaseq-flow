@@ -58,6 +58,8 @@ process QUARTO_REPORT {
     # runs as the invoking user, whose home is not writable in the image.
     export HOME="\$PWD"
     export XDG_CACHE_HOME="\$PWD/.cache"
+    export TMPDIR="\$PWD/.tmp"
+    mkdir -p "\$TMPDIR"
 
     # Render the analysis report. The .qmd discovers multiqc_data.json and the
     # deseq2/edger/gsea/gprofiler result directories staged alongside it, and
