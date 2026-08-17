@@ -2,7 +2,7 @@
 #$ -cwd
 #$ -V
 #$ -pe smp 2
-#$ -l mem=24G
+#$ -l mem=12G
 #$ -l h_rt=24:00:00
 #$ -l tmpfs=10G
 #$ -j y
@@ -14,9 +14,9 @@ run_download=F
 
 # aligners
 run_star=F
-run_hisat2=T
-run_salmon=F
-run_kallisto=F
+run_hisat2=F
+run_salmon=T
+run_kallisto=T
 
 PRJ_DIR=/home/ucsagil/Scratch/projects/rnaseq-flow
 
@@ -88,6 +88,66 @@ if [[ "$run_hisat2" == "T" ]]; then
         --strandedness unstranded \
         --gtf        ${PRJ_DIR}/references/yeast/v116/*.gtf.gz \
         --outdir     ${PRJ_DIR}/results/test/hisat2 \
+        -profile test_yeast,singularity \
+        --max_cpus 2 \
+        --max_memory 24GB \
+        -resume
+        # --gmt        ${PRJ_DIR}/references/yeast/gmt/c5_go_bp.gmt \
+
+fi
+
+
+if [[ "$run_salmon" == "T" ]]; then
+
+    if [[ ! -d ${PRJ_DIR}/references/idx/yeast_salmon/salmon_index ]]; then
+        nextflow run ${PRJ_DIR}/rnaseq-flow/main.nf --build_indices --aligner salmon \
+            --genome_fasta ${PRJ_DIR}/references/yeast/v116/*.dna.toplevel.fa.gz \
+            --transcript_fasta ${PRJ_DIR}/references/yeast/v116/*.cdna.all.fa.gz \
+            --outdir ${PRJ_DIR}/references/idx/yeast_salmon \
+            -profile test_yeast,singularity \
+            --max_cpus 2 \
+            --max_memory 24GB  \
+        || { echo "salmon index build failed (exit $?) - skipping alignment"; exit 1; }
+                else
+            echo "salmon index present - skipping build"
+        fi
+
+    nextflow run ${PRJ_DIR}/rnaseq-flow/main.nf \
+        --input      ${PRJ_DIR}/test_data/samplesheet_yeast.csv \
+        --aligner    salmon \
+        --salmon_index ${PRJ_DIR}/references/idx/yeast_salmon/salmon_index \
+        --strandedness unstranded \
+        --gtf        ${PRJ_DIR}/references/yeast/v116/*.gtf.gz \
+        --outdir     ${PRJ_DIR}/results/test/salmon \
+        -profile test_yeast,singularity \
+        --max_cpus 2 \
+        --max_memory 24GB \
+        -resume
+        # --gmt        ${PRJ_DIR}/references/yeast/gmt/c5_go_bp.gmt \
+
+fi
+
+if [[ "$run_kallisto" == "T" ]]; then
+
+    if [[ ! -d ${PRJ_DIR}/references/idx/yeast_kallisto/kallisto_index ]]; then
+        nextflow run ${PRJ_DIR}/rnaseq-flow/main.nf --build_indices --aligner kallisto \
+            --transcript_fasta ${PRJ_DIR}/references/yeast/v116/*.cdna.all.fa.gz \
+            --outdir ${PRJ_DIR}/references/idx/yeast_kallisto \
+            -profile test_yeast,singularity \
+            --max_cpus 2 \
+            --max_memory 24GB  \
+        || { echo "kallisto index build failed (exit $?) - skipping alignment"; exit 1; }
+                else
+            echo "kallisto index present - skipping build"
+        fi
+
+    nextflow run ${PRJ_DIR}/rnaseq-flow/main.nf \
+        --input      ${PRJ_DIR}/test_data/samplesheet_yeast.csv \
+        --aligner    kallisto \
+        --kallisto_index ${PRJ_DIR}/references/idx/yeast_kallisto/kallisto_index \
+        --strandedness unstranded \
+        --gtf        ${PRJ_DIR}/references/yeast/v116/*.gtf.gz \
+        --outdir     ${PRJ_DIR}/results/test/kallisto \
         -profile test_yeast,singularity \
         --max_cpus 2 \
         --max_memory 24GB \
