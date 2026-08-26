@@ -79,6 +79,24 @@ mqc_gs  <- if (length(gs_hits)) gs_hits[1] else NA_character_
 
 have_mqc <- !is.na(mqc_json) || !is.na(mqc_gs)
 
+# The published MultiQC report is not called multiqc_report.html: MultiQC
+# prefixes the filename with the `title:` from assets/multiqc_config.yml, giving
+# "rnaseq-flow_multiqc_report.html". Hardcoding either name is wrong -- one is
+# wrong today, the other breaks the moment the title changes.
+#
+# The data directory staged into this task carries the same prefix
+# ("rnaseq-flow_multiqc_report_data"), so the report's name is derived from it
+# and the link follows the config automatically. MultiQC's own default, with no
+# title set, is the unprefixed pair multiqc_data/ and multiqc_report.html, which
+# does not follow the rule and is handled separately.
+mqc_marker <- if (!is.na(mqc_json)) mqc_json else mqc_gs
+mqc_data_dir <- if (!is.na(mqc_marker)) basename(dirname(mqc_marker)) else NA_character_
+mqc_report_name <- if (is.na(mqc_data_dir) || identical(mqc_data_dir, "multiqc_data")) {
+  "multiqc_report.html"
+} else {
+  paste0(sub("_data$", "", mqc_data_dir), ".html")
+}
+
 # ---- Run manifest ----------------------------------------------------------
 # Written by the workflow before this report renders (buildRunManifest() in
 # workflows/rnaseq.nf) and staged beside this .qmd. It is the only route by
@@ -99,6 +117,16 @@ manifest <- if (file.exists("run_manifest.json")) {
   NULL
 }
 have_manifest <- !is.null(manifest)
+
+# The design is only summarised when the run began from a samplesheet; a glob
+# input has no condition column to read one from.
+have_samples <- have_manifest &&
+  !is.null(manifest$samples) &&
+  length(manifest$samples$conditions) > 0
+
+# Requested-but-skipped analyses. Absent on a clean run, and on a results
+# directory produced before the manifest recorded them.
+have_notices <- have_manifest && length(unlist(manifest$notices)) > 0
 
 # Nested lookup that yields NA when any level is missing. Every field is
 # optional by design: the manifest stores null where provenance could not be
@@ -241,6 +269,198 @@ if (have_manifest) {
 
 ```{=html}
 <style>
+  /* ---- palette ---------------------------------------------------------
+     Namespaced with rf- so nothing here can collide with the Bootstrap
+     variables the cosmo theme defines. */
+  :root {
+    --rf-bg:     #f7f8fa;
+    --rf-card:   #ffffff;
+    --rf-border: #e5e7eb;
+    --rf-text:   #1f2937;
+    --rf-muted:  #6b7280;
+  }
+
+  body {
+    background-color: var(--rf-bg);
+    color: var(--rf-text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  /* ---- section cards ---------------------------------------------------
+     Each top-level section sits on the grey page as its own white panel, so
+     the boundary between one analysis and the next is visible rather than
+     implied by a heading.
+
+     Only .level1 gets a card. Quarto nests <section class="level2/3"> inside
+     it, and styling those too would draw boxes within boxes. */
+  main > section.level1,
+  #quarto-document-content > section.level1,
+  #title-block-header {
+    background-color: var(--rf-card);
+    border: 1px solid var(--rf-border);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1.15rem;
+  }
+
+  /* Nested sections inherit the card they sit in, never their own. */
+  main section.level1 section {
+    background-color: transparent;
+    border: 0;
+    padding: 0;
+  }
+
+  /* The heading already opens a card, so its default top margin would push it
+     away from the card edge it is meant to sit against. */
+  main > section.level1 > h1:first-child,
+  #quarto-document-content > section.level1 > h1:first-child {
+    margin-top: 0;
+  }
+
+  /* The TOC stays on the grey ground -- it is navigation, not content, and a
+     card around it would compete with the panels it points at. */
+  #quarto-margin-sidebar,
+  .sidebar.margin-sidebar {
+    background-color: transparent;
+  }
+
+  /* ---- run overview ----------------------------------------------------
+     The four headline facts sit in a row that reflows to whatever fits, so
+     the panel works from a phone up to a wide monitor without breakpoints. */
+  .rf-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: .75rem;
+    margin: .2rem 0 1.2rem;
+  }
+  .rf-fact {
+    border: 1px solid var(--rf-border);
+    border-radius: 8px;
+    padding: .6rem .8rem;
+    background-color: #fcfcfd;
+  }
+  .rf-fact-k {
+    display: block;
+    font-size: .78em;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--rf-muted);
+    margin-bottom: .15rem;
+  }
+  .rf-fact-v { display: block; font-weight: 600; }
+
+  /* The detail table is a definition list in table clothing: labels are a
+     fixed narrow column so values line up down the page. */
+  table.rf-runtable {
+    border-collapse: collapse;
+    font-size: .93em;
+    width: 100%;
+  }
+  table.rf-runtable th,
+  table.rf-runtable td {
+    padding: .3em .9em .3em 0;
+    vertical-align: top;
+    border: 0;
+  }
+  table.rf-runtable th {
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    width: 1%;
+  }
+  /* Group headers break the table into Execution / Analysis / Reference so a
+     20-row list scans as three short ones. */
+  table.rf-runtable tr.rf-group th {
+    padding-top: 1em;
+    font-size: .8em;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--rf-muted);
+    font-weight: 700;
+  }
+  table.rf-runtable tr.rf-group:first-child th { padding-top: 0; }
+  /* A full nextflow invocation is long and has no spaces to break on. */
+  code.rf-cmd { word-break: break-all; font-size: .85em; }
+
+  /* ---- sample design, and the file index ------------------------------- */
+  table.rf-designtable,
+  table.rf-filetable {
+    border-collapse: collapse;
+    font-size: .93em;
+    width: auto;
+    min-width: min(100%, 32rem);
+  }
+  table.rf-designtable th,
+  table.rf-designtable td,
+  table.rf-filetable th,
+  table.rf-filetable td {
+    padding: .35em 1.1em .35em 0;
+    vertical-align: top;
+    border: 0;
+    border-bottom: 1px solid var(--rf-border);
+  }
+  table.rf-designtable thead th,
+  table.rf-filetable thead th {
+    text-align: left;
+    font-size: .8em;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--rf-muted);
+  }
+  table.rf-designtable tbody tr:last-child td,
+  table.rf-filetable tbody tr:last-child td { border-bottom: 0; }
+  table.rf-designtable code,
+  table.rf-filetable code {
+    font-size: .92em;
+    white-space: nowrap;
+  }
+  table.rf-filetable { width: 100%; }
+  /* Group rows separate the index into Differential expression, QC and so on.
+     They repeat the run table's treatment so the two read as one system. */
+  table.rf-filetable tr.rf-group th {
+    padding-top: 1.1em;
+    font-size: .8em;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--rf-muted);
+    font-weight: 700;
+    border-bottom: 0;
+  }
+  table.rf-filetable tr.rf-group:first-child th { padding-top: 0; }
+  p.rf-note {
+    font-size: .9em;
+    color: var(--rf-muted);
+    margin-top: .8rem;
+  }
+
+  /* ---- requested-but-skipped notices ------------------------------------
+     Amber rather than red: nothing failed, and colouring it as an error would
+     misrepresent a run that completed. It has to be noticeable, because the
+     rest of the document gives no other sign that something is missing. */
+  .rf-notices {
+    border: 1px solid #fcd9a4;
+    border-left: 4px solid #d97706;
+    background-color: #fffbeb;
+    border-radius: 8px;
+    padding: .9rem 1.1rem;
+    margin: 1.2rem 0;
+  }
+  .rf-notices-head {
+    font-weight: 700;
+    color: #92400e;
+    margin-bottom: .4rem;
+  }
+  .rf-notices ul { margin: 0 0 .5rem; padding-left: 1.2rem; }
+  .rf-notices li { margin-bottom: .25rem; }
+  .rf-notices p {
+    margin: 0;
+    font-size: .9em;
+    color: #92400e;
+  }
+
+  /* ---- title block ----------------------------------------------------- */
   /* The logo leads the title block, left-aligned above the heading, rather than
      sitting in the TOC sidebar: Quarto hides .margin-sidebar below its large
      breakpoint, so a sidebar mark would vanish on the phones and tablets an
@@ -250,6 +470,21 @@ if (have_manifest) {
   .rf-source { font-size: .85em; opacity: .75; margin-top: -.4rem; }
   @media (max-width: 620px) {
     .rf-logo { width: 180px; }
+  }
+
+  /* ---- printing --------------------------------------------------------
+     Cards are a screen device. On paper the grey ground wastes toner and the
+     borders fragment across page breaks, so the document reverts to plain
+     flowed text. */
+  @media print {
+    body { background-color: #fff; }
+    main > section.level1,
+    #quarto-document-content > section.level1,
+    #title-block-header {
+      border: 0;
+      padding: 0;
+      margin-bottom: 1rem;
+    }
   }
 </style>
 <script>
@@ -290,135 +525,231 @@ if (length(present)) {
 }
 ```
 
-```{r overview-provenance, eval=have_manifest, results="asis"}
-# How this run was configured. A one-line summary stays visible, and the full
-# record folds away so it does not push the science down the page.
+# Run overview
+
+```{r run-overview-none, eval=!have_manifest, results="asis"}
+cat("\n*This results directory carries no run manifest, so the aligner,",
+    "references and gene sets used are not recorded. Results produced by",
+    "rnaseq-flow 1.5.1 or earlier predate it.*\n")
+```
+
+```{r run-overview-facts, eval=have_manifest, results="asis"}
+# The four questions a reader of this HTML alone cannot otherwise answer: what
+# ran it, what went in, what kind of library, and what was actually done.
 #
-# The annotation is described differently depending on where it came from. When
-# the pipeline downloaded it, reference_metadata.json beside the files records
-# the source, release and assembly authoritatively. When the user supplied it,
-# the release is genuinely unknowable — an Ensembl GTF's header carries the
-# assembly and genebuild date but never the release, and the trailing number in
-# the filename is an annotation version, not the release. So it is reported as
-# not recorded rather than inferred.
-ann_origin <- mf("references", "annotation", "origin")
-downloaded <- identical(ann_origin, "pipeline_download")
+# The first three come from the manifest, which records *configuration*. The
+# analysis level is built from have_* instead — those reflect which result
+# directories exist, so it describes what the run produced rather than what it
+# was asked to produce. A stage that was requested and then failed would
+# otherwise be reported here as though it had worked.
+level <- character(0)
+if (have_deseq2 || have_edger) {
+  callers <- c(if (have_deseq2) "DESeq2", if (have_edger) "edgeR")
+  level <- c(level, paste0("Differential expression (", paste(callers, collapse = ", "), ")"))
+}
+if (have_gsea)      level <- c(level, "GSEA")
+if (have_gprofiler) level <- c(level, "gProfiler")
+opt <- unlist(manifest$analysis$optional)
+if (length(opt)) level <- c(level, opt)
+if (!length(level)) level <- "Quality control only"
 
-ref_summary <- if (downloaded) {
-  paste0(esc(mf("references", "annotation", "source")), " release ",
-         esc(mf("references", "annotation", "release")),
-         " (assembly ", esc(mf("references", "annotation", "assembly")), ")")
-} else if (!is.na(mf("references", "annotation", "file"))) {
-  paste0(esc(mf("references", "annotation", "file")), " <em>(user-supplied)</em>")
+fact <- function(label, value) {
+  paste0("<div class='rf-fact'><span class='rf-fact-k'>", label,
+         "</span><span class='rf-fact-v'>", value, "</span></div>")
+}
+
+# &mdash; as an entity, never the literal character: the rendering container runs
+# in the C locale, where R escapes a non-ASCII byte to <U+2014> on output. That
+# applies to anything R emits — cat(), a DT caption, a plotly label — not just
+# to raw HTML, so every string leaving R has to stay ASCII.
+input_desc <- if (!is.na(mf("analysis", "counts"))) {
+  paste0("Count matrix &mdash; <code>", esc(basename(mf("analysis", "counts"))), "</code>")
+} else if (!is.na(mf("analysis", "input"))) {
+  paste0("Samplesheet &mdash; <code>", esc(basename(mf("analysis", "input"))), "</code>")
 } else {
-  "<em style='opacity:.6'>no annotation</em>"
+  or_unrecorded(NA_character_)
 }
 
-summary_bits <- character(0)
-if (!is.na(mf("analysis", "aligner"))) {
-  summary_bits <- c(summary_bits,
-                    paste0("aligned with <strong>", esc(toupper(mf("analysis", "aligner"))),
-                           "</strong>"))
+lib_desc <- if (!is.na(mf("analysis", "library_layout"))) {
+  s <- mf("analysis", "strandedness")
+  paste0(esc(mf("analysis", "library_layout")),
+         if (!is.na(s)) paste0(", ", esc(s)) else "")
 } else {
-  summary_bits <- c(summary_bits, "entered from a supplied count matrix")
+  or_unrecorded(NA_character_)
 }
-summary_bits <- c(summary_bits, paste0("against ", ref_summary))
-if (!is.na(mf("gene_sets", "collection"))) {
-  summary_bits <- c(summary_bits,
-                    paste0("gene sets <code>", esc(mf("gene_sets", "collection")), "</code>"))
-}
-cat("\n<p style='margin-top:.9em'><strong>This run:</strong> ",
-    paste(summary_bits, collapse = ", "), ".</p>\n", sep = "")
 
-# ---- the full record -------------------------------------------------------
+cat("<div class='rf-facts'>",
+    fact("Pipeline", paste0(or_unrecorded(mf("pipeline", "name")), " ",
+                            or_unrecorded(mf("pipeline", "version")))),
+    fact("Input", input_desc),
+    fact("Library", lib_desc),
+    fact("Analysis", esc(paste(level, collapse = " + "))),
+    "</div>\n", sep = "")
+```
+
+```{r run-overview-table, eval=have_manifest, results="asis"}
+# The full record. The annotation is described differently depending on where it
+# came from: when the pipeline downloaded it, reference_metadata.json beside the
+# files records source, release and assembly authoritatively. When the user
+# supplied it the release is genuinely unknowable — an Ensembl GTF's header
+# carries the assembly and genebuild date but never the release, and the
+# trailing number in the filename is an annotation version, not the release. So
+# it is reported as not recorded rather than inferred.
+downloaded <- identical(mf("references", "annotation", "origin"), "pipeline_download")
+
 row <- function(label, value) {
-  paste0("<tr><th style='text-align:left;padding:.25em .9em .25em 0;",
-         "font-weight:600;white-space:nowrap;vertical-align:top'>", label,
-         "</th><td style='padding:.25em 0;vertical-align:top'>", value, "</td></tr>")
+  paste0("<tr><th>", label, "</th><td>", value, "</td></tr>")
+}
+group <- function(label) {
+  paste0("<tr class='rf-group'><th colspan='2'>", label, "</th></tr>")
 }
 
 rows <- c(
-  row("Pipeline",      paste0(or_unrecorded(mf("pipeline", "name")), " ",
-                              or_unrecorded(mf("pipeline", "version")))),
-  row("Run name",      or_unrecorded(mf("pipeline", "run_name"))),
-  row("Started",       or_unrecorded(mf("pipeline", "started_at"))),
-  row("Nextflow",      or_unrecorded(mf("pipeline", "nextflow_version"))),
-  row("Profile",       or_unrecorded(mf("pipeline", "profile"))),
-  row("Entry point",   or_unrecorded(mf("analysis", "entry"))),
-  row("Aligner",       or_unrecorded(mf("analysis", "aligner"))),
-  row("Quantification", or_unrecorded(mf("analysis", "quantification"))),
-  row("Strandedness",  or_unrecorded(mf("analysis", "strandedness"))),
-  row("Design",        paste0("<code>", or_unrecorded(mf("analysis", "design")), "</code>")),
-  row("Organism",      or_unrecorded(mf("analysis", "organism")))
-)
+  group("Execution"),
+  row("Run name",  or_unrecorded(mf("pipeline", "run_name"))),
+  row("Started",   or_unrecorded(mf("pipeline", "started_at"))),
+  row("Nextflow",  or_unrecorded(mf("pipeline", "nextflow_version"))),
+  row("Profile",   or_unrecorded(mf("pipeline", "profile"))),
+  row("Output directory", paste0("<code>", or_unrecorded(mf("analysis", "outdir")), "</code>")),
 
-# Reference rows: the downloaded case can state release and provenance; the
-# user-supplied case states what is verifiable and says so.
-rows <- c(rows,
-  row("Annotation",    or_unrecorded(mf("references", "annotation", "file"))),
-  row("Reference source",
+  group("Analysis"),
+  row("Entry point",    or_unrecorded(mf("analysis", "entry"))),
+  row("Aligner",        or_unrecorded(mf("analysis", "aligner"))),
+  row("Quantification", or_unrecorded(mf("analysis", "quantification"))),
+  row("Strandedness",   or_unrecorded(mf("analysis", "strandedness"))),
+  row("Design",         paste0("<code>", or_unrecorded(mf("analysis", "design")), "</code>")),
+  row("Organism",       or_unrecorded(mf("analysis", "organism"))),
+
+  group("Reference"),
+  row("Annotation", or_unrecorded(mf("references", "annotation", "file"))),
+  row("Source",
       if (downloaded) {
         paste0(or_unrecorded(mf("references", "annotation", "source")),
                " <em>(downloaded by this pipeline)</em>")
       } else {
         "<em>user-supplied</em>"
       }),
-  row("Assembly",      or_unrecorded(mf("references", "annotation", "assembly"))),
-  row("Release",       or_unrecorded(mf("references", "annotation", "release"))),
+  row("Assembly",           or_unrecorded(mf("references", "annotation", "assembly"))),
+  row("Release",            or_unrecorded(mf("references", "annotation", "release"))),
   row("Annotation version", or_unrecorded(mf("references", "annotation", "annotation_version"))),
-  row("Reference obtained", or_unrecorded(mf("references", "annotation", "downloaded_at")))
-)
-
-if (!downloaded && !is.na(mf("references", "annotation", "note"))) {
-  rows <- c(rows, row("Reference note",
-                      paste0("<em style='opacity:.75'>",
-                             esc(mf("references", "annotation", "note")), "</em>")))
-}
-
-rows <- c(rows,
-  row("Index",         or_unrecorded(mf("references", "index"))),
+  row("Obtained",           or_unrecorded(mf("references", "annotation", "downloaded_at"))),
+  row("Index",              paste0("<code>", or_unrecorded(mf("references", "index")), "</code>")),
   row("Gene sets",
       if (!is.na(mf("gene_sets", "collection"))) {
         paste0(esc(mf("gene_sets", "collection")),
-               " <em style='opacity:.75'>(collection read from the filename; GMT",
-               " files carry no version)</em>")
+               " <em style='opacity:.75'>(collection read from the filename;",
+               " GMT files carry no version)</em>")
       } else {
         or_unrecorded(NA_character_)
       })
 )
 
-optional <- manifest$analysis$optional
-if (length(optional)) {
-  rows <- c(rows, row("Optional analyses",
-                      esc(paste(unlist(optional), collapse = ", "))))
+if (!downloaded && !is.na(mf("references", "annotation", "note"))) {
+  rows <- c(rows, row("Note", paste0("<em style='opacity:.75'>",
+                                     esc(mf("references", "annotation", "note")), "</em>")))
 }
 
 if (!is.na(mf("pipeline", "command_line"))) {
-  rows <- c(rows, row("Command",
-                      paste0("<code style='word-break:break-all;font-size:.85em'>",
-                             esc(mf("pipeline", "command_line")), "</code>")))
+  rows <- c(rows, group("Invocation"),
+            row("Command", paste0("<code class='rf-cmd'>",
+                                  esc(mf("pipeline", "command_line")), "</code>")))
 }
 
-cat("<details style='margin:.4em 0 1.2em'>",
-    "<summary style='cursor:pointer'>Full run details</summary>",
-    "<table style='margin-top:.6em;border-collapse:collapse;font-size:.92em'>",
-    paste(rows, collapse = ""),
-    "</table></details>\n", sep = "")
+cat("<table class='rf-runtable'>", paste(rows, collapse = ""), "</table>\n", sep = "")
 ```
 
-```{r overview-no-manifest, eval=!have_manifest, results="asis"}
-cat("\n*This results directory carries no run manifest, so the aligner,",
-    "references and gene sets used are not recorded. Results produced by",
-    "rnaseq-flow 1.5.1 or earlier predate it.*\n")
+```{r notices, eval=have_notices, results="asis"}
+# Analyses that were requested and did not run.
+#
+# This section exists only when there is something to say -- a clean run renders
+# nothing at all, not an empty box. It sits here, before the results, because it
+# changes how everything below should be read: the run succeeded, so nothing
+# else in this document indicates that part of what was asked for is missing.
+cat("<div class='rf-notices'>",
+    "<div class='rf-notices-head'>Requested but not performed</div>",
+    "<ul>",
+    paste(vapply(unlist(manifest$notices),
+                 function(n) paste0("<li>", esc(n), "</li>"), character(1)),
+          collapse = ""),
+    "</ul>",
+    "<p>The run completed; these steps were skipped for the reasons given, so the",
+    " corresponding outputs are absent.</p>",
+    "</div>\n", sep = "")
+```
+
+# Sample design
+
+```{r sample-design-none, eval=!have_samples, results="asis"}
+cat("\n*The experimental design is not recorded for this run. It is read from a",
+    "samplesheet, so a run started from a file glob has none to describe.*\n")
+```
+
+```{r sample-design, eval=have_samples, results="asis"}
+# Who was compared with whom. The condition order is the samplesheet's own, not
+# alphabetical: the REF baseline is written first by convention and every fold
+# change in this report is oriented against it, so re-sorting here would show
+# the design in an order that contradicts the results.
+conds <- manifest$samples$conditions
+n_tot <- as.integer(mf("samples", "total"))
+reps  <- vapply(conds, function(x) as.integer(x$n), integer(1))
+
+cat("<p><strong>", n_tot, " samples</strong> across <strong>", length(conds),
+    " conditions</strong>", if (mf("samples", "has_batch") == "TRUE") {
+      " &mdash; a <code>batch</code> column is present"
+    } else { "" }, ".</p>\n", sep = "")
+
+design_rows <- vapply(conds, function(x) {
+  paste0("<tr><td><strong>", esc(x$name), "</strong></td>",
+         "<td style='text-align:right'>", x$n, "</td>",
+         "<td>", paste(vapply(x$samples, function(s)
+                                paste0("<code>", esc(s), "</code>"), character(1)),
+                       collapse = " "), "</td></tr>")
+}, character(1))
+
+cat("<table class='rf-designtable'>",
+    "<thead><tr><th>Condition</th><th style='text-align:right'>Replicates</th>",
+    "<th>Samples</th></tr></thead><tbody>",
+    paste(design_rows, collapse = ""),
+    "</tbody></table>\n", sep = "")
+
+# An unbalanced design is not an error -- DESeq2 and edgeR both handle it -- but
+# it changes how much power each contrast has, and it is the kind of thing that
+# is easy to miss when the samplesheet was assembled by hand.
+notes <- character(0)
+if (length(unique(reps)) > 1) {
+  notes <- c(notes, paste0("The design is <strong>unbalanced</strong>: ",
+                           paste(vapply(conds, function(x)
+                                   paste0(esc(x$name), " n=", x$n), character(1)),
+                                 collapse = ", "),
+                           ". Both DESeq2 and edgeR handle this, but contrasts",
+                           " involving the smaller groups carry less power."))
+}
+if (!is.na(mf("analysis", "design"))) {
+  notes <- c(notes, paste0("Model: <code>", esc(mf("analysis", "design")), "</code>",
+                           if (identical(mf("samples", "has_batch"), "TRUE") &&
+                               !grepl("batch", mf("analysis", "design"))) {
+                             paste0(" &mdash; note the samplesheet has a <code>batch</code>",
+                                    " column that this model does not use.")
+                           } else { "." }))
+}
+if (length(notes)) {
+  cat("<p class='rf-note'>", paste(notes, collapse = "<br>"), "</p>\n", sep = "")
+}
 ```
 
 # Quality control
 
 ```{r qc-intro, results="asis"}
 if (have_mqc) {
-  cat("The [MultiQC report](../multiqc/multiqc_report.html) is the authoritative,",
-      "per-sample QC document; the table below is a compact summary of its general",
-      "statistics for a quick scan.\n")
+  # The link is relative to this report's own directory, so it resolves while
+  # the results tree is intact and breaks if the HTML is sent on by itself. The
+  # path is stated in the text as well, so a detached copy still says where to
+  # look.
+  cat("The [MultiQC report](../multiqc/", mqc_report_name, ") is the authoritative,",
+      " per-sample QC document; the table below is a compact summary of its general",
+      " statistics for a quick scan. If this document has been moved out of its",
+      " results directory the link will not resolve; the file is",
+      " `multiqc/", mqc_report_name, "`.\n", sep = "")
 } else {
   cat("\n*No MultiQC report was produced for this run. A `--counts` run enters at",
       "differential expression from a pre-computed count matrix, so it has no read",
@@ -461,7 +792,9 @@ if (!qc_ok && have_mqc) {
 ```
 
 ```{r qc-table, eval=qc_ok}
-nice_table(stats_df, "MultiQC general statistics — one row per sample.")
+# The caption is rendered as HTML, so the entity resolves; a literal em-dash
+# would come through as <U+2014> (see the note in run-overview-facts).
+nice_table(stats_df, "MultiQC general statistics &mdash; one row per sample.")
 ```
 
 # Differential expression
@@ -1096,7 +1429,9 @@ gp <- gpr %>%
   ungroup() %>%
   mutate(
     neglog10p = -log10(pmax(p_value, 1e-300)),
-    panel     = paste0(contrast, " — ", direction),
+    # A plain hyphen, not an entity: this is a facet label drawn inside the
+    # plot as text, so "&mdash;" would appear literally rather than resolving.
+    panel     = paste0(contrast, " - ", direction),
     text      = paste0(term_name, " (", term_id, ")",
                        "<br>source: ", source,
                        "<br>p: ", signif(p_value, 3),
@@ -1126,6 +1461,131 @@ dt <- DT::datatable(gpr_tbl, rownames = FALSE, filter = "top",
         options = list(pageLength = 10, scrollX = TRUE))
 if ("p_value" %in% names(gpr_tbl)) dt <- DT::formatSignif(dt, "p_value", digits = 3)
 dt
+```
+
+# Files and locations
+
+```{r files-intro, results="asis"}
+cat("Where this run wrote everything, relative to its results directory.",
+    "The links resolve while this document sits in `quarto_report/` alongside",
+    "the other output folders; if it has been sent on by itself they will not,",
+    "so every location is given as text as well.\n")
+```
+
+```{r files-table, results="asis"}
+# An index of where this run wrote its outputs, built from the route the run
+# actually took: a pseudo-aligner has no BAMs to index or coverage to plot, a
+# --counts run has no reads to QC, and optional analyses appear only when they
+# were requested.
+#
+# These are locations, not a presence check. The report is given only its own
+# inputs, so it cannot see most of these directories -- listing a path is
+# useful regardless, and a directory that is missing is informative in itself.
+aligner   <- mf("analysis", "aligner")
+bam_route <- !is.na(aligner) && aligner %in% c("star", "hisat2")
+tx_route  <- !is.na(aligner) && aligner %in% c("salmon", "kallisto")
+optional  <- unlist(manifest$analysis$optional)
+
+frow <- function(group, name, desc, path) {
+  data.frame(group = group, name = name, desc = desc, path = path,
+             stringsAsFactors = FALSE)
+}
+
+items <- list()
+add <- function(...) items[[length(items) + 1]] <<- frow(...)
+
+if (have_deseq2) {
+  add("Differential expression", "DESeq2",
+      "Result tables per contrast, figures, and a reproduce/ folder that redraws them",
+      "deseq2_output/")
+}
+if (have_edger) {
+  add("Differential expression", "edgeR",
+      "Result tables per contrast, figures, and a reproduce/ folder", "edger_output/")
+}
+if (have_gsea) {
+  add("Functional enrichment", "GSEA",
+      "Enrichment statistics, ranks, and the gene-set plots", "gsea_output/")
+}
+if (have_gprofiler) {
+  add("Functional enrichment", "gProfiler",
+      "Over-representation of the up and down gene lists", "gprofiler_output/")
+}
+
+if (bam_route) {
+  add("Quantification", "featureCounts",
+      "Gene-level count matrix and per-sample assignment summaries", "featurecounts/")
+} else if (tx_route) {
+  add("Quantification", "tximport",
+      "Transcript quantification summarised to gene level, and the txi object",
+      "tximport/")
+}
+
+add("Quality control", "MultiQC",
+    "The authoritative per-sample QC report, across every tool that ran",
+    paste0("multiqc/", mqc_report_name))
+if (!identical(mf("analysis", "entry"), "count matrix")) {
+  add("Quality control", "FastQC", "Per-sample raw read quality", "fastqc/")
+  add("Quality control", "fastp", "Adapter and quality trimming reports", "fastp/")
+}
+if (bam_route) {
+  add("Quality control", "RSeQC",
+      "Strandedness inference, read distribution and gene-body coverage", "rseqc/")
+}
+
+if (!is.na(aligner)) {
+  add("Alignment and quantification", toupper(aligner),
+      if (bam_route) "Sorted BAM files, their indexes and alignment logs"
+      else "Per-sample quantification directories",
+      paste0(aligner, "/"))
+}
+if (bam_route) {
+  add("Alignment and quantification", "Coverage tracks",
+      "BigWig tracks for a genome browser", "bam_to_bigwig/")
+}
+
+for (o in optional) {
+  d <- if (grepl("splicing", o))        "diffsplice_output/"
+       else if (grepl("transcript usage", o)) "dtu_output/"
+       else if (grepl("isoform", o))    "isoform_switch_output/"
+       else if (grepl("fusion", o))     "star_fusion/"
+       else NA_character_
+  if (!is.na(d)) add("Optional analyses", o, "Requested for this run", d)
+}
+if (bam_route) {
+  add("Optional analyses", "rMATS",
+      "Alternative splicing events, when the run included it", "rmats_output/")
+}
+
+add("Provenance", "Run manifest",
+    "How this run was configured, machine-readable; the source of section 2",
+    "pipeline_info/run_manifest.json")
+add("Provenance", "Run summary",
+    "Duration, per-process resource use and completion status, written after this report",
+    "pipeline_info/run_summary.html")
+add("Provenance", "Software versions",
+    "Every tool and version collected at run time", "pipeline_info/software_versions_mqc.yml")
+add("Provenance", "Execution trace",
+    "Nextflow's own timeline, report and trace files", "pipeline_info/")
+
+tbl <- do.call(rbind, items)
+
+out <- character(0)
+for (g in unique(tbl$group)) {
+  out <- c(out, paste0("<tr class='rf-group'><th colspan='3'>", esc(g), "</th></tr>"))
+  part <- tbl[tbl$group == g, ]
+  for (i in seq_len(nrow(part))) {
+    r <- part[i, ]
+    out <- c(out, paste0(
+      "<tr><td><strong>", esc(r$name), "</strong></td>",
+      "<td>", esc(r$desc), "</td>",
+      "<td><a href='../", r$path, "'><code>", esc(r$path), "</code></a></td></tr>"))
+  }
+}
+
+cat("<table class='rf-filetable'>",
+    "<thead><tr><th>Output</th><th>Contents</th><th>Location</th></tr></thead><tbody>",
+    paste(out, collapse = ""), "</tbody></table>\n", sep = "")
 ```
 
 # Session information
