@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static checks for the Quarto analysis report and the R analysis scripts.
+"""Static checks for the analysis report, the R scripts and the Nextflow modules.
 
     python3 assets/test/check_report.py
 
@@ -28,6 +28,12 @@ that actually shipped.
 
   4. Chunk gates.  Every `eval=` option must name a variable the document
      defines, or the chunk silently never runs.
+
+  5. Module heredocs.  Nextflow strips a script block's COMMON leading
+     whitespace, so one line at column 0 leaves `<<-END_VERSIONS` unable to
+     match its terminator. versions.yml then comes out malformed, the aggregated
+     software_versions.yml becomes invalid YAML, and MULTIQC fails a long way
+     from the cause. Shipped twice.
 """
 import os
 import re
