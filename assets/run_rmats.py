@@ -6,19 +6,24 @@ import csv
 import itertools
 import subprocess
 
-# Usage: run_rmats.py <samplesheet.csv> <gtf> <read_type> <read_length> <output_dir> <sample_bam.tsv>
+# Usage: run_rmats.py <samplesheet.csv> <gtf> <read_type> <read_length> <output_dir>
+#                     <sample_ids_csv> <bam_files...>
 #
-# <sample_bam.tsv> is a two-column, tab-separated sample->BAM mapping written by
-# the RMATS process from Nextflow's own meta.id. BAMs used to be matched to
+# <sample_ids_csv> is a comma-separated list of sample ids in the SAME ORDER as
+# the BAM arguments that follow. It comes from Nextflow's own meta.id, so the
+# pairing is authoritative rather than reconstructed. BAMs used to be matched to
 # samples here by filename substring, and sample 'ctrl1' matched 'ctrl10.bam':
-# wrong BAM, wrong splicing calls, no error (C3). The mapping is authoritative,
-# so every disagreement below is an internal consistency failure -- none is
-# reachable from an ordinary samplesheet -- and each exits hard rather than
-# warning, because a warning here means rMATS runs on the wrong grouping.
+# wrong BAM, wrong splicing calls, no error (C3).
+#
+# Because the mapping is authoritative, every disagreement below is an internal
+# consistency failure -- none is reachable from an ordinary samplesheet -- so
+# each exits hard rather than warning. A warning here would mean rMATS running
+# on the wrong grouping.
 
 def main():
-    if len(sys.argv) != 7:
-        print("Usage: run_rmats.py <samplesheet.csv> <gtf> <read_type> <read_length> <output_dir> <sample_bam.tsv>")
+    if len(sys.argv) < 8:
+        print("Usage: run_rmats.py <samplesheet.csv> <gtf> <read_type> <read_length> "
+              "<output_dir> <sample_ids_csv> <bam_files...>")
         sys.exit(1)
 
     samplesheet = sys.argv[1]
@@ -26,7 +31,8 @@ def main():
     read_type = sys.argv[3] # "paired" or "single"
     read_length = sys.argv[4]
     base_output_dir = sys.argv[5]
-    bam_map_path = sys.argv[6]
+    sample_ids = [s for s in sys.argv[6].split(',') if s]
+    bam_files = sys.argv[7:]
 
     # Parse Samplesheet
     samples = {} # sample_id -> condition
@@ -37,35 +43,30 @@ def main():
             samples[row['sample']] = row['condition']
             conditions.add(row['condition'])
 
-    # Read the sample->BAM mapping, collecting every problem before failing so
+    # Pair ids with BAMs by position, collecting every problem before failing so
     # one run reports them all (the same style as the samplesheet validation).
-    sample_bams = {}
     problems = []
-    with open(bam_map_path, 'r') as f:
-        for lineno, line in enumerate(f, 1):
-            line = line.rstrip('\n')
-            if not line:
-                continue
-            parts = line.split('\t')
-            if len(parts) != 2:
-                problems.append(f"line {lineno} of {bam_map_path}: expected 'sample<TAB>bam', got: {line!r}")
-                continue
-            sample, bam = parts
-            if sample not in samples:
-                problems.append(f"BAM '{bam}' is mapped to '{sample}', which is not in the samplesheet")
-            elif sample in sample_bams:
-                problems.append(f"sample '{sample}' is mapped to two BAMs: '{sample_bams[sample]}' and '{bam}'")
-            elif not os.path.exists(bam):
-                problems.append(f"BAM for sample '{sample}' not found on disk: '{bam}'")
-            else:
-                sample_bams[sample] = bam
+    if len(sample_ids) != len(bam_files):
+        problems.append(f"{len(sample_ids)} sample id(s) but {len(bam_files)} BAM(s); "
+                        "the workflow passed mismatched lists")
+
+    sample_bams = {}
+    for sample, bam in zip(sample_ids, bam_files):
+        if sample not in samples:
+            problems.append(f"BAM '{bam}' is paired with '{sample}', which is not in the samplesheet")
+        elif sample in sample_bams:
+            problems.append(f"sample '{sample}' appears twice: '{sample_bams[sample]}' and '{bam}'")
+        elif not os.path.exists(bam):
+            problems.append(f"BAM for sample '{sample}' not found on disk: '{bam}'")
+        else:
+            sample_bams[sample] = bam
 
     missing = sorted(set(samples) - set(sample_bams))
     if missing and not problems:
-        problems.append("no BAM mapped for sample(s): " + ", ".join(missing))
+        problems.append("no BAM for sample(s): " + ", ".join(missing))
 
     if problems:
-        print("ERROR: the sample->BAM mapping disagrees with the samplesheet. "
+        print("ERROR: the sample-to-BAM pairing disagrees with the samplesheet. "
               "This is a pipeline bug, not a samplesheet mistake:")
         for p in problems:
             print(f"  - {p}")
