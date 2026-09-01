@@ -91,7 +91,15 @@ have_mqc <- !is.na(mqc_json) || !is.na(mqc_gs)
 # does not follow the rule and is handled separately.
 mqc_marker <- if (!is.na(mqc_json)) mqc_json else mqc_gs
 mqc_data_dir <- if (!is.na(mqc_marker)) basename(dirname(mqc_marker)) else NA_character_
-mqc_report_name <- if (is.na(mqc_data_dir) || identical(mqc_data_dir, "multiqc_data")) {
+# Only derive when the directory actually ends in "_data", which is MultiQC's
+# own convention. Anything else means the directory was staged under a name of
+# our choosing rather than MultiQC's, and inventing "<whatever>.html" from it
+# produces a confident dead link -- which is exactly what happened when the
+# QUARTO_REPORT input was pinned to the literal name "multiqc_data_dir".
+# Falling back to MultiQC's default is still a guess, but a recognisable one.
+mqc_report_name <- if (is.na(mqc_data_dir) ||
+                       identical(mqc_data_dir, "multiqc_data") ||
+                       !grepl("_data$", mqc_data_dir)) {
   "multiqc_report.html"
 } else {
   paste0(sub("_data$", "", mqc_data_dir), ".html")
