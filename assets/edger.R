@@ -690,7 +690,7 @@ for (i in seq_len(ncol(pairs))) {
     c1 <- pairs[1, i]
     c2 <- pairs[2, i]
 
-    # Orient so 'REF' is the denominator where present.
+    # Orient so the baseline is the denominator where present.
     numerator   <- c1
     denominator <- c2
     if (c1 == REF_LEVEL) { numerator <- c2; denominator <- c1 }

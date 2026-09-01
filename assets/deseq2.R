@@ -348,7 +348,6 @@ samples <- read.csv(samplesheet_path, stringsAsFactors = FALSE)
 samples$sample <- as.character(samples$sample)
 rownames(samples) <- samples$sample
 
-# Treat a condition named 'REF' as the baseline (denominator) of contrasts.
 # The baseline is --reference_level (default "REF"), delivered as an environment
 # variable because three of the five scripts that need it take a variadic list of
 # count files as their final argument. main.nf fails the run at launch if a level
