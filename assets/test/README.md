@@ -25,7 +25,14 @@ BY4741 carrying the empty `pTOWug2836` vector, grown in YPD or in NaCl.
 
 Two conditions × three replicates — comfortably above the pipeline's minimum of
 two conditions and two replicates each, so DESeq2/edgeR, GSEA and gProfiler all
-run. Naming the control `REF` orients every fold change as NaCl-vs-control.
+run. Naming the control `REF` orients every fold change, and every rMATS PSI
+difference, as NaCl-vs-control.
+
+That is why none of the commands below pass `--reference_level`: it defaults to
+`REF`, which is what this dataset calls its control, so the flag would be a
+no-op. Adapting these commands to data whose control group has another name is
+the case that needs it — `--reference_level Untreated`, say. See
+[USAGE.md §4.5](../../USAGE.md#45-which-condition-results-are-measured-against---reference_level).
 
 Full runs are 3.5–9.8 M read pairs. The fetch script subsamples to 1 M pairs by
 default, which is enough to exercise every process while keeping the download
