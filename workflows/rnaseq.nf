@@ -538,14 +538,30 @@ workflow RNASEQ {
              // rMATS (Level 4+) - collapse all per-sample BAMs into one task.
              if (run_level >= 4 && params.input.endsWith('.csv')) {
                 ch_rmats_input = ch_bam_bai
-                    .map { meta, bam, bai -> [ bam, bai, meta.single_end ] }
-                    // flat:false keeps each [bam, bai, single_end] as a sub-list
-                    // instead of flattening every element into one long list.
+                    // meta.id is carried through so the module can emit an
+                    // authoritative sample->BAM mapping. It used to be dropped
+                    // here, which forced run_rmats.py to reconstruct the pairing
+                    // from filenames with a substring match -- and sample
+                    // 'ctrl1' matched 'ctrl10.bam' (C3): wrong BAM, wrong
+                    // splicing calls, no error.
+                    .map { meta, bam, bai -> [ meta.id, bam, bai, meta.single_end ] }
+                    // flat:false keeps each [id, bam, bai, single_end] as a
+                    // sub-list instead of flattening everything into one list.
                     .collect(flat: false)
                     .map { rows ->
-                         def bams = rows.collect { row -> row[0] }
-                         def bais = rows.collect { row -> row[1] }
-                         [ [ id:'all_samples', single_end: rows[0][2] ], bams, bais ]
+                         // rMATS runs one -t mode for the whole cohort, so a
+                         // samplesheet mixing single- and paired-end cannot be
+                         // analysed correctly -- previously row 0's layout was
+                         // silently applied to everyone (H7).
+                         def layouts = rows.collect { row -> row[3] }.unique()
+                         if (layouts.size() > 1) {
+                             error "rMATS needs a single library layout, but the samplesheet " +
+                                   "mixes single-end and paired-end samples."
+                         }
+                         def ids  = rows.collect { row -> row[0] }
+                         def bams = rows.collect { row -> row[1] }
+                         def bais = rows.collect { row -> row[2] }
+                         [ [ id:'all_samples', single_end: rows[0][3], ids: ids ], bams, bais ]
                     }
                 RMATS ( file(params.input), ch_rmats_input, file(params.gtf), file("${projectDir}/assets/run_rmats.py") )
                 ch_versions = ch_versions.mix(RMATS.out.versions)
