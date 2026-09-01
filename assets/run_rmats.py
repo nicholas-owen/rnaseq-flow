@@ -72,13 +72,33 @@ def main():
             print(f"  - {p}")
         sys.exit(1)
 
-    # Sort conditions
+    # Order conditions so REF is LAST, which puts it second in every pair and
+    # therefore makes it the denominator -- matching how DESeq2 and edgeR orient
+    # every contrast in this pipeline (see run_contrast() in assets/deseq2.R).
+    #
+    # This is load-bearing for interpretation, not cosmetics. itertools.
+    # combinations takes the pair in list order, c1 becomes both the directory
+    # prefix and --b1, and rMATS defines
+    #     IncLevelDifference = mean(IncLevel1) - mean(IncLevel2)
+    # where sample 1 is --b1. With REF first the directory read REF_vs_NaCl and
+    # a positive value meant "higher inclusion in REF" -- the opposite of a
+    # positive log2FoldChange in the DE tables sitting beside it. Anyone
+    # comparing the two concluded they agreed when they disagreed (M19).
+    #
+    # REF last gives NaCl_vs_REF and PSI(NaCl) - PSI(REF): positive means higher
+    # inclusion in the treatment, exactly as positive log2FC does.
     sorted_conds = sorted(list(conditions))
-    # Move REF to start
     if 'REF' in sorted_conds:
         sorted_conds.remove('REF')
-        sorted_conds.insert(0, 'REF')
-    
+        sorted_conds.append('REF')
+    else:
+        # deseq2.R warns in this case rather than failing; match that, because a
+        # silent fallback to alphabetical order decides which way every fold
+        # change and every PSI difference points.
+        print("Warning: condition 'REF' not found. Using alphabetical order, so "
+              "the last condition alphabetically becomes the denominator of each "
+              "contrast. Name a condition 'REF' to control this explicitly.")
+
     pairs = list(itertools.combinations(sorted_conds, 2))
     
     if not os.path.exists(base_output_dir):

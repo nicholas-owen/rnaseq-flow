@@ -7,6 +7,31 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **rMATS contrasts are now oriented like every other contrast in the pipeline.**
+  Output directories are named `<condition>_vs_REF` rather than
+  `REF_vs_<condition>`, and `IncLevelDifference` is PSI(condition) − PSI(REF), so
+  a positive value means higher inclusion in the treatment — matching what a
+  positive `log2FoldChange` means in the DESeq2 and edgeR tables beside it.
+
+  **This inverts the sign of every splicing result relative to earlier
+  releases.** Previously `--b1` was `REF`, so a positive `IncLevelDifference`
+  meant higher inclusion in the control: a reader comparing a positive fold
+  change with a positive PSI difference in the same results directory concluded
+  they agreed when they pointed opposite ways. Nothing in the files marked which
+  convention was in force beyond the directory name.
+
+  Two consequences worth planning for. Anything scripted against
+  `rmats_output/REF_vs_*/` breaks, which is the loud failure and the good case.
+  And splicing results generated before this change cannot be compared with
+  results generated after it without accounting for the flip — the file formats
+  are identical and only the sign differs.
+
+  Also aligned: rMATS now warns when no condition is named `REF`, where it
+  previously fell back to alphabetical order silently. `deseq2.R` already warned
+  in that case; the two now behave the same way.
+
 ### Added
 
 - **`--validate_only`** — validate the samplesheet and inputs, then exit before

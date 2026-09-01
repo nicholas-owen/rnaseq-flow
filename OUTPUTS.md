@@ -298,7 +298,18 @@ Key columns: `term_name`, `source` (GO:BP/MF/CC, KEGG, REACTOME…),
 
 ## 11. Alternative splicing — `rmats_output/`
 
-One sub-directory per condition pair. rMATS reports five event types:
+One sub-directory per condition pair, named `<condition>_vs_REF` to match the
+differential-expression tables, with `REF` as the denominator.
+
+> **Changed after v1.5.1.** Directories were previously named `REF_vs_<condition>`
+> and `IncLevelDifference` carried the opposite sign, so a positive value meant
+> higher inclusion in `REF` — the reverse of what a positive `log2FoldChange`
+> means in the DE tables beside it. **Splicing results produced before this change
+> point the other way**, and the files give no indication of which convention they
+> follow beyond the directory name. Do not compare results across that boundary
+> without checking.
+
+rMATS reports five event types:
 
 | Code | Event |
 |---|---|
@@ -322,7 +333,22 @@ Key columns:
 | `IncLevelDifference` | PSI difference (1 − 2) — the effect size |
 | `PValue`, `FDR` | Significance of the difference |
 
+**Reading the sign.** Condition 1 is the first name in the directory, condition 2
+the second. In `NaCl_vs_REF`, `IncLevelDifference` is PSI(NaCl) − PSI(REF), so a
+**positive value means higher inclusion in NaCl** — the same direction a positive
+`log2FoldChange` means in `deseq2_output/deseq2_results_NaCl_vs_REF.csv`.
+
+PSI is a proportion, so the difference is bounded at ±1. A value of 0.2 means
+twenty percentage points of the transcript pool shifted. It is not a fold change
+and should not be compared to one.
+
 A common cutoff: `FDR < 0.05` and `|IncLevelDifference| > 0.1`.
+
+> **`summary.txt` uses different criteria.** rMATS builds it with an
+> `|IncLevelDifference|` cutoff of **0**, so its `SignificantEvents*` columns
+> count every FDR-significant event regardless of effect size. Those numbers will
+> be larger, often much larger, than the cutoff above produces. Recompute from
+> the `*.MATS.JC.txt` files rather than quoting `summary.txt`.
 
 ---
 
