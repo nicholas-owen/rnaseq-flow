@@ -72,7 +72,7 @@ def main():
             print(f"  - {p}")
         sys.exit(1)
 
-    # Order conditions so REF is LAST, which puts it second in every pair and
+    # Order conditions so the baseline is LAST, which puts it second in every pair and
     # therefore makes it the denominator -- matching how DESeq2 and edgeR orient
     # every contrast in this pipeline (see run_contrast() in assets/deseq2.R).
     #
@@ -87,17 +87,25 @@ def main():
     #
     # REF last gives NaCl_vs_REF and PSI(NaCl) - PSI(REF): positive means higher
     # inclusion in the treatment, exactly as positive log2FC does.
+    # The baseline is --reference_level (default "REF"), delivered as an
+    # environment variable; see the note in assets/deseq2.R for why it travels
+    # that way rather than as an argument.
+    ref_level = os.environ.get('RNASEQ_FLOW_REFERENCE_LEVEL', 'REF')
+
     sorted_conds = sorted(list(conditions))
-    if 'REF' in sorted_conds:
-        sorted_conds.remove('REF')
-        sorted_conds.append('REF')
+    if ref_level in sorted_conds:
+        sorted_conds.remove(ref_level)
+        sorted_conds.append(ref_level)
     else:
         # deseq2.R warns in this case rather than failing; match that, because a
         # silent fallback to alphabetical order decides which way every fold
-        # change and every PSI difference points.
-        print("Warning: condition 'REF' not found. Using alphabetical order, so "
-              "the last condition alphabetically becomes the denominator of each "
-              "contrast. Name a condition 'REF' to control this explicitly.")
+        # change and every PSI difference points. main.nf fails the run at launch
+        # when a level named explicitly is absent, so reaching here means the
+        # default was in force and no condition happened to be called REF.
+        print(f"Warning: baseline condition '{ref_level}' not found in the "
+              "samplesheet. Using alphabetical order, so the last condition "
+              "alphabetically becomes the denominator of each contrast. Set "
+              "--reference_level, or name a condition 'REF', to control this.")
 
     pairs = list(itertools.combinations(sorted_conds, 2))
     

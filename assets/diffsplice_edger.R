@@ -52,7 +52,10 @@ strip <- function(x) sub("\\.[0-9]+$", "", x)   # drop version suffixes
 # ---- samples --------------------------------------------------------------
 samples   <- read.csv(samplesheet, stringsAsFactors = FALSE)
 condition <- factor(samples$condition)
-if ("REF" %in% levels(condition)) condition <- relevel(condition, ref = "REF")
+# Baseline level from --reference_level (default "REF"); see deseq2.R for why it
+# arrives as an environment variable rather than an argument.
+REF_LEVEL <- Sys.getenv("RNASEQ_FLOW_REFERENCE_LEVEL", "REF")
+if (REF_LEVEL %in% levels(condition)) condition <- relevel(condition, ref = REF_LEVEL)
 if (nlevels(condition) < 2) emit_empty("Fewer than two conditions.")
 
 # ---- GTF: gene-symbol / biotype map (transcript mode also reuses `lines`) --

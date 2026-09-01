@@ -293,11 +293,19 @@ samples <- read.csv(samplesheet_path, stringsAsFactors = FALSE)
 samples$sample <- as.character(samples$sample)
 rownames(samples) <- samples$sample
 
-# 'condition' is the variable of interest; 'REF' is its baseline level.
-if ("REF" %in% samples$condition) {
-    samples$condition <- relevel(factor(samples$condition), ref = "REF")
+# 'condition' is the variable of interest; the baseline level is
+# --reference_level (default "REF"), delivered as an environment variable. See
+# the note in deseq2.R for why it travels that way rather than as an argument.
+REF_LEVEL <- Sys.getenv("RNASEQ_FLOW_REFERENCE_LEVEL", "REF")
+
+if (REF_LEVEL %in% samples$condition) {
+    samples$condition <- relevel(factor(samples$condition), ref = REF_LEVEL)
 } else {
-    warning("Condition 'REF' not found. Using default (alphabetical) level ordering.")
+    warning(sprintf(paste0("Baseline condition '%s' not found in the samplesheet. Using ",
+                           "alphabetical level ordering, so the first condition ",
+                           "alphabetically becomes the denominator of every contrast. Set ",
+                           "--reference_level, or name a condition 'REF', to control this."),
+                    REF_LEVEL))
     samples$condition <- factor(samples$condition)
 }
 
@@ -685,7 +693,7 @@ for (i in seq_len(ncol(pairs))) {
     # Orient so 'REF' is the denominator where present.
     numerator   <- c1
     denominator <- c2
-    if (c1 == "REF") { numerator <- c2; denominator <- c1 }
+    if (c1 == REF_LEVEL) { numerator <- c2; denominator <- c1 }
 
     # Contrast over the design columns: +1 on the numerator's condition
     # coefficient, -1 on the denominator's. A level that is the model's

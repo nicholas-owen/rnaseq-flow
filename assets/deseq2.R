@@ -349,10 +349,21 @@ samples$sample <- as.character(samples$sample)
 rownames(samples) <- samples$sample
 
 # Treat a condition named 'REF' as the baseline (denominator) of contrasts.
-if ("REF" %in% samples$condition) {
-    samples$condition <- relevel(factor(samples$condition), ref = "REF")
+# The baseline is --reference_level (default "REF"), delivered as an environment
+# variable because three of the five scripts that need it take a variadic list of
+# count files as their final argument. main.nf fails the run at launch if a level
+# named explicitly is absent, so reaching the fallback below means the default
+# was in force and no condition happened to be called REF.
+REF_LEVEL <- Sys.getenv("RNASEQ_FLOW_REFERENCE_LEVEL", "REF")
+
+if (REF_LEVEL %in% samples$condition) {
+    samples$condition <- relevel(factor(samples$condition), ref = REF_LEVEL)
 } else {
-    warning("Condition 'REF' not found. Using default (alphabetical) level ordering.")
+    warning(sprintf(paste0("Baseline condition '%s' not found in the samplesheet. Using ",
+                           "alphabetical level ordering, so the first condition ",
+                           "alphabetically becomes the denominator of every contrast. Set ",
+                           "--reference_level, or name a condition 'REF', to control this."),
+                    REF_LEVEL))
     samples$condition <- factor(samples$condition)
 }
 
@@ -857,10 +868,10 @@ for (i in 1:ncol(pairs)) {
     c1 <- pairs[1, i]
     c2 <- pairs[2, i]
 
-    # Orient each contrast so 'REF' is the denominator where present.
-    if (c1 == "REF") {
+    # Orient each contrast so the baseline is the denominator where present.
+    if (c1 == REF_LEVEL) {
         run_contrast(c2, c1)
-    } else if (c2 == "REF") {
+    } else if (c2 == REF_LEVEL) {
         run_contrast(c1, c2)
     } else {
         run_contrast(c1, c2)

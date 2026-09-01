@@ -626,6 +626,9 @@ rows <- c(
   row("Quantification", or_unrecorded(mf("analysis", "quantification"))),
   row("Strandedness",   or_unrecorded(mf("analysis", "strandedness"))),
   row("Design",         paste0("<code>", or_unrecorded(mf("analysis", "design")), "</code>")),
+  # The denominator of every contrast: without it a reader cannot tell which way
+  # a positive fold change points.
+  row("Baseline",       or_unrecorded(mf("analysis", "reference_level"))),
   row("Organism",       or_unrecorded(mf("analysis", "organism"))),
 
   group("Reference"),

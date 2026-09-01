@@ -7,6 +7,27 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **`--reference_level`** names the baseline condition, replacing a `REF` string
+  hardcoded twenty times across five scripts. It reaches DESeq2, edgeR, rMATS,
+  DEXSeq and diffSplice, so every contrast in a run is oriented the same way, and
+  it is recorded in the run manifest and shown in the report's Run overview.
+
+  The substance is not configurability but the failure mode. The baseline is the
+  denominator of every contrast, so it decides which way every fold change and
+  PSI difference points — and a name that was not in the samplesheet used to fall
+  back to alphabetical order silently, producing a complete and plausible set of
+  results oriented against the wrong condition. **A level named explicitly now
+  stops the run at launch if it is not present**, listing the conditions that
+  are. Leaving the default with no `REF` condition keeps the previous behaviour,
+  since that has always been allowed, but every tool now warns identically rather
+  than some warning and others staying silent.
+
+  It travels to the scripts as an environment variable set from the param, not as
+  an argument: three of the five take a variadic list of count files last, so a
+  positional parameter would have shifted every index.
+
 ### Changed
 
 - **rMATS contrasts are now oriented like every other contrast in the pipeline.**

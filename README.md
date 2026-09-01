@@ -237,12 +237,24 @@ treat_rep2,data/treat_rep2_R1.fastq.gz,data/treat_rep2_R2.fastq.gz,treatment
 | `condition` | Experimental group — drives the differential-expression design |
 | `batch` *(optional)* | Batch / covariate label; if present, the DE model becomes `~ batch + condition` automatically |
 
-> **Important — the `REF` convention.** The differential-expression scripts
-> treat a condition literally named `REF` as the baseline/denominator of every
-> contrast, so a positive log2 fold change means "up relative to `REF`". Name
-> your control group `REF` to get correctly-oriented results. If no group is
-> called `REF`, conditions are ordered alphabetically and the comparison
-> direction is arbitrary.
+> **Important — the baseline condition.** One condition is the denominator of
+> every contrast, so it decides which way results point: a positive log2 fold
+> change means "up relative to the baseline", and the same holds for the PSI
+> differences rMATS reports. It defaults to a condition literally named `REF`.
+>
+> Name your control group `REF`, or point `--reference_level` at whatever you
+> called it:
+>
+> ```bash
+> --reference_level Untreated
+> ```
+>
+> This reaches DESeq2, edgeR, rMATS, DEXSeq and diffSplice, so every contrast in
+> the run is oriented the same way. **A level you name explicitly must exist in
+> the samplesheet** — the run stops at launch if it does not, rather than
+> silently falling back. If you name nothing and no group is called `REF`,
+> conditions are ordered alphabetically, the direction is arbitrary, and each
+> tool says so in the log.
 
 Single-end and paired-end samples are detected automatically from whether `R2`
 is present.
@@ -303,6 +315,7 @@ silently ignored.
 | `--dtu` | No | `false` | Enable DEXSeq differential transcript usage (needs `--aligner salmon`/`kallisto` and `--gtf`) |
 | `--diffsplice` | No | `false` | Enable edgeR `diffSpliceDGE` — exon-level usage (STAR/HISAT2) or transcript-level usage (Salmon/Kallisto); needs `--gtf` |
 | `--design` | No | auto | DESeq2/edgeR model formula, e.g. `~ batch + condition`. Default: `~ batch + condition` if the samplesheet has a `batch` column, else `~ condition` |
+| `--reference_level` | No | `REF` | Baseline condition — the denominator of every contrast. Decides which way fold changes and PSI differences point |
 | `--gmt` | No | — | GMT gene-set file — enables GSEA |
 | `--organism` | No | `hsapiens` | Organism ID for gProfiler / GMT download |
 

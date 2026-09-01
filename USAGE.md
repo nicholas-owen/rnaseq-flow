@@ -288,8 +288,11 @@ treat_1,/data/treat_1_R1.fastq.gz,/data/treat_1_R2.fastq.gz,treatment
 treat_2,/data/treat_2_R1.fastq.gz,/data/treat_2_R2.fastq.gz,treatment
 ```
 
-- Name the control/baseline group **`REF`** so fold changes are oriented as
-  "treatment vs control" (see README → Samplesheet format).
+- Name the control/baseline group **`REF`**, or pass `--reference_level <name>`
+  if you called it something else, so fold changes and PSI differences are
+  oriented as "treatment vs control". It reaches DESeq2, edgeR, rMATS, DEXSeq
+  and diffSplice alike, and a level you name must exist in the samplesheet or
+  the run stops at launch (see README → Samplesheet format).
 - Leave `R2` empty for single-end reads.
 - Provide **at least 2 conditions and at least 2 replicates per condition** —
   this is enforced (DESeq2/edgeR cannot estimate dispersion otherwise).

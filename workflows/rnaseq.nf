@@ -354,6 +354,10 @@ def buildRunManifest(design, notices) {
             quantification: quantification,
             strandedness  : from_counts ? null : params.strandedness,
             design        : design,
+            // The denominator of every contrast, so it decides which way every
+            // fold change and PSI difference points -- worth recording in the
+            // artefact that travels.
+            reference_level: params.reference_level?.toString(),
             organism      : params.organism,
             stop_at       : params.stop_at,
             optional      : optional,

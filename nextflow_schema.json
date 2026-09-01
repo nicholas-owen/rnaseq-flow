@@ -147,6 +147,12 @@
         "design": {
           "type": "string",
           "description": "DESeq2/edgeR model formula, e.g. '~ batch + condition'. Default: '~ batch + condition' if the samplesheet has a batch column, otherwise '~ condition'. Covariates must be samplesheet columns and 'condition' must be included (it is the variable contrasted)."
+        },
+        "reference_level": {
+          "type": "string",
+          "default": "REF",
+          "description": "Baseline condition: the denominator of every contrast.",
+          "help_text": "Every fold change and every PSI difference is measured against this condition, so it decides which way results point. It must be one of the values in the samplesheet's condition column; the run fails at launch if a level you named is not there. When left at the default and no condition is called REF, the tools fall back to alphabetical order and say so in the log. Used by DESeq2, edgeR, rMATS, DEXSeq and diffSplice."
         }
       }
     },
