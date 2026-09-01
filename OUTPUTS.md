@@ -43,7 +43,7 @@ Which directories appear depends on the aligner and options you chose.
 > `bam_to_bigwig/`, `featurecounts/`, `tximport/`) and the MultiQC report are
 > **not** produced. You get the differential-expression outputs onward
 > (`deseq2_output/`, `edger_output/`, and any enrichment), plus a Quarto report
-> whose QC section is omitted. See [USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
+> whose QC section is omitted. See [USAGE.md §4.7](USAGE.md#47-starting-from-a-count-matrix---counts).
 
 ---
 

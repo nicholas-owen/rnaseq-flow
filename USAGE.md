@@ -297,7 +297,7 @@ treat_2,/data/treat_2_R1.fastq.gz,/data/treat_2_R2.fastq.gz,treatment
 - Provide **at least 2 conditions and at least 2 replicates per condition** —
   this is enforced (DESeq2/edgeR cannot estimate dispersion otherwise).
 - Optionally add a **`batch`** column (or other covariate columns) to model
-  confounders in the differential-expression design — see §4.5.
+  confounders in the differential-expression design — see §4.6.
 
 The samplesheet is validated before the run starts: if a required column is
 missing, a sample id is duplicated, a FASTQ path does not exist, or the
@@ -406,7 +406,44 @@ nextflow run main.nf --input samplesheet.csv --aligner star \
     --gtf references/human/annotation.gtf --stop_at postQC -profile docker
 ```
 
-### 4.5 Batch effects & covariates
+### 4.5 Which condition results are measured against (`--reference_level`)
+
+One condition is the **baseline**: the denominator of every contrast. It decides
+which way results point, so it is worth being deliberate about.
+
+It defaults to a condition literally named `REF`. If your control group is called
+something else, name it:
+
+```bash
+nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --reference_level Untreated \
+    --outdir results -profile docker
+```
+
+With `--reference_level Untreated` and a `Treated` group, you get
+`Treated_vs_Untreated`, and:
+
+| Result | Positive value means |
+|---|---|
+| `log2FoldChange` (DESeq2), `logFC` (edgeR) | Higher expression in `Treated` |
+| `IncLevelDifference` (rMATS) | Higher inclusion in `Treated` |
+
+The setting reaches **DESeq2, edgeR, rMATS, DEXSeq and edgeR diffSplice**, so
+every contrast in the run is oriented the same way. It is recorded in
+`pipeline_info/run_manifest.json` and shown as **Baseline** in the analysis
+report, so a reader of the report alone can tell what the numbers are relative
+to.
+
+**A level you name must exist in the samplesheet.** The run stops at launch if it
+does not, listing the conditions that were found — a mistyped baseline would
+otherwise produce a complete, plausible set of results oriented against the wrong
+condition.
+
+> If you name nothing and no group is called `REF`, conditions are ordered
+> alphabetically, the direction is arbitrary, and each tool says so in the log.
+
+### 4.6 Batch effects & covariates
 
 The gene-level differential-expression model (DESeq2 and edgeR) defaults to
 `~ condition`. To adjust for a confounder there are two ways:
@@ -435,7 +472,7 @@ every treated sample in another): the model would be rank-deficient and
 DESeq2/edgeR would abort. `--design` covers the gene-level DE tests; rMATS, DTU
 and diffSplice keep their own designs.
 
-### 4.6 Starting from a count matrix (`--counts`)
+### 4.7 Starting from a count matrix (`--counts`)
 
 If you already have a gene count matrix — from a previous run, a collaborator,
 or a public dataset (e.g. a GEO supplementary file) — you can skip QC and
