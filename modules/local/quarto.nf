@@ -23,7 +23,14 @@ process QUARTO_REPORT {
     conda 'conda-forge::quarto=1.7.31 conda-forge::r-base conda-forge::r-rmarkdown conda-forge::r-knitr conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tidyr conda-forge::r-jsonlite conda-forge::r-plotly conda-forge::r-dt conda-forge::r-heatmaply'
 
     input:
-    path "multiqc_data_dir"
+    // Staged under its incoming name rather than a fixed one. MultiQC prefixes
+    // its output with the `title:` from assets/multiqc_config.yml, so the
+    // directory arrives as e.g. rnaseq-flow_multiqc_report_data -- and the .qmd
+    // derives the report's filename from it to build the link. Pinning the
+    // stage name to a literal threw that away and produced a dead link. The
+    // .qmd finds the files inside it with a recursive search, so it never
+    // depended on the name being fixed.
+    path multiqc_data_dir
     path qmd_template
     // Staged under a fixed name so the .qmd can find it regardless of what the
     // incoming file is called. Records how the run was configured -- aligner,

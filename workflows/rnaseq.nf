@@ -204,7 +204,100 @@ def describeGeneSets(gmt) {
  * which result directories exist. Keeping the two apart avoids the manifest
  * claiming a stage ran when it failed or was skipped.
  */
-def buildRunManifest(design) {
+/*
+ * Whether the run is paired- or single-end, read from the samplesheet.
+ *
+ * Taken from the sheet rather than from the read channel because the manifest
+ * is assembled synchronously, before any channel has emitted. A cohort may
+ * legitimately mix the two, and that is reported as 'mixed' rather than
+ * flattened to whichever layout the first row happens to have -- a mixed cohort
+ * is worth a reader noticing.
+ *
+ * Returns null when there is no sheet to read: a glob input carries no R2
+ * column, and a --counts run has no reads at all.
+ */
+def resolveLibraryLayout(samplesheet) {
+    if (!samplesheet) {
+        return null
+    }
+    def sheet = samplesheet.toString()
+    if (!sheet.endsWith('.csv')) {
+        return null
+    }
+    def rows = file(sheet).splitCsv(header: true)
+    if (!rows) {
+        return null
+    }
+    if (!rows.first().containsKey('R2')) {
+        return 'single-end'
+    }
+    def paired = rows.count { row -> row.R2?.toString()?.trim() }
+    if (paired == 0)          return 'single-end'
+    if (paired == rows.size()) return 'paired-end'
+    return "mixed (${paired} of ${rows.size()} paired)"
+}
+
+/*
+ * Summarise the experimental design from the samplesheet: how many samples, in
+ * which conditions, with what replication.
+ *
+ * Conditions are kept in first-appearance order rather than sorted. The `REF`
+ * baseline convention means the control is written first, and every fold change
+ * in the report is oriented against it, so alphabetical order would present the
+ * design in a sequence that contradicts how the results were computed.
+ *
+ * Returns null when there is nothing to read -- a glob input, or a sheet
+ * missing the columns this describes.
+ */
+def summariseSamples(samplesheet) {
+    if (!samplesheet) {
+        return null
+    }
+    def sheet = samplesheet.toString()
+    if (!sheet.endsWith('.csv')) {
+        return null
+    }
+    def rows = file(sheet).splitCsv(header: true)
+    if (!rows) {
+        return null
+    }
+    def cols = rows.first().keySet()
+    if (!cols.contains('sample') || !cols.contains('condition')) {
+        return null
+    }
+
+    def order  = []
+    def byCond = [:]
+    rows.each { row ->
+        def cond = row.condition?.toString()?.trim()
+        def name = row.sample?.toString()?.trim()
+        if (cond) {
+            if (!byCond.containsKey(cond)) {
+                byCond[cond] = []
+                order.add(cond)
+            }
+            byCond[cond].add(name)
+        }
+    }
+
+    def batches = []
+    if (cols.contains('batch')) {
+        batches = rows.collect { row -> row.batch?.toString()?.trim() }
+                      .findAll { value -> value }
+                      .unique()
+    }
+
+    return [
+        total     : rows.size(),
+        conditions: order.collect { cond ->
+            [name: cond, n: byCond[cond].size(), samples: byCond[cond]]
+        },
+        has_batch : cols.contains('batch'),
+        batches   : batches,
+    ]
+}
+
+def buildRunManifest(design, notices) {
     def from_counts = params.counts != null
 
     def quantification = null
@@ -252,6 +345,11 @@ def buildRunManifest(design) {
         ],
         analysis: [
             entry         : from_counts ? 'count matrix' : 'sequencing reads',
+            // The samplesheet or read glob, and the matrix for a --counts run.
+            // Named so a reader can tell which cohort produced the report.
+            input         : params.input?.toString(),
+            counts        : params.counts?.toString(),
+            library_layout: from_counts ? null : resolveLibraryLayout(params.input),
             aligner       : from_counts ? null : params.aligner,
             quantification: quantification,
             strandedness  : from_counts ? null : params.strandedness,
@@ -259,7 +357,14 @@ def buildRunManifest(design) {
             organism      : params.organism,
             stop_at       : params.stop_at,
             optional      : optional,
+            outdir        : params.outdir?.toString(),
         ],
+        // The experimental design, read from the samplesheet. The report has no
+        // other route to it -- the samplesheet is never staged for rendering.
+        samples: summariseSamples(params.input),
+        // Analyses that were requested and will not run. Empty on a clean run,
+        // and the report renders nothing for an empty list.
+        notices: notices ?: [],
         references: [
             annotation      : resolveReferenceProvenance(params.gtf),
             genome_fasta    : params.genome_fasta?.toString(),
@@ -279,6 +384,19 @@ workflow RNASEQ {
 
     main:
     ch_versions = channel.empty()
+
+    // Notices about analyses that were asked for and will not happen.
+    //
+    // These are the dangerous class of message: the run succeeds, every process
+    // ticks green, and part of what was requested is quietly absent. A failure
+    // announces itself; this does not. Each is logged as a warning *and*
+    // recorded here, so it reaches the report rather than living only in
+    // terminal scrollback that has scrolled away by the time anyone reads the
+    // results.
+    //
+    // Accumulated during workflow construction, which is synchronous, so the
+    // list is complete by the time buildRunManifest() reads it.
+    def notices = []
 
     // Result directories fed to the Quarto analysis report. Each defaults to an
     // empty list and is reassigned to the real channel if that stage runs, so
@@ -379,9 +497,11 @@ workflow RNASEQ {
         else if (params.aligner == 'kallisto') {
             if (!params.kallisto_index) error "Kallisto index not provided via --kallisto_index"
             if (params.strandedness == 'auto') {
-                log.warn "kallisto cannot infer strandedness (it produces no BAM for RSeQC). " +
-                         "Running library-type-agnostic; pass --strandedness forward or reverse " +
-                         "explicitly if your library is stranded."
+                def msg = "kallisto cannot infer strandedness (it produces no BAM for RSeQC). " +
+                          "Running library-type-agnostic; pass --strandedness forward or reverse " +
+                          "explicitly if your library is stranded."
+                log.warn msg
+                notices.add(msg)
             }
             KALLISTO_QUANT( FASTP.out.reads, file(params.kallisto_index) )
             ch_versions = ch_versions.mix(KALLISTO_QUANT.out.versions.first())
@@ -491,8 +611,10 @@ workflow RNASEQ {
             ch_de_counts = ch_featurecounts_results
             run_de = true
             if (params.dtu) {
-                log.warn "--dtu (differential transcript usage) needs a pseudo-aligner; " +
-                         "it has no effect with --aligner ${params.aligner}."
+                def msg = "--dtu (differential transcript usage) needs a pseudo-aligner; " +
+                          "it has no effect with --aligner ${params.aligner}."
+                log.warn msg
+                notices.add(msg)
             }
 
             // Optional: edgeR diffSplice exon-usage test (genome aligners).
@@ -508,7 +630,9 @@ workflow RNASEQ {
                     )
                     ch_versions = ch_versions.mix(DIFFSPLICE.out.versions)
                 } else {
-                    log.warn "--diffsplice needs --gtf for exon-level counting; skipping."
+                    def msg = "--diffsplice needs --gtf for exon-level counting; skipping."
+                    log.warn msg
+                    notices.add(msg)
                 }
             }
         }
@@ -550,8 +674,10 @@ workflow RNASEQ {
                     ch_versions = ch_versions.mix(DIFFSPLICE.out.versions)
                 }
             } else {
-                log.warn "Differential expression for --aligner ${params.aligner} needs --gtf " +
-                         "(transcript-to-gene map); skipping DESeq2/edgeR."
+                def msg = "Differential expression for --aligner ${params.aligner} needs --gtf " +
+                          "(transcript-to-gene map); skipping DESeq2/edgeR."
+                log.warn msg
+                notices.add(msg)
             }
         }
 
@@ -583,7 +709,10 @@ workflow RNASEQ {
         }
     }
     else if (run_level >= 3 && !params.input.endsWith('.csv')) {
-        log.warn "Differential Expression steps skipped because input is not a CSV samplesheet."
+        def msg = "Differential expression was skipped: the input is a file glob, not a CSV " +
+                  "samplesheet, so there are no conditions to contrast."
+        log.warn msg
+        notices.add(msg)
     }
 
     //
@@ -646,7 +775,7 @@ workflow RNASEQ {
         : null
     ch_run_manifest = channel
         .of(groovy.json.JsonOutput.prettyPrint(
-                groovy.json.JsonOutput.toJson(buildRunManifest(manifest_design))))
+                groovy.json.JsonOutput.toJson(buildRunManifest(manifest_design, notices))))
         .collectFile(name: 'run_manifest.json', storeDir: "${params.tracedir}")
         .first()
 
