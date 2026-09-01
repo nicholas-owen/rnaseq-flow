@@ -314,6 +314,15 @@ workflow {
     // Help / typo-detection / required-input checks (may print help and exit).
     checkParameters()
 
+    // --validate_only concerns the samplesheet, which the helper workflows do
+    // not take. Warn rather than fail: the flag is harmless here, but silently
+    // ignoring it would let someone believe a reference download had been
+    // checked over when nothing was.
+    if (params.validate_only && (params.download_refs || params.build_indices)) {
+        log.warn "--validate_only has no effect with --download_refs or --build_indices; " +
+                 "neither takes a samplesheet."
+    }
+
     if (params.download_refs) {
         DOWNLOAD( params.download_species, params.download_source )
     }
@@ -378,7 +387,24 @@ workflow {
         //
         // Run workflow
         //
-        RNASEQ ( ch_reads )
+        if (params.validate_only) {
+            // Validation has already run above, and exits non-zero on any
+            // problem, so reaching this point means the inputs are usable.
+            // Stop here rather than scheduling work: the point of the flag is
+            // to answer "is my samplesheet right?" without waiting for a run.
+            //
+            // A glob input never reaches validateSamplesheet -- there is no
+            // sample or condition column to check -- so say so plainly instead
+            // of implying it passed something.
+            if (!params.counts && !params.input.toString().endsWith('.csv')) {
+                log.warn "--validate_only: the input is a file glob, not a samplesheet, " +
+                         "so there is nothing to validate beyond the read-pair match."
+            }
+            log.info "--validate_only: inputs are valid. No processes were run."
+        }
+        else {
+            RNASEQ ( ch_reads )
+        }
     }
 
     /*

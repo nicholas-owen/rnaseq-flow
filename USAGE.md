@@ -40,6 +40,56 @@ nextflow run main.nf --input samplesheet_test.csv --aligner star \
 `-stub-run` executes the lightweight stub of each process (it just creates
 placeholder output files), which confirms the channel wiring is sound.
 
+### Check a samplesheet before running (`--validate_only`)
+
+A samplesheet problem is cheap to fix and expensive to discover late. Add
+`--validate_only` to any normal run command to validate the inputs and stop
+before a single process is scheduled:
+
+```bash
+nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --validate_only
+```
+
+```
+Samplesheet OK: 6 sample(s), 2 condition(s) [REF:3, NaCl:3]
+--validate_only: inputs are valid. No processes were run.
+```
+
+It runs exactly the validation a real run performs — there is no second set of
+rules to drift out of step — and reports **every** problem at once rather than
+stopping at the first:
+
+- required columns (`sample`, `R1`, `condition`; `R2` when paired-end)
+- empty or duplicated sample ids, empty condition values
+- R1 and R2 paths that do not resolve on disk
+- at least two conditions, and at least two replicates per condition
+- `--design` variables that are not samplesheet columns
+
+```
+Samplesheet validation failed (2 problem(s)):
+  - row 3: duplicate sample id 'ctrl_1'
+  - row 4 (sample 't1'): R1 file not found: reads/MISSING_1.fq.gz
+```
+
+It **exits non-zero when validation fails**, so it works as a gate in a script:
+
+```bash
+nextflow run main.nf --input samplesheet.csv ... --validate_only && sbatch run_real.sh
+```
+
+Two things it does not do. A **file glob** input has no sample or condition
+column, so there is nothing to validate beyond matching read pairs, and the flag
+says so rather than implying otherwise. And it has **no effect with
+`--download_refs` or `--build_indices`**, which take no samplesheet — it warns
+instead of passing silently, so nobody believes a reference download was checked
+over when it was not.
+
+> This is the check worth running before submitting to a cluster or copying into
+> a secure environment, where the round trip to discover a typo'd path is
+> measured in hours rather than seconds.
+
 ### Discovering parameters
 
 ```bash
@@ -689,4 +739,5 @@ Execution reports are written to `<outdir>/pipeline_info/` (timeline, trace,
 resource report) — inspect these to find which process failed and why.
 
 To validate pipeline structure after editing it, re-run with `-stub-run`
-(see §1).
+(see §1). To check a samplesheet without running anything, add
+`--validate_only` — it reports every problem at once and schedules no work.

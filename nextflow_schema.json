@@ -256,6 +256,12 @@
           "type": "boolean",
           "default": false,
           "description": "Display the parameter help message and exit."
+        },
+        "validate_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "Validate the samplesheet and inputs, then exit without running the pipeline.",
+          "help_text": "Runs the same validation the pipeline performs at launch -- required columns, duplicate sample ids, empty values, FASTQ paths that resolve, at least two conditions and at least two replicates per condition -- reports every problem at once, and stops before any process is scheduled. Exits non-zero when validation fails, so it can gate a script. Has no effect with --download_refs or --build_indices, which take no samplesheet."
         }
       }
     }

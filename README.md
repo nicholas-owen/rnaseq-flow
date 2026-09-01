@@ -326,7 +326,19 @@ silently ignored.
 | `--max_memory` | `128.GB` | Per-process memory ceiling |
 | `--max_time` | `240.h` | Per-process wall-time ceiling |
 
+### Generic
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--help` | `false` | Print every parameter, grouped with defaults, and exit |
+| `--validate_only` | `false` | Validate the samplesheet and inputs, then exit without running anything |
+
 \* "Yes*" = required only when the relevant tool or mode is used.
+
+> **Check the samplesheet first.** `--validate_only` runs the same validation a
+> real run performs, reports every problem at once, and stops before any process
+> is scheduled — worth a few seconds before submitting to a cluster. See
+> [USAGE.md](USAGE.md#check-a-samplesheet-before-running---validate_only).
 
 ---
 

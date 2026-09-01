@@ -9,6 +9,22 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`--validate_only`** — validate the samplesheet and inputs, then exit before
+  any process is scheduled. It calls the validation a normal run already
+  performs, so there is no second set of rules to drift out of step: required
+  columns, empty or duplicated sample ids, R1/R2 paths that resolve, at least
+  two conditions with at least two replicates each, and `--design` variables
+  that exist as columns. Every problem is reported at once, and it exits
+  non-zero on failure so it can gate a script.
+
+  A samplesheet problem is cheap to fix and expensive to find late, and the
+  equivalent check previously existed only as `-stub-run`, which nobody finds
+  without reading the docs closely. It warns rather than passing silently when
+  given a file glob (no columns to check) or `--download_refs` /
+  `--build_indices` (no samplesheet at all).
+
+### Added
+
 - **A machine-readable provenance record for downloaded reference sets.**
   `--download_refs` now writes `reference_metadata.json` beside the reference
   files, alongside the existing human-readable `download_log.txt`: source,
