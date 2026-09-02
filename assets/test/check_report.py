@@ -87,6 +87,32 @@ def check_non_ascii(path, chunks=None):
     return bad
 
 
+def gate_exprs(src):
+    """Every chunk's complete `eval=` expression.
+
+    Scans forward from each `eval=` tracking bracket depth, so the expression
+    ends at the comma or closing brace that ends the option rather than at the
+    first punctuation. `eval=(a && b), fig.width=9` yields "(a && b)".
+    """
+    out = []
+    for m in re.finditer(r"eval\s*=\s*", src):
+        i = m.end()
+        depth = 0
+        while i < len(src):
+            c = src[i]
+            if c in "([":
+                depth += 1
+            elif c in ")]":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif c == "\n" or (depth == 0 and c in ",}"):
+                break
+            i += 1
+        out.append(src[m.end():i])
+    return out
+
+
 def check_heredocs():
     """Every `<<-` heredoc terminator must survive Nextflow's stripIndent().
 
@@ -203,7 +229,15 @@ def main():
 
     # ---- 4. chunk gates ----------------------------------------------------
     print("\nchunk eval= gates")
-    gates = set(re.findall(r"eval\s*=\s*!?\(?([A-Za-z_][A-Za-z0-9_.]*)", src))
+    # Every name in the gate, not just the first. A compound gate such as
+    # eval=(have_rmats && rmats_ok) hides its second condition from a regex that
+    # stops at the first identifier, which is exactly where an undefined gate
+    # would sit: the outer have_* is always defined in setup, the inner flag is
+    # the one that gets forgotten. A chunk gated on an undefined variable does
+    # not error, it silently never runs.
+    gates = set()
+    for expr in gate_exprs(src):
+        gates.update(re.findall(r"[A-Za-z_][A-Za-z0-9_.]*", expr))
     defined = set(re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*<-", src, re.M))
     missing = sorted(g for g in gates if g not in defined and g not in {"TRUE", "FALSE"})
     report(f"all {len(gates)} gates resolve to a defined variable", not missing,
