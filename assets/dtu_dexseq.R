@@ -102,7 +102,10 @@ message(sprintf("DTU input: %d transcripts across %d multi-transcript genes.",
 
 # ---- DEXSeq DTU test ------------------------------------------------------
 condition <- factor(samples$condition)
-if ("REF" %in% levels(condition)) condition <- relevel(condition, ref = "REF")
+# Baseline level from --reference_level (default "REF"); see deseq2.R for why it
+# arrives as an environment variable rather than an argument.
+REF_LEVEL <- Sys.getenv("RNASEQ_FLOW_REFERENCE_LEVEL", "REF")
+if (REF_LEVEL %in% levels(condition)) condition <- relevel(condition, ref = REF_LEVEL)
 sampleData <- data.frame(condition = condition, row.names = samples$sample)
 
 dxd <- DEXSeqDataSet(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static checks for the Quarto analysis report and the R analysis scripts.
+"""Static checks for the analysis report, the R scripts and the Nextflow modules.
 
     python3 assets/test/check_report.py
 
@@ -28,6 +28,12 @@ that actually shipped.
 
   4. Chunk gates.  Every `eval=` option must name a variable the document
      defines, or the chunk silently never runs.
+
+  5. Module heredocs.  Nextflow strips a script block's COMMON leading
+     whitespace, so one line at column 0 leaves `<<-END_VERSIONS` unable to
+     match its terminator. versions.yml then comes out malformed, the aggregated
+     software_versions.yml becomes invalid YAML, and MULTIQC fails a long way
+     from the cause. Shipped twice.
 """
 import os
 import re
@@ -39,6 +45,7 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 QMD = os.path.join(ROOT, "assets", "analysis_report.qmd")
 R_SCRIPTS = os.path.join(ROOT, "assets")
+MODULES = os.path.join(ROOT, "modules", "local")
 
 failures = []
 
@@ -78,6 +85,92 @@ def check_non_ascii(path, chunks=None):
                 codes = " ".join(f"U+{ord(c):04X} ({c})" for c in chars)
                 bad.append((where, codes, line.strip()[:88]))
     return bad
+
+
+def gate_exprs(src):
+    """Every chunk's complete `eval=` expression.
+
+    Scans forward from each `eval=` tracking bracket depth, so the expression
+    ends at the comma or closing brace that ends the option rather than at the
+    first punctuation. `eval=(a && b), fig.width=9` yields "(a && b)".
+    """
+    out = []
+    for m in re.finditer(r"eval\s*=\s*", src):
+        i = m.end()
+        depth = 0
+        while i < len(src):
+            c = src[i]
+            if c in "([":
+                depth += 1
+            elif c in ")]":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif c == "\n" or (depth == 0 and c in ",}"):
+                break
+            i += 1
+        out.append(src[m.end():i])
+    return out
+
+
+def check_heredocs():
+    """Every `<<-` heredoc terminator must survive Nextflow's stripIndent().
+
+    Nextflow removes the COMMON leading whitespace from a script block. One line
+    at column 0 makes that common indent zero, so nothing is stripped -- and
+    `<<-` strips tabs, not spaces, so a space-indented terminator then never
+    matches. The heredoc runs to EOF: versions.yml comes out indented with a
+    literal END_VERSIONS inside it, the aggregated software_versions.yml becomes
+    invalid YAML, and MULTIQC dies with a ScannerError far from the cause.
+
+    This has shipped twice -- multiqc.nf documents it and works around it by
+    going flush-left throughout, and rmats.nf reintroduced it during the C3 fix.
+    """
+    problems, checked = [], 0
+    if not os.path.isdir(MODULES):
+        return problems, checked
+
+    for fname in sorted(os.listdir(MODULES)):
+        if not fname.endswith(".nf"):
+            continue
+        checked += 1
+        lines = open(os.path.join(MODULES, fname), encoding="utf-8").read().split("\n")
+
+        # Collect each triple-quoted script block.
+        blocks, i = [], 0
+        while i < len(lines):
+            if lines[i].strip() == '"""':
+                body, i = [], i + 1
+                while i < len(lines) and lines[i].strip() != '"""':
+                    body.append(lines[i])
+                    i += 1
+                blocks.append(body)
+            i += 1
+
+        for body in blocks:
+            content = [l for l in body if l.strip()]
+            if not content:
+                continue
+            common = min(len(l) - len(l.lstrip()) for l in content)
+            for n, line in enumerate(body):
+                # multiqc.nf's own note about this trap contains the literal
+                # text "<<- strips tabs, not spaces".
+                if line.lstrip().startswith("#"):
+                    continue
+                m = re.search(r"<<-\s*(\w+)", line)
+                if not m:
+                    continue
+                delim = m.group(1)
+                term = next((len(l) - len(l.lstrip())
+                             for l in body[n + 1:] if l.strip() == delim), None)
+                if term is None:
+                    problems.append(f"{fname}: <<-{delim} has no terminator")
+                elif term - common != 0:
+                    problems.append(
+                        f"{fname}: <<-{delim} terminator keeps {term - common} space(s) "
+                        f"after stripIndent (block common indent {common}) -- the heredoc "
+                        f"will not terminate")
+    return problems, checked
 
 
 def main():
@@ -136,11 +229,26 @@ def main():
 
     # ---- 4. chunk gates ----------------------------------------------------
     print("\nchunk eval= gates")
-    gates = set(re.findall(r"eval\s*=\s*!?\(?([A-Za-z_][A-Za-z0-9_.]*)", src))
+    # Every name in the gate, not just the first. A compound gate such as
+    # eval=(have_rmats && rmats_ok) hides its second condition from a regex that
+    # stops at the first identifier, which is exactly where an undefined gate
+    # would sit: the outer have_* is always defined in setup, the inner flag is
+    # the one that gets forgotten. A chunk gated on an undefined variable does
+    # not error, it silently never runs.
+    gates = set()
+    for expr in gate_exprs(src):
+        gates.update(re.findall(r"[A-Za-z_][A-Za-z0-9_.]*", expr))
     defined = set(re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*<-", src, re.M))
     missing = sorted(g for g in gates if g not in defined and g not in {"TRUE", "FALSE"})
     report(f"all {len(gates)} gates resolve to a defined variable", not missing,
            f"-- undefined: {missing}")
+
+    # ---- 5. module heredocs ------------------------------------------------
+    print("\nNextflow module heredocs")
+    hd, n_mod = check_heredocs()
+    report(f"all <<- terminators survive stripIndent ({n_mod} modules)", not hd)
+    for p in hd:
+        print(f"        {p}")
 
     print()
     if failures:

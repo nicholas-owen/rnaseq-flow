@@ -43,6 +43,12 @@ process QUARTO_REPORT {
     path edger_dir        // edger_output/   (or [] when DE did not run)
     path gsea_dir         // gsea_output/    (or [] when GSEA did not run)
     path gprofiler_dir    // gprofiler_output/ (or [] when gProfiler did not run)
+    // rmats_output/ (or [] when rMATS did not run). One subdirectory per
+    // contrast, each holding the ten *.MATS.{JC,JCEC}.txt result files the
+    // splicing section reads. Staged whole rather than filtered to those files:
+    // a `path` input takes the directory as it stands, and the .qmd selects
+    // what it needs by name.
+    path rmats_dir
 
     output:
     path "analysis_report.html", emit: html
@@ -74,8 +80,8 @@ process QUARTO_REPORT {
     export XDG_CACHE_HOME="\$PWD/.cache"
 
     # Render the analysis report. The .qmd discovers multiqc_data.json and the
-    # deseq2/edger/gsea/gprofiler result directories staged alongside it, and
-    # renders whichever sections it finds data for.
+    # deseq2/edger/gsea/gprofiler/rmats result directories staged alongside it,
+    # and renders whichever sections it finds data for.
     quarto render ${qmd_template} --output analysis_report.html
 
     cat <<-END_VERSIONS > versions.yml

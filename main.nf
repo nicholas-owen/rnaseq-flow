@@ -227,6 +227,23 @@ def validateSamplesheet(samplesheet_path) {
         }
     }
 
+    // The baseline condition must exist, when one was named explicitly.
+    //
+    // It is the denominator of every contrast, so it decides which way every
+    // fold change and every PSI difference points. Asking for a level that is
+    // not in the samplesheet is a mistake worth failing on: the analysis scripts
+    // would otherwise fall back to alphabetical order and produce a complete,
+    // plausible set of results oriented against the wrong baseline.
+    //
+    // Only checked when the user named one. Left at the default, an absent
+    // 'REF' keeps the existing behaviour -- the scripts warn and fall back --
+    // because a samplesheet with no REF condition has always been allowed.
+    def ref_level = params.reference_level?.toString()
+    if (ref_level && ref_level != 'REF' && !condition_counts.containsKey(ref_level)) {
+        errors << "--reference_level '${ref_level}' is not a condition in the samplesheet. " +
+                  "Found: ${condition_counts.keySet().sort().join(', ')}"
+    }
+
     // Differential-expression design checks
     def de_msgs = []
     if (condition_counts.size() < 2) {

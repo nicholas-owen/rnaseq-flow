@@ -5,11 +5,71 @@ All notable changes to **rnaseq-flow** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.6.0] - 2026-09-02
+
+Three new capabilities and the first breaking change in the project's history.
+
+**Breaking: rMATS splicing results change sign and directory name.** Output
+directories are now `<condition>_vs_REF` rather than `REF_vs_<condition>`, and
+`IncLevelDifference` is PSI(condition) minus PSI(REF). Splicing results produced
+before this release point the other way, and nothing in the files says which
+convention is in force beyond the directory name, so do not compare results
+across the boundary without checking. Anything scripted against
+`rmats_output/REF_vs_*/` breaks outright, which is the good case. Details under
+Changed below, and in OUTPUTS.md section 11.
+
+Containers are unchanged from 1.5.1, so the offline Singularity bundle published
+for 1.5.1 covers this release as well.
 
 ### Added
 
-- **`--validate_only`** — validate the samplesheet and inputs, then exit before
+- **An alternative-splicing section in the analysis report.** rMATS results were
+  written to `rmats_output/` and appeared nowhere in the document that gets
+  emailed around. The report now stages that directory and reads the
+  `MATS.JC.txt` and `MATS.JCEC.txt` files for every contrast.
+
+  It shows events per type and contrast, a JC-against-JCEC agreement table, a
+  PSI-difference volcano coloured by event type, a stacked bar of significant
+  events, per-replicate PSI for the top 16 events, a JC-against-JCEC concordance
+  scatter, and a searchable results table. The last panel counts genes whose
+  splicing changed while their total expression did not: those are regulated at
+  isoform level and appear nowhere else in the report, because the DE tables miss
+  them by construction and the enrichment sections read from the DESeq2 ranked
+  list.
+
+  Counts are recomputed from the result files rather than read from
+  `summary.txt`, which rMATS builds with an effect-size cutoff of 0 and which
+  therefore reports larger numbers than the `FDR < 0.05`, `|dPSI| > 0.1`
+  criteria in OUTPUTS.md section 11. Two facts the result files cannot show are printed
+  above the results: rMATS is invoked without `--libType`, so a run configured as
+  stranded is flagged as having been analysed unstranded, and a design with fewer
+  than three replicates in any group is flagged because rMATS estimates its
+  among-replicate variance from those observations.
+
+  The per-replicate figure is the reason the section is worth reading at n=3. It
+  shows whether a PSI difference of 0.3 is three replicates tightly grouped or
+  one outlier dragging a mean, which the volcano cannot.
+
+- **`--reference_level`** names the baseline condition, replacing a `REF` string
+  hardcoded twenty times across five scripts. It reaches DESeq2, edgeR, rMATS,
+  DEXSeq and diffSplice, so every contrast in a run is oriented the same way, and
+  it is recorded in the run manifest and shown in the report's Run overview.
+
+  The substance is not configurability but the failure mode. The baseline is the
+  denominator of every contrast, so it decides which way every fold change and
+  PSI difference points. A name that was not in the samplesheet used to fall
+  back to alphabetical order silently, producing a complete and plausible set of
+  results oriented against the wrong condition. **A level named explicitly now
+  stops the run at launch if it is not present**, listing the conditions that
+  are. Leaving the default with no `REF` condition keeps the previous behaviour,
+  since that has always been allowed, but every tool now warns identically rather
+  than some warning and others staying silent.
+
+  It travels to the scripts as an environment variable set from the param, not as
+  an argument: three of the five take a variadic list of count files last, so a
+  positional parameter would have shifted every index.
+
+- **`--validate_only`** validates the samplesheet and inputs, then exits before
   any process is scheduled. It calls the validation a normal run already
   performs, so there is no second set of rules to drift out of step: required
   columns, empty or duplicated sample ids, R1/R2 paths that resolve, at least
@@ -23,8 +83,6 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   given a file glob (no columns to check) or `--download_refs` /
   `--build_indices` (no samplesheet at all).
 
-### Added
-
 - **A machine-readable provenance record for downloaded reference sets.**
   `--download_refs` now writes `reference_metadata.json` beside the reference
   files, alongside the existing human-readable `download_log.txt`: source,
@@ -34,7 +92,7 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
   The download is the only moment some of this can be known. An Ensembl GTF's
   header carries the assembly, the assembly accession and the genebuild date,
-  but not the release it was published in — and the trailing number in the
+  but not the release it was published in, and the trailing number in the
   filename is an annotation version, not the release (release-116 ships
   `Saccharomyces_cerevisiae.R64-1-1.63.gtf.gz`). Recorded at download time and
   kept with the files, a later run can report exactly which reference set it
@@ -42,6 +100,31 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
   Groundwork for surfacing run provenance in the analysis report, where a reader
   of the HTML alone currently cannot tell what was aligned or against what.
+
+### Changed
+
+- **rMATS contrasts are now oriented like every other contrast in the pipeline.**
+  Output directories are named `<condition>_vs_REF` rather than
+  `REF_vs_<condition>`, and `IncLevelDifference` is PSI(condition) minus PSI(REF), so
+  a positive value means higher inclusion in the treatment, matching what a
+  positive `log2FoldChange` means in the DESeq2 and edgeR tables beside it.
+
+  **This inverts the sign of every splicing result relative to earlier
+  releases.** Previously `--b1` was `REF`, so a positive `IncLevelDifference`
+  meant higher inclusion in the control: a reader comparing a positive fold
+  change with a positive PSI difference in the same results directory concluded
+  they agreed when they pointed opposite ways. Nothing in the files marked which
+  convention was in force beyond the directory name.
+
+  Two consequences worth planning for. Anything scripted against
+  `rmats_output/REF_vs_*/` breaks, which is the loud failure and the good case.
+  And splicing results generated before this change cannot be compared with
+  results generated after it without accounting for the flip. The file formats
+  are identical and only the sign differs.
+
+  Also aligned: rMATS now warns when no condition is named `REF`, where it
+  previously fell back to alphabetical order silently. `deseq2.R` already warned
+  in that case; the two now behave the same way.
 
 ### Documentation
 
@@ -53,7 +136,8 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   and used with `-profile tre`, which disables Wave and pins the seven
   Conda-declared processes to the bundled images. Covers verification, the
   release pinning, and the point that references and gene sets travel
-  separately — the bundle carries software, not data.
+  separately. The bundle carries software, not data.
+
 
 Roadmap items are tracked in
 [future_improvements.md](future_improvements.md); current candidates include

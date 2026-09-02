@@ -43,7 +43,7 @@ Which directories appear depends on the aligner and options you chose.
 > `bam_to_bigwig/`, `featurecounts/`, `tximport/`) and the MultiQC report are
 > **not** produced. You get the differential-expression outputs onward
 > (`deseq2_output/`, `edger_output/`, and any enrichment), plus a Quarto report
-> whose QC section is omitted. See [USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
+> whose QC section is omitted. See [USAGE.md §4.7](USAGE.md#47-starting-from-a-count-matrix---counts).
 
 ---
 
@@ -298,7 +298,18 @@ Key columns: `term_name`, `source` (GO:BP/MF/CC, KEGG, REACTOME…),
 
 ## 11. Alternative splicing — `rmats_output/`
 
-One sub-directory per condition pair. rMATS reports five event types:
+One sub-directory per condition pair, named `<condition>_vs_REF` to match the
+differential-expression tables, with `REF` as the denominator.
+
+> **Changed after v1.5.1.** Directories were previously named `REF_vs_<condition>`
+> and `IncLevelDifference` carried the opposite sign, so a positive value meant
+> higher inclusion in `REF` — the reverse of what a positive `log2FoldChange`
+> means in the DE tables beside it. **Splicing results produced before this change
+> point the other way**, and the files give no indication of which convention they
+> follow beyond the directory name. Do not compare results across that boundary
+> without checking.
+
+rMATS reports five event types:
 
 | Code | Event |
 |---|---|
@@ -322,7 +333,22 @@ Key columns:
 | `IncLevelDifference` | PSI difference (1 − 2) — the effect size |
 | `PValue`, `FDR` | Significance of the difference |
 
+**Reading the sign.** Condition 1 is the first name in the directory, condition 2
+the second. In `NaCl_vs_REF`, `IncLevelDifference` is PSI(NaCl) − PSI(REF), so a
+**positive value means higher inclusion in NaCl** — the same direction a positive
+`log2FoldChange` means in `deseq2_output/deseq2_results_NaCl_vs_REF.csv`.
+
+PSI is a proportion, so the difference is bounded at ±1. A value of 0.2 means
+twenty percentage points of the transcript pool shifted. It is not a fold change
+and should not be compared to one.
+
 A common cutoff: `FDR < 0.05` and `|IncLevelDifference| > 0.1`.
+
+> **`summary.txt` uses different criteria.** rMATS builds it with an
+> `|IncLevelDifference|` cutoff of **0**, so its `SignificantEvents*` columns
+> count every FDR-significant event regardless of effect size. Those numbers will
+> be larger, often much larger, than the cutoff above produces. Recompute from
+> the `*.MATS.JC.txt` files rather than quoting `summary.txt`.
 
 ---
 
@@ -419,6 +445,18 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
   MDS / heatmap panels, a DESeq2-vs-edgeR agreement table, and searchable
   (DT) DESeq2 / edgeR / GSEA / gProfiler result tables. Sections for stages
   that did not run are simply omitted, so the report adapts to each run.
+
+  Its **Alternative splicing** section reads `rmats_output/` directly and covers
+  the ground described in §11: an events-per-type count recomputed from the
+  `MATS.JC.txt` files rather than taken from `summary.txt`, a JC-against-JCEC
+  agreement table, a PSI-difference volcano coloured by event type, a stacked
+  bar of significant events, per-replicate PSI for the top 16 events, a
+  JC-against-JCEC concordance scatter, and a searchable results table. It ends
+  by counting the genes whose splicing changed while their total expression did
+  not, which the DE tables miss by construction. Two things the result files do
+  not show are stated above the results: rMATS runs without `--libType`, so a
+  stranded run is flagged, and a design with fewer than three replicates per
+  group is flagged as well.
 
 ---
 
