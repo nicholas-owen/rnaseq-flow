@@ -409,6 +409,7 @@ workflow RNASEQ {
     ch_quarto_edger     = channel.value([])
     ch_quarto_gsea      = channel.value([])
     ch_quarto_gprofiler = channel.value([])
+    ch_quarto_rmats     = channel.value([])
 
     // Count-matrix entry: when --counts is set the pipeline skips QC and
     // alignment entirely and enters at differential expression (Level 3),
@@ -569,6 +570,7 @@ workflow RNASEQ {
                     }
                 RMATS ( file(params.input), ch_rmats_input, file(params.gtf), file("${projectDir}/assets/run_rmats.py") )
                 ch_versions = ch_versions.mix(RMATS.out.versions)
+                ch_quarto_rmats = RMATS.out.results
              }
          
              // FeatureCounts gene counts (input to DESeq2 / edgeR at Level >= 3).
@@ -813,7 +815,8 @@ workflow RNASEQ {
         ch_quarto_deseq2,
         ch_quarto_edger,
         ch_quarto_gsea,
-        ch_quarto_gprofiler
+        ch_quarto_gprofiler,
+        ch_quarto_rmats
     )
     // Single unnamed emit (the strict parser wants the name omitted when there
     // is only one): the accumulated version channel, plus the reporting steps'.

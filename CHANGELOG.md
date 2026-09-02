@@ -9,6 +9,33 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **An alternative-splicing section in the analysis report.** rMATS results were
+  written to `rmats_output/` and appeared nowhere in the document that gets
+  emailed around. The report now stages that directory and reads the
+  `MATS.JC.txt` and `MATS.JCEC.txt` files for every contrast.
+
+  It shows events per type and contrast, a JC-against-JCEC agreement table, a
+  PSI-difference volcano coloured by event type, a stacked bar of significant
+  events, per-replicate PSI for the top 16 events, a JC-against-JCEC concordance
+  scatter, and a searchable results table. The last panel counts genes whose
+  splicing changed while their total expression did not: those are regulated at
+  isoform level and appear nowhere else in the report, because the DE tables miss
+  them by construction and the enrichment sections read from the DESeq2 ranked
+  list.
+
+  Counts are recomputed from the result files rather than read from
+  `summary.txt`, which rMATS builds with an effect-size cutoff of 0 and which
+  therefore reports larger numbers than the `FDR < 0.05`, `|dPSI| > 0.1`
+  criteria in OUTPUTS.md §11. Two facts the result files cannot show are printed
+  above the results: rMATS is invoked without `--libType`, so a run configured as
+  stranded is flagged as having been analysed unstranded, and a design with fewer
+  than three replicates in any group is flagged because rMATS estimates its
+  among-replicate variance from those observations.
+
+  The per-replicate figure is the reason the section is worth reading at n=3. It
+  shows whether a PSI difference of 0.3 is three replicates tightly grouped or
+  one outlier dragging a mean, which the volcano cannot.
+
 - **`--reference_level`** names the baseline condition, replacing a `REF` string
   hardcoded twenty times across five scripts. It reaches DESeq2, edgeR, rMATS,
   DEXSeq and diffSplice, so every contrast in a run is oriented the same way, and

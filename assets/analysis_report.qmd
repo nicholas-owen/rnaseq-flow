@@ -38,6 +38,7 @@ deseq2_dir    <- "deseq2_output"
 edger_dir     <- "edger_output"
 gsea_dir      <- "gsea_output"
 gprofiler_dir <- "gprofiler_output"
+rmats_dir     <- "rmats_output"
 
 list_csvs <- function(d, pat) {
   if (dir.exists(d)) list.files(d, pattern = pat, full.names = TRUE) else character(0)
@@ -47,6 +48,17 @@ deseq2_files    <- list_csvs(deseq2_dir,    "^deseq2_results_.*\\.csv$")
 edger_files     <- list_csvs(edger_dir,     "^edger_results_.*\\.csv$")
 gsea_files      <- list_csvs(gsea_dir,      "^gsea_stats_.*\\.csv$")
 gprofiler_files <- list_csvs(gprofiler_dir, "^gprofiler_(UP|DOWN)_.*\\.csv$")
+
+# rMATS writes one subdirectory per contrast, so its results are found one level
+# down rather than by a flat listing. The pattern is matched against file names
+# only, which keeps the intermediates out: rmats_output/<contrast>/ also holds
+# fromGTF.*, *.raw.input.* and a tmp/ tree, none of which this report reads.
+rmats_files <- if (dir.exists(rmats_dir)) {
+  list.files(rmats_dir, pattern = "^(SE|MXE|A3SS|A5SS|RI)\\.MATS\\.(JC|JCEC)\\.txt$",
+             recursive = TRUE, full.names = TRUE)
+} else {
+  character(0)
+}
 
 have_deseq2    <- length(deseq2_files)    > 0
 # Set in deseq2-load once the table is read. A results directory produced before
@@ -61,6 +73,14 @@ have_heatmap   <- FALSE
 have_edger     <- length(edger_files)     > 0
 have_gsea      <- length(gsea_files)      > 0
 have_gprofiler <- length(gprofiler_files) > 0
+have_rmats     <- length(rmats_files)     > 0
+# Set in rmats-load. A run can produce the result files and still have nothing
+# to plot: rMATS writes all ten files per contrast whether or not any event was
+# testable, and on a small or well-annotated genome they are routinely empty.
+rmats_ok       <- FALSE
+rmats_sig_ok   <- FALSE
+rmats_psi_ok   <- FALSE
+rmats_conc_ok  <- FALSE
 
 mqc_hits <- list.files(pattern = "multiqc_data.json", recursive = TRUE,
                        full.names = TRUE)
@@ -174,6 +194,17 @@ LFC_CUT        <- 1      # |log2 fold change| cutoff (a 2-fold change)
 MAX_TABLE_ROWS <- 1000   # cap on rows shown in an interactive results table
 MAX_NS_POINTS  <- 8000   # cap on non-significant points drawn per volcano
 
+# Splicing thresholds. The effect-size filter is not a matter of taste here:
+# assets/run_rmats.py passes no --cstat, so rMATS tests against its default null
+# of |dPSI| <= 0.0001. A significant FDR on its own therefore means the two
+# groups' inclusion levels differ by more than 0.01%, which is a statement about
+# detectability rather than about biology, and the magnitude filter has to be
+# applied afterwards. 0.1 is convention rather than a derived optimum; the rMATS
+# authors used 0.05 in their own analysis (Shen et al., PNAS 2014).
+PSI_FDR_CUT    <- 0.05   # rMATS FDR cutoff
+DPSI_CUT       <- 0.1    # |IncLevelDifference|, a 10 percentage-point PSI shift
+MAX_PSI_EVENTS <- 16     # events shown in the per-replicate PSI figure
+
 # ---- Helpers ---------------------------------------------------------------
 # Read every per-contrast DE CSV into one long data frame; the contrast label
 # is recovered from the file name (DE scripts name files <prefix><contrast>.csv).
@@ -215,6 +246,82 @@ repro_csv <- function(dir, name) {
     }
   }
   NULL
+}
+
+# ---- rMATS helpers ---------------------------------------------------------
+RMATS_EVENTS <- c("SE", "MXE", "A3SS", "A5SS", "RI")
+# Donor and acceptor rather than 5' and 3'. The two name the same sites, and the
+# apostrophe does not survive the trip to HTML: Pandoc's smart quotes turn it
+# into a right single quotation mark, so the table read "Alternative 3' splice
+# site" with a curly quote where a prime belongs. The code is kept in the label
+# so this table and the volcano's legend, which is keyed by code, line up.
+RMATS_LABELS <- c(SE   = "Skipped exon (SE)",
+                  MXE  = "Mutually exclusive exons (MXE)",
+                  A3SS = "Alternative acceptor site (A3SS)",
+                  A5SS = "Alternative donor site (A5SS)",
+                  RI   = "Retained intron (RI)")
+
+# The five event types carry different coordinate columns: an MXE row describes
+# two competing exons, an A3SS row a pair of alternative acceptor sites. So the
+# files cannot simply be stacked, and only the columns common to all five are
+# kept. That set covers everything this section uses; the coordinates are left
+# in the result files, where a reader following up an event needs them anyway.
+RMATS_KEEP <- c("ID", "GeneID", "geneSymbol", "chr", "strand",
+                "IJC_SAMPLE_1", "SJC_SAMPLE_1", "IJC_SAMPLE_2", "SJC_SAMPLE_2",
+                "IncFormLen", "SkipFormLen", "PValue", "FDR",
+                "IncLevel1", "IncLevel2", "IncLevelDifference")
+
+# rMATS packs the per-replicate values into one comma-separated field, writing
+# NA for a replicate with no reads spanning the event (a real yeast run gives
+# IncLevel2 = "1.0,NA,1.0"). Both helpers drop those rather than propagating
+# them, so an event measured in two of three replicates still yields a mean.
+csv_values <- function(x) {
+  lapply(strsplit(as.character(x), ",", fixed = TRUE),
+         function(v) suppressWarnings(as.numeric(v)))
+}
+csv_mean <- function(x) {
+  vapply(csv_values(x),
+         function(v) if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE),
+         numeric(1))
+}
+csv_sum <- function(x) {
+  vapply(csv_values(x), function(v) sum(v, na.rm = TRUE), numeric(1))
+}
+
+# run_rmats.py names each contrast directory <condition>_vs_<reference>, and
+# --b1 is the first of the two. That is the whole basis for the sign of
+# IncLevelDifference, so both group names are read back from the directory
+# rather than assumed from the samplesheet order.
+rmats_g1 <- function(x) sub("_vs_.*$", "", x)
+rmats_g2 <- function(x) sub("^.*_vs_", "", x)
+
+# rMATS carries the GTF's gene symbol where the annotation has one and repeats
+# the gene id where it does not. read.delim turns a literal "NA" into a missing
+# value, so both cases fall back to the id rather than labelling a point "NA".
+rmats_gene <- function(sym, id) ifelse(is.na(sym) | !nzchar(sym), id, sym)
+
+# Read every *.MATS.{JC,JCEC}.txt into one long frame keyed by contrast, event
+# type and counting mode. A file rMATS wrote with a header and no rows is not an
+# error: it means no event of that type was testable.
+read_rmats <- function(files) {
+  if (!length(files)) return(NULL)
+  parts <- strsplit(basename(files), ".", fixed = TRUE)
+  bind_rows(lapply(seq_along(files), function(i) {
+    d <- tryCatch(read.delim(files[i], stringsAsFactors = FALSE),
+                  error = function(e) NULL)
+    if (is.null(d) || !nrow(d)) return(NULL)
+    # A column the installed rMATS did not write is filled rather than dropped,
+    # so a version change degrades one panel instead of failing the render.
+    for (cn in setdiff(RMATS_KEEP, names(d))) d[[cn]] <- NA
+    d <- d[, RMATS_KEEP]
+    for (cn in c("PValue", "FDR", "IncLevelDifference")) {
+      d[[cn]] <- suppressWarnings(as.numeric(d[[cn]]))
+    }
+    d$event_type <- parts[[i]][1]
+    d$count_mode <- parts[[i]][3]
+    d$contrast   <- basename(dirname(files[i]))
+    d
+  }))
 }
 
 # An interactive table with consistent defaults.
@@ -555,6 +662,7 @@ if (have_deseq2 || have_edger) {
   callers <- c(if (have_deseq2) "DESeq2", if (have_edger) "edgeR")
   level <- c(level, paste0("Differential expression (", paste(callers, collapse = ", "), ")"))
 }
+if (have_rmats)     level <- c(level, "Alternative splicing (rMATS)")
 if (have_gsea)      level <- c(level, "GSEA")
 if (have_gprofiler) level <- c(level, "gProfiler")
 opt <- unlist(manifest$analysis$optional)
@@ -1296,6 +1404,510 @@ d_sig %>% count(contrast, name = "DESeq2") %>%
                                "confidence calls."))
 ```
 
+# Alternative splicing
+
+rMATS tests one local splicing choice at a time: whether an exon is skipped, an
+intron retained, one of two splice sites used, or one of two mutually exclusive
+exons chosen. It reports PSI, the fraction of transcripts at that locus that
+include the alternative element after correcting for the two isoforms' effective
+lengths. PSI is a proportion, so it is bounded, and a difference of 0.2 means
+twenty percentage points of the transcript pool switched. It cannot be read as,
+or compared with, a fold change.
+
+```{r rmats-note, results="asis"}
+if (!have_rmats) {
+  cat("\n*No splicing results were produced. rMATS runs on a CSV samplesheet",
+      "with STAR or HISAT2 at analysis level 4 or above, so it is skipped by",
+      "`--stop_at preQC/postQC/DE`, by a pseudo-aligner, and by a `--counts`",
+      "run.*\n")
+}
+```
+
+```{r rmats-load, eval=have_rmats, include=FALSE}
+rmats <- read_rmats(rmats_files)
+
+if (!is.null(rmats) && nrow(rmats)) {
+  rmats <- rmats %>%
+    mutate(
+      event_label = unname(RMATS_LABELS[event_type]),
+      gene        = rmats_gene(geneSymbol, GeneID),
+      group1      = rmats_g1(contrast),
+      group2      = rmats_g2(contrast),
+      psi_1       = csv_mean(IncLevel1),
+      psi_2       = csv_mean(IncLevel2),
+      # Total junction reads behind each group's estimate. The single most
+      # useful number for judging whether an event is worth believing, and it
+      # is not otherwise visible anywhere in this report.
+      reads_1     = csv_sum(IJC_SAMPLE_1) + csv_sum(SJC_SAMPLE_1),
+      reads_2     = csv_sum(IJC_SAMPLE_2) + csv_sum(SJC_SAMPLE_2),
+      min_reads   = pmin(reads_1, reads_2),
+      significant = !is.na(FDR) & !is.na(IncLevelDifference) &
+                    FDR < PSI_FDR_CUT & abs(IncLevelDifference) > DPSI_CUT,
+      direction   = ifelse(IncLevelDifference > 0, "More included", "Less included"),
+      # Stable across the JC and JCEC files: both are derived from the same
+      # fromGTF.<type>.txt event list, so the id identifies the same event in
+      # each. That is what makes the agreement panel below an event-level
+      # comparison rather than a count comparison.
+      event_key   = paste(contrast, event_type, ID, sep = ":"))
+
+  rmats$event_type <- factor(rmats$event_type, levels = RMATS_EVENTS)
+
+  # JC is the default view throughout: a junction read is direct evidence of
+  # which splice was made, where an exon-body read is consistent with inclusion
+  # in any transcript containing that exon, unspliced pre-mRNA included.
+  rmats_jc <- rmats %>% filter(count_mode == "JC")
+
+  rmats_ok     <- nrow(rmats_jc) > 0
+  rmats_sig_ok <- any(rmats_jc$significant, na.rm = TRUE)
+  # The per-replicate figure needs more than one value per group to say
+  # anything the group means do not already say.
+  rmats_psi_ok <- rmats_sig_ok &&
+    any(lengths(csv_values(rmats_jc$IncLevel1[rmats_jc$significant])) > 1)
+  # The concordance scatter reshapes the two counting modes into two columns,
+  # which needs both of them present. A results directory carrying only one
+  # would otherwise fail the reshape rather than skip the figure.
+  rmats_conc_ok <- rmats_ok && all(c("JC", "JCEC") %in% unique(rmats$count_mode))
+}
+
+# Strandedness, read for the notice below. rMATS is invoked without --libType
+# (assets/run_rmats.py), so it runs fr-unstranded whatever the library was.
+rmats_strand <- if (have_manifest) mf("analysis", "strandedness") else NA_character_
+rmats_strand_mismatch <- !is.na(rmats_strand) && rmats_strand != "unstranded"
+
+# Replicate counts, for the low-replication notice. rMATS estimates the
+# among-replicate variance component from these.
+rmats_min_reps <- if (have_samples) {
+  min(vapply(manifest$samples$conditions, function(x) as.integer(x$n), integer(1)))
+} else {
+  NA_integer_
+}
+```
+
+```{r rmats-caveats, eval=have_rmats, results="asis"}
+# Two facts that change how everything below should be read, placed above the
+# results rather than in a caption under them. Both are properties of how this
+# pipeline invokes rMATS, so neither is visible in the output files.
+caveats <- character(0)
+
+if (rmats_strand_mismatch) {
+  caveats <- c(caveats, paste0(
+    "The run was configured as <code>", esc(rmats_strand), "</code>, but rMATS ",
+    "was invoked without <code>--libType</code> and so treated every library as ",
+    "unstranded. featureCounts used the strand information and rMATS did not, ",
+    "which can cost specificity where genes overlap on opposite strands."))
+}
+
+if (!is.na(rmats_min_reps) && rmats_min_reps < 3) {
+  caveats <- c(caveats, paste0(
+    "The smallest group has <strong>", rmats_min_reps, " replicate",
+    if (rmats_min_reps == 1) "" else "s", "</strong>. rMATS models variability ",
+    "among replicates, so with fewer than three that variance is estimated from ",
+    "one or two observations and the FDR is a weakly-informed estimate rather ",
+    "than a calibrated error rate. Read the per-replicate PSI figure before ",
+    "trusting any individual call."))
+}
+
+if (length(caveats)) {
+  cat("<div class='rf-notices'>",
+      "<div class='rf-notices-head'>How to read this section</div>",
+      "<ul>",
+      paste(vapply(caveats, function(n) paste0("<li>", n, "</li>"), character(1)),
+            collapse = ""),
+      "</ul>",
+      "<p>Both are properties of how the pipeline ran rMATS, not of the result",
+      " files, so nothing downstream of here shows them.</p>",
+      "</div>\n", sep = "")
+}
+```
+
+```{r rmats-orientation, eval=(have_rmats && rmats_ok), results="asis"}
+# The sign convention, written out against this run's own contrast names. It is
+# the one thing a reader will get backwards, and getting it backwards inverts
+# every conclusion in the section.
+ex   <- sort(unique(rmats_jc$contrast))[1]
+g1   <- rmats_g1(ex)
+g2   <- rmats_g2(ex)
+cat("<p class='rf-note'><strong>Sign convention.</strong> ",
+    "<code>IncLevelDifference</code> is mean PSI in the first group of the ",
+    "contrast minus mean PSI in the second. For <code>", esc(ex), "</code> that ",
+    "is PSI(", esc(g1), ") minus PSI(", esc(g2), "), so a positive value means ",
+    "the element is <strong>more included in ", esc(g1), "</strong>. That is the ",
+    "same orientation as the log2 fold changes above: both are oriented against ",
+    "<code>", esc(g2), "</code> as the baseline.</p>\n", sep = "")
+```
+
+```{r rmats-empty, eval=(have_rmats && !rmats_ok), results="asis"}
+cat("\n*rMATS ran and wrote its result files, but no splicing event was",
+    "testable in any contrast. That is the normal outcome for a compact genome",
+    "with little annotated alternative splicing, and for a subsetted test",
+    "dataset where few junctions carry enough reads.*\n")
+```
+
+```{r rmats-h-counts, eval=have_rmats, results="asis"}
+# Every subsection heading below is emitted from a gated chunk rather than
+# written as markdown. rMATS does not run on a pseudo-aligner, a --counts run or
+# a --stop_at below level 4, which are common; a plain markdown heading would
+# leave those reports with eight numbered subsections and nothing under any of
+# them. Output marked asis is parsed as markdown, so these are real headings and
+# reach the table of contents like any other.
+cat("\n## Events per type and contrast\n")
+```
+
+```{r rmats-summary, eval=(have_rmats && rmats_ok)}
+# Recomputed from the result files rather than read from summary.txt. rMATS
+# builds that file with an effect-size cutoff of zero, so its
+# SignificantEventsJC column counts every FDR-significant event however small
+# the shift, and is usually far larger than the count under the criteria this
+# report and OUTPUTS.md both document.
+#
+# Event is a factor over all five labels and .drop = FALSE keeps its empty
+# levels, so a type with nothing testable shows as a row of zeros rather than
+# vanishing from the table. On a compact genome that is most of them, and
+# "tested 0" is the useful statement.
+rmats_jc %>%
+  mutate(Event = factor(event_label, levels = unname(RMATS_LABELS))) %>%
+  group_by(Contrast = contrast, Event, .drop = FALSE) %>%
+  summarise(Tested          = n(),
+            `More included` = sum(significant & IncLevelDifference > 0, na.rm = TRUE),
+            `Less included` = sum(significant & IncLevelDifference < 0, na.rm = TRUE),
+            Significant     = sum(significant, na.rm = TRUE),
+            .groups = "drop") %>%
+  arrange(Contrast, Event) %>%
+  knitr::kable(caption = sprintf(paste(
+    "Junction-count (JC) events. An event is significant at FDR &lt; %.2f and",
+    "|&Delta;PSI| &gt; %g. Each event type is corrected separately by rMATS, in",
+    "its own file, so the Significant column is the union of five independently",
+    "corrected families rather than one FDR-controlled set."),
+    PSI_FDR_CUT, DPSI_CUT))
+```
+
+```{r rmats-h-agree, eval=have_rmats, results="asis"}
+cat("\n## JC and JCEC agreement\n")
+```
+
+JC counts only reads that span a junction, which is direct evidence of the
+splice that was made. JCEC adds reads landing in the exon body, which raises
+power but also counts reads from unspliced pre-mRNA and from any other
+transcript containing that exon. Events called in both modes are the ones to
+take forward; where the two disagree, JC is the more specific call.
+
+Retained intron is the honest exception. For an RI event the exon body is the
+intron, so the extra reads JCEC counts are the quantity in question rather than
+a contaminant. RI is also where rMATS agrees least with other tools: Muller et
+al. found correlation below 60% for retained intron while the other four event
+types agreed well ([BMC Bioinformatics
+2021](https://doi.org/10.1186/s12859-021-04263-9)).
+
+```{r rmats-agreement, eval=(have_rmats && rmats_ok)}
+# The direct analogue of the DESeq2-vs-edgeR panel above, and it earns its place
+# for the same reason: it turns two parallel analyses into one statement about
+# confidence. Matched on event_key, so this is an event-level overlap rather
+# than a comparison of two counts.
+jc_sig   <- rmats %>% filter(count_mode == "JC",   significant) %>% distinct(contrast, event_key)
+jcec_sig <- rmats %>% filter(count_mode == "JCEC", significant) %>% distinct(contrast, event_key)
+
+rmats %>% distinct(contrast) %>%
+  rename(Contrast = contrast) %>%
+  left_join(jc_sig   %>% count(contrast, name = "JC"),   by = c("Contrast" = "contrast")) %>%
+  left_join(jcec_sig %>% count(contrast, name = "JCEC"), by = c("Contrast" = "contrast")) %>%
+  left_join(inner_join(jc_sig, jcec_sig, by = c("contrast", "event_key")) %>%
+              count(contrast, name = "Both"), by = c("Contrast" = "contrast")) %>%
+  mutate(across(c(JC, JCEC, Both), ~ tidyr::replace_na(., 0L))) %>%
+  knitr::kable(caption = paste(
+    "Significant events under each counting mode and the overlap by event",
+    "identity. Events in 'Both' are the highest-confidence calls."))
+```
+
+```{r rmats-h-volcano, eval=have_rmats, results="asis"}
+cat("\n## Volcano\n")
+```
+
+```{r rmats-volcano-note, eval=(have_rmats && rmats_ok), results="asis"}
+cat("\nEach point is one splicing event. Colour is the event type rather than",
+    "the direction, which the x axis already shows. The x axis is fixed to the",
+    "full range PSI can take: unlike a log2 fold change, a difference of",
+    "proportions is bounded at plus or minus one, and autoscaling would let a",
+    "0.15 shift fill the panel.\n")
+```
+
+```{r rmats-volcano, eval=(have_rmats && rmats_ok), fig.width=9, fig.height=6}
+vd <- rmats_jc %>% filter(!is.na(PValue), !is.na(IncLevelDifference))
+ns  <- vd %>% filter(!significant)
+sig <- vd %>% filter(significant)
+if (nrow(ns) > MAX_NS_POINTS) ns <- ns[sample(nrow(ns), MAX_NS_POINTS), ]
+vd <- bind_rows(sig, ns)
+
+p <- ggplot(vd, aes(IncLevelDifference, -log10(PValue), colour = event_type,
+                    text = paste0(gene,
+                                  "<br>", event_label,
+                                  "<br>PSI difference: ", round(IncLevelDifference, 3),
+                                  "<br>FDR: ", signif(FDR, 3),
+                                  "<br>junction reads: ", reads_1, " vs ", reads_2))) +
+  geom_point(size = 0.9, alpha = 0.7) +
+  facet_wrap(~ contrast, ncol = 2) +
+  geom_vline(xintercept = c(-DPSI_CUT, DPSI_CUT), linetype = "dashed",
+             colour = "#868e96", linewidth = 0.3) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  scale_colour_manual(values = c("SE" = "#c2255c", "MXE" = "#1c7ed6",
+                                 "A3SS" = "#0ca678", "A5SS" = "#f08c00",
+                                 "RI" = "#7048e8"), drop = FALSE) +
+  labs(x = "PSI difference (first group minus second)",
+       y = "-log10 p-value", colour = NULL) +
+  theme_bw(base_size = 11)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r rmats-h-types, eval=have_rmats, results="asis"}
+cat("\n## Which events changed\n")
+```
+
+```{r rmats-types-note, eval=(have_rmats && !rmats_sig_ok), results="asis"}
+cat("\n*No event passed both thresholds, so there is no distribution to plot.",
+    "The volcano above shows every tested event.*\n")
+```
+
+```{r rmats-types, eval=(have_rmats && rmats_sig_ok), fig.width=8, fig.height=4.5}
+# Deliberately static. Ten to twenty bars carry no per-point identity worth
+# hovering for, and the report should not spend widget weight where a plain
+# figure says the same thing.
+rmats_jc %>%
+  filter(significant) %>%
+  count(contrast, event_label, direction) %>%
+  ggplot(aes(reorder(event_label, n), n, fill = direction)) +
+  geom_col() +
+  facet_wrap(~ contrast, ncol = 2) +
+  coord_flip() +
+  scale_fill_manual(values = c("More included" = "#c2255c",
+                               "Less included" = "#1c7ed6")) +
+  labs(x = NULL, y = "Significant events", fill = NULL) +
+  theme_bw(base_size = 11)
+```
+
+```{r rmats-types-caption, eval=(have_rmats && rmats_sig_ok), results="asis"}
+cat("<p class='rf-note'>The shape of this distribution is diagnostic. A result",
+    "dominated by retained intron with the other four types near zero more often",
+    "reflects RNA quality, intronic signal or library preparation than regulated",
+    "splicing.</p>\n")
+```
+
+```{r rmats-h-psi, eval=have_rmats, results="asis"}
+cat("\n## Per-replicate inclusion\n")
+```
+
+```{r rmats-psi-note, eval=(have_rmats && rmats_ok && !rmats_psi_ok), results="asis"}
+# Covers both reasons the figure can be absent, so the subsection is never a
+# bare heading with nothing under it.
+if (!rmats_sig_ok) {
+  cat("\n*No event passed both thresholds, so there is none to break down by",
+      "replicate.*\n")
+} else {
+  cat("\n*The installed rMATS reported a single inclusion value per group rather",
+      "than one per replicate, so the spread behind each call cannot be shown.*\n")
+}
+```
+
+```{r rmats-psi, eval=(have_rmats && rmats_psi_ok), fig.width=9, fig.height=6}
+# The most honest figure in the section: it answers what the volcano cannot,
+# which is whether a dPSI of 0.3 is three replicates tightly at 0.2 against
+# three at 0.5, or one outlier dragging a mean. At n=3 that distinction is the
+# whole result.
+#
+# Replicate labels come from b1.txt and b2.txt, which run_rmats.py writes in the
+# same order as the values in IncLevel1 and IncLevel2. Reading them back is the
+# published contract; inferring the order from the samplesheet would depend on
+# an implementation detail instead.
+bam_labels <- function(contrast, which_file) {
+  f <- file.path(rmats_dir, contrast, which_file)
+  if (!file.exists(f)) return(character(0))
+  v <- strsplit(trimws(readLines(f, warn = FALSE))[1], ",", fixed = TRUE)[[1]]
+  v <- sub("\\.bam$", "", basename(v))
+  sub("\\.Aligned\\.sortedByCoord\\.out$", "", v)
+}
+
+top <- rmats_jc %>%
+  filter(significant) %>%
+  arrange(FDR, desc(abs(IncLevelDifference))) %>%
+  head(MAX_PSI_EVENTS)
+
+psi_long <- bind_rows(lapply(seq_len(nrow(top)), function(i) {
+  r  <- top[i, ]
+  l1 <- bam_labels(r$contrast, "b1.txt")
+  l2 <- bam_labels(r$contrast, "b2.txt")
+  v1 <- csv_values(r$IncLevel1)[[1]]
+  v2 <- csv_values(r$IncLevel2)[[1]]
+  # Fall back to positional labels if b1.txt is absent or its length disagrees
+  # with the values, rather than pairing a PSI with the wrong sample name.
+  if (length(l1) != length(v1)) l1 <- paste0("rep", seq_along(v1))
+  if (length(l2) != length(v2)) l2 <- paste0("rep", seq_along(v2))
+  data.frame(
+    event  = paste0(r$gene, " (", r$event_type, " ", r$ID, ")"),
+    group  = c(rep(r$group1, length(v1)), rep(r$group2, length(v2))),
+    sample = c(l1, l2),
+    psi    = c(v1, v2),
+    stringsAsFactors = FALSE)
+}))
+psi_long <- psi_long %>% filter(!is.na(psi))
+
+means <- psi_long %>% group_by(event, group) %>%
+  summarise(psi = mean(psi), .groups = "drop")
+
+p <- ggplot(psi_long, aes(group, psi, colour = group,
+                          text = paste0(sample, "<br>PSI: ", round(psi, 3)))) +
+  geom_point(size = 2, alpha = 0.8,
+             position = position_jitter(width = 0.12, height = 0, seed = 1)) +
+  # inherit.aes = FALSE: the point layer's aes carries `text`, which the mean
+  # frame does not have, and inheriting it fails the build rather than the layer.
+  geom_crossbar(data = means, aes(x = group, y = psi, ymin = psi, ymax = psi),
+                width = 0.5, linewidth = 0.3, colour = "#343a40",
+                inherit.aes = FALSE, show.legend = FALSE) +
+  facet_wrap(~ event, ncol = 4, scales = "free_x") +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(x = NULL, y = "PSI (inclusion level)", colour = NULL) +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r rmats-psi-caption, eval=(have_rmats && rmats_psi_ok), results="asis"}
+cat("<p class='rf-note'>One point per replicate, with the group mean marked.",
+    "Events are the top", MAX_PSI_EVENTS, "by FDR. A replicate with no reads",
+    "spanning the event is reported by rMATS as NA and is absent here, so a",
+    "group can show fewer points than it has samples.</p>\n")
+```
+
+```{r rmats-h-conc, eval=have_rmats, results="asis"}
+cat("\n## JC against JCEC\n")
+```
+
+```{r rmats-concordance-note, eval=(have_rmats && rmats_ok && !rmats_conc_ok), results="asis"}
+cat("\n*This comparison needs both counting modes, and only one is present in",
+    "the results directory.*\n")
+```
+
+```{r rmats-concordance, eval=(have_rmats && rmats_conc_ok), fig.width=7, fig.height=6}
+# A specificity check on the section's own primary result. Points off the
+# diagonal are events where the exon-body reads disagree with the junction
+# reads, which are the ones to distrust. Colouring by event type lets the RI
+# cluster, if there is one, become visible without being asserted.
+conc <- rmats %>%
+  select(contrast, event_key, event_type, event_label, gene,
+         count_mode, IncLevelDifference) %>%
+  filter(!is.na(IncLevelDifference)) %>%
+  tidyr::pivot_wider(names_from = count_mode, values_from = IncLevelDifference) %>%
+  filter(!is.na(JC), !is.na(JCEC))
+
+p <- ggplot(conc, aes(JC, JCEC, colour = event_type,
+                      text = paste0(gene,
+                                    "<br>", event_label,
+                                    "<br>JC: ", round(JC, 3),
+                                    "<br>JCEC: ", round(JCEC, 3)))) +
+  geom_abline(slope = 1, intercept = 0, colour = "#868e96", linetype = "dashed",
+              linewidth = 0.3) +
+  geom_point(size = 0.9, alpha = 0.7) +
+  facet_wrap(~ contrast, ncol = 2) +
+  scale_x_continuous(limits = c(-1, 1)) +
+  scale_y_continuous(limits = c(-1, 1)) +
+  scale_colour_manual(values = c("SE" = "#c2255c", "MXE" = "#1c7ed6",
+                                 "A3SS" = "#0ca678", "A5SS" = "#f08c00",
+                                 "RI" = "#7048e8"), drop = FALSE) +
+  labs(x = "PSI difference, junction counts only",
+       y = "PSI difference, junction and exon counts", colour = NULL) +
+  theme_bw(base_size = 11)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r rmats-h-table, eval=have_rmats, results="asis"}
+cat("\n## Results table\n")
+```
+
+```{r rmats-table, eval=(have_rmats && rmats_ok)}
+# One table for all five event types, with Event as a filterable column, rather
+# than five subsections. The coordinates are deliberately left out: they differ
+# per event type, which is what would force the split, and anyone following up a
+# specific event needs the result file itself.
+tbl <- rmats_jc %>%
+  filter(significant) %>%
+  arrange(FDR, desc(abs(IncLevelDifference))) %>%
+  transmute(Contrast = contrast, Gene = gene, `Gene ID` = GeneID,
+            Event = event_type, `Event ID` = ID,
+            `PSI 1` = round(psi_1, 3), `PSI 2` = round(psi_2, 3),
+            `PSI difference` = round(IncLevelDifference, 3),
+            `Reads 1` = reads_1, `Reads 2` = reads_2,
+            PValue, FDR)
+truncated <- nrow(tbl) > MAX_TABLE_ROWS
+if (truncated) tbl <- head(tbl, MAX_TABLE_ROWS)
+cap <- if (truncated) {
+  sprintf("Top %d significant events by FDR (of %d).", MAX_TABLE_ROWS,
+          sum(rmats_jc$significant))
+} else {
+  sprintf(paste("All %d significant JC events (FDR &lt; %.2f, |PSI difference|",
+                "&gt; %g). Groups 1 and 2 are the first and second condition in",
+                "the contrast name; reads are the junction totals behind each",
+                "group's estimate."),
+          nrow(tbl), PSI_FDR_CUT, DPSI_CUT)
+}
+dt <- DT::datatable(tbl, rownames = FALSE, filter = "top", caption = cap,
+                    options = list(pageLength = 10, scrollX = TRUE))
+DT::formatSignif(dt, c("PValue", "FDR"), digits = 3)
+```
+
+```{r rmats-h-overlap, eval=have_rmats, results="asis"}
+cat("\n## Splicing without expression change\n")
+```
+
+```{r rmats-de-overlap-note, eval=(have_rmats && rmats_ok && !(have_deseq2 || have_edger)), results="asis"}
+cat("\n*This comparison needs gene-level differential expression results.*\n")
+```
+
+```{r rmats-de-overlap, eval=(have_rmats && rmats_ok && (have_deseq2 || have_edger))}
+# The most useful line in the section. A gene whose splicing changed but whose
+# total expression did not is regulated at isoform level, and it is invisible
+# everywhere else in this report: the DE tables miss it by construction and the
+# enrichment sections read from the DESeq2 ranked list, so it never reaches
+# them either.
+#
+# Matched on gene identifier alone. rMATS reports the GeneID from the GTF, which
+# is the same identifier the count matrix is built on, but a version suffix or a
+# symbol-based annotation would break the join silently, so the join size is
+# reported rather than assumed.
+de_ref <- if (have_deseq2) {
+  deseq2 %>% transmute(contrast, gene_id, de_sig = significant)
+} else {
+  edger %>% transmute(contrast, gene_id, de_sig = significant)
+}
+de_name <- if (have_deseq2) "DESeq2" else "edgeR"
+
+spl <- rmats_jc %>%
+  filter(significant) %>%
+  distinct(contrast, gene_id = GeneID)
+
+# rMATS quotes gene ids from the GTF, which for Ensembl carry a version suffix
+# the count matrix may not have. Strip it on both sides before matching.
+strip_ver <- function(x) sub("\\.[0-9]+$", "", x)
+spl$gene_id    <- strip_ver(spl$gene_id)
+de_ref$gene_id <- strip_ver(de_ref$gene_id)
+
+j <- spl %>% left_join(de_ref, by = c("contrast", "gene_id"))
+
+tbl <- j %>%
+  group_by(Contrast = contrast) %>%
+  summarise(`Genes with splicing change` = n(),
+            `Also differentially expressed` = sum(de_sig %in% TRUE),
+            `Splicing only` = sum(!(de_sig %in% TRUE) & !is.na(de_sig)),
+            `Not in the DE table` = sum(is.na(de_sig)),
+            .groups = "drop")
+
+knitr::kable(tbl, caption = sprintf(paste(
+  "Genes carrying a significant JC splicing event, against the %s calls for the",
+  "same contrast. 'Splicing only' genes were tested for expression and did not",
+  "change: they are regulated at isoform level and appear nowhere else in this",
+  "report. 'Not in the DE table' means the gene identifier did not match, which",
+  "is a filtering or annotation difference rather than a result."), de_name))
+```
+
 # Functional enrichment
 
 ```{r enrich-note, results="asis"}
@@ -1563,9 +2175,18 @@ for (o in optional) {
        else NA_character_
   if (!is.na(d)) add("Optional analyses", o, "Requested for this run", d)
 }
-if (bam_route) {
+if (have_rmats) {
+  # No longer hedged with "when the run included it": rmats_output/ is staged
+  # into this report now, so its presence is known rather than guessed.
+  # No glob characters in the description: this chunk's output is parsed as
+  # markdown before it reaches the page, so a leading asterisk is taken as an
+  # emphasis marker and silently deleted. "*.MATS.JC.txt" rendered as
+  # ".MATS.JC.txt", which is a filename that does not exist.
   add("Optional analyses", "rMATS",
-      "Alternative splicing events, when the run included it", "rmats_output/")
+      paste("Alternative splicing events, one subdirectory per contrast.",
+            "The MATS.JC.txt and MATS.JCEC.txt files hold the results;",
+            "everything else there is an rMATS intermediate"),
+      "rmats_output/")
 }
 
 add("Provenance", "Run manifest",

@@ -446,6 +446,18 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
   (DT) DESeq2 / edgeR / GSEA / gProfiler result tables. Sections for stages
   that did not run are simply omitted, so the report adapts to each run.
 
+  Its **Alternative splicing** section reads `rmats_output/` directly and covers
+  the ground described in §11: an events-per-type count recomputed from the
+  `MATS.JC.txt` files rather than taken from `summary.txt`, a JC-against-JCEC
+  agreement table, a PSI-difference volcano coloured by event type, a stacked
+  bar of significant events, per-replicate PSI for the top 16 events, a
+  JC-against-JCEC concordance scatter, and a searchable results table. It ends
+  by counting the genes whose splicing changed while their total expression did
+  not, which the DE tables miss by construction. Two things the result files do
+  not show are stated above the results: rMATS runs without `--libType`, so a
+  stranded run is flagged, and a design with fewer than three replicates per
+  group is flagged as well.
+
 ---
 
 ## 17. Execution metadata — `pipeline_info/`
