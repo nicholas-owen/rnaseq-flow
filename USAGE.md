@@ -722,8 +722,10 @@ sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
 **Points worth knowing:**
 
 - **The bundle is pinned to a release.** Container references are resolved per
-  release, so use the 1.5.1 bundle with pipeline 1.5.1. A mismatch surfaces as a
-  process failing to find its image, not as a clear version error.
+  release, so the bundle has to match the pipeline. The 1.5.1 bundle also covers
+  1.6.0: no container reference changed between the two, so there is nothing new
+  to download. A genuine mismatch surfaces as a process failing to find its
+  image, not as a clear version error.
 - **The `tre` profile only works with the bundle.** The seven Conda-built images
   are named locally to it and resolve nowhere online, so the profile is not
   usable on its own.
