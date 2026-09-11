@@ -44,7 +44,7 @@ that download and index them for you.
 For step-by-step run instructions see **[USAGE.md](USAGE.md)**.
 For how to read every output file see **[OUTPUTS.md](OUTPUTS.md)**.
 For a visual map of the workflow, open **[overview.html](overview.html)** in a
-browser — it shows the pipeline as both a DAG and an nf-core-style metro map.
+browser, it shows the pipeline as both a DAG and an nf-core-style metro map.
 
 ---
 
@@ -75,9 +75,9 @@ aligner indices, so you can go from nothing to results with three commands.
 
 ## Requirements
 
-- **Nextflow** `>=25.10.0` (`curl -s https://get.nextflow.io | bash`) — the pipeline uses the strict language (default parser from 25.10; verified on 26.04)
+- **Nextflow** `>=25.10.0` (`curl -s https://get.nextflow.io | bash`). The pipeline uses the strict language (default parser from 25.10; verified on 26.04)
 - **Java** 17–26 (required by Nextflow; 11 has not been supported since Nextflow 24)
-- A **container engine** — Docker *or* Singularity/Apptainer — or **Conda**.
+- A **container engine** (Docker *or* Singularity/Apptainer) or **Conda**.
   Every process declares its own container, so nothing else needs installing.
 
 ---
@@ -85,17 +85,17 @@ aligner indices, so you can go from nothing to results with three commands.
 ## Profiles
 
 **Every command needs a `-profile`.** It tells Nextflow how to obtain and run
-the software for each process — without one, the pipeline expects the tools to
+the software for each process. Without one, the pipeline expects the tools to
 already be on your `PATH`, and they will not be.
 
 | Profile | Use it when |
 |---|---|
 | `docker` | Running locally and you have Docker. The usual choice on a laptop or workstation. |
 | `singularity` | Running on shared or HPC infrastructure, where Docker is normally unavailable. |
-| `conda` | No container engine at all. Slower, and environments are solved at run time — needs network access. |
+| `conda` | No container engine at all. Slower, and environments are solved at run time, which needs network access. |
 | `sge` | Submitting to an SGE cluster (UCL Myriad / Kathleen / Young). Enables Singularity itself, so use it **alone**. |
 | `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. |
-| `tre` | No internet access — a Trusted Research Environment or air-gapped HPC. Ships with the offline container bundle, not the repository (see below). |
+| `tre` | No internet access: a Trusted Research Environment or air-gapped HPC. Ships with the offline container bundle, not the repository (see below). |
 
 Combine them with a comma. The engine and the environment are separate choices:
 
@@ -109,8 +109,8 @@ Combine them with a comma. The engine and the environment are separate choices:
 > **No internet access?** Several containers are provisioned at run time by
 > Nextflow Wave, which contacts an external service, so the pipeline does not run
 > as-is in a TRE or air-gapped environment. A complete offline container bundle
-> is published on Zenodo —
-> [doi.org/10.5281/zenodo.21880329](https://doi.org/10.5281/zenodo.21880329) —
+> is published on Zenodo
+> ([doi.org/10.5281/zenodo.21880329](https://doi.org/10.5281/zenodo.21880329))
 > and used with `-profile tre`. See
 > [USAGE.md](USAGE.md#running-without-internet-access-tre--air-gapped).
 
@@ -153,7 +153,7 @@ nextflow run main.nf \
     -profile docker
 ```
 
-Reference FASTA/GTF files may be supplied **gzipped or uncompressed** — the
+Reference FASTA/GTF files may be supplied **gzipped or uncompressed**: the
 pipeline decompresses them internally where a tool requires it.
 
 ---
@@ -173,9 +173,9 @@ Only one mode runs per invocation.
 
 The `RNASEQ` mode can also start from a **pre-computed gene count matrix** with
 `--counts <matrix>` (plus `--input` for the design and `--gtf` for annotation).
-This skips QC and alignment and enters directly at differential expression —
+This skips QC and alignment and enters directly at differential expression:
 useful for re-analysing published or collaborator count tables (e.g. GEO
-supplementary files). See [Starting from a count matrix](USAGE.md#46-starting-from-a-count-matrix---counts)
+supplementary files). See [Starting from a count matrix](USAGE.md#47-starting-from-a-count-matrix---counts)
 in the usage guide.
 
 ---
@@ -185,35 +185,44 @@ in the usage guide.
 The main `RNASEQ` workflow runs these stages in order. Use `--stop_at` to halt
 early (see [Parameter reference](#parameter-reference)).
 
-1. **Read QC & trimming** — FastQC on raw reads; fastp adapter/quality trimming.
-2. **Alignment / quantification** — STAR or HISAT2 (genome) *or* Salmon or
+1. **Read QC & trimming**: FastQC on raw reads; fastp adapter/quality trimming.
+2. **Alignment / quantification**: STAR or HISAT2 (genome) *or* Salmon or
    Kallisto (pseudo-alignment).
-3. **Post-alignment QC** *(genome aligners only)* — BAM indexing, RSeQC, BigWig
+3. **Post-alignment QC** *(genome aligners only)*: BAM indexing, RSeQC, BigWig
    coverage tracks.
-4. **Gene quantification** — featureCounts gene matrix (STAR/HISAT2), or
+4. **Gene quantification**: featureCounts gene matrix (STAR/HISAT2), or
    tximport summarising Salmon/Kallisto transcript quantification to gene level.
-5. **Differential expression** — DESeq2 and edgeR. Both run, in parallel, on the
+5. **Differential expression**: DESeq2 and edgeR. Both run, in parallel, on the
    same gene counts as two independent callers; neither feeds the other. DESeq2
    log2 fold changes are apeglm-shrunken (`lfcShrink`) for better gene ranking.
-6. **Alternative splicing** — rMATS (genome aligners, CSV samplesheet).
-7. **Fusion detection** — STAR-Fusion (STAR only, needs `--ctat_lib`).
-8. **Isoform switching** — IsoformSwitchAnalyzeR (Salmon only, needs
+6. **Alternative splicing**: rMATS (genome aligners, CSV samplesheet).
+7. **Fusion detection**: STAR-Fusion (STAR only, needs `--ctat_lib`).
+8. **Isoform switching**: IsoformSwitchAnalyzeR (Salmon only, needs
    `--isoform_switch` and `--transcript_fasta`).
-9. **Differential transcript usage** — DEXSeq (Salmon/Kallisto, opt-in with
+9. **Differential transcript usage**: DEXSeq (Salmon/Kallisto, opt-in with
    `--dtu`): tests whether transcript-isoform proportions shift between
    conditions, complementing gene-level DE.
-10. **Differential splicing** — edgeR `diffSpliceDGE` (opt-in with
+10. **Differential splicing**: edgeR `diffSpliceDGE` (opt-in with
     `--diffsplice`): an exon-usage test on STAR/HISAT2 and a transcript-usage
     test on Salmon/Kallisto, each comparing a feature's fold change against its
     gene's overall fold change.
-11. **Functional enrichment** — fgsea (needs `--gmt`) and gprofiler2, run on the
+11. **Functional enrichment**: fgsea (needs `--gmt`) and gprofiler2, run on the
     **DESeq2** results only (edgeR results are not used downstream).
-12. **Reporting** — MultiQC and an interactive Quarto analysis report (QC
-    summary plus DE tables, plotly volcano plots and enrichment summaries).
+12. **Reporting**: MultiQC (`rnaseq-flow_multiqc_report.html`) and an
+    interactive Quarto analysis report: a run overview and sample design read
+    from the run manifest, the QC summary, DE tables with plotly volcano, MA,
+    PCA, MDS and heatmap panels, an alternative splicing section, enrichment
+    plots, and a files-and-locations index.
 
 Every differential-expression result table (DESeq2, edgeR, DTU and diffSplice)
-is annotated with `gene_name` and `gene_biotype` columns parsed from the GTF, so
-the outputs are readable without a separate gene-ID lookup.
+carries `gene_id`, `gene_name` and `gene_biotype` columns parsed from the GTF,
+so the outputs are readable without a separate gene-ID lookup. Every figure is
+written as SVG and PNG, and each analysis directory carries a `reproduce/`
+folder that redraws its figures from the results alone
+([OUTPUTS.md §18](OUTPUTS.md#18-redrawing-and-adapting-figures-reproduce)).
+`pipeline_info/run_manifest.json` records how the run was configured, and
+`reference_metadata.json` beside a downloaded reference set records where it
+came from, so a results directory can say what was aligned against what.
 
 ---
 
@@ -234,10 +243,10 @@ treat_rep2,data/treat_rep2_R1.fastq.gz,data/treat_rep2_R2.fastq.gz,treatment
 | `sample` | Unique sample identifier (used to name all outputs) |
 | `R1` | Path to the R1 (or single-end) FASTQ; absolute or relative to the launch directory |
 | `R2` | Path to the R2 FASTQ. **Leave empty for single-end data** |
-| `condition` | Experimental group — drives the differential-expression design |
+| `condition` | Experimental group. Drives the differential-expression design |
 | `batch` *(optional)* | Batch / covariate label; if present, the DE model becomes `~ batch + condition` automatically |
 
-> **Important — the baseline condition.** One condition is the denominator of
+> **Important: the baseline condition.** One condition is the denominator of
 > every contrast, so it decides which way results point: a positive log2 fold
 > change means "up relative to the baseline", and the same holds for the PSI
 > differences rMATS reports. It defaults to a condition literally named `REF`.
@@ -251,7 +260,7 @@ treat_rep2,data/treat_rep2_R1.fastq.gz,data/treat_rep2_R2.fastq.gz,treatment
 >
 > This reaches DESeq2, edgeR, rMATS, DEXSeq and diffSplice, so every contrast in
 > the run is oriented the same way. **A level you name explicitly must exist in
-> the samplesheet** — the run stops at launch if it does not, rather than
+> the samplesheet**: the run stops at launch if it does not, rather than
 > silently falling back. If you name nothing and no group is called `REF`,
 > conditions are ordered alphabetically, the direction is arbitrary, and each
 > tool says so in the log.
@@ -261,8 +270,8 @@ is present.
 
 > **Validation.** The samplesheet is checked before any work starts, and the
 > run aborts immediately if there is a problem. The checks: required columns
-> present, sample ids unique, every R1/R2 FASTQ exists, and — because DESeq2 and
-> edgeR need them — **at least 2 conditions and at least 2 replicates per
+> present, sample ids unique, every R1/R2 FASTQ exists, and, because DESeq2 and
+> edgeR need them, **at least 2 conditions and at least 2 replicates per
 > condition**. (With `--stop_at preQC`/`postQC`, where no differential
 > expression runs, the condition/replicate rules are downgraded to warnings.)
 
@@ -286,37 +295,37 @@ silently ignored.
 
 | Parameter | Required | Default | Description |
 |---|---|---|---|
-| `--input` | Yes (RNASEQ mode) | — | Path to the CSV samplesheet |
-| `--counts` | No | — | Pre-computed gene count matrix; enters at differential expression, skipping QC/alignment. Requires `--input` and `--gtf` |
+| `--input` | Yes (RNASEQ mode) | - | Path to the CSV samplesheet |
+| `--counts` | No | - | Pre-computed gene count matrix; enters at differential expression, skipping QC/alignment. Requires `--input` and `--gtf` |
 | `--outdir` | No | `results` | Output directory |
 | `--publish_dir_mode` | No | `copy` | How results are published (`copy`, `symlink`, `link`) |
-| `--stop_at` | No | — | Stop after a stage: `preQC`, `postQC`, `DE`, `GSEA` |
+| `--stop_at` | No | - | Stop after a stage: `preQC`, `postQC`, `DE`, `GSEA` |
 
 ### Alignment & references
 
 | Parameter | Required | Default | Description |
 |---|---|---|---|
 | `--aligner` | No | `star` | `star`, `hisat2`, `salmon` or `kallisto` |
-| `--strandedness` | No | `auto` | `auto` (RSeQC infers it for STAR/HISAT2), `unstranded`, `forward`, `reverse` — `forward`/`reverse` also set kallisto `--fr-stranded`/`--rf-stranded` |
-| `--gtf` | Yes* | — | Gene annotation (GTF, may be gzipped) |
-| `--star_index` | Yes* | — | STAR index directory (if `--aligner star`) |
-| `--hisat2_index` | Yes* | — | HISAT2 index directory (if `--aligner hisat2`) |
-| `--salmon_index` | Yes* | — | Salmon index directory (if `--aligner salmon`) |
-| `--kallisto_index` | Yes* | — | Kallisto index file (if `--aligner kallisto`) |
-| `--transcript_fasta` | Yes* | — | Transcript FASTA (isoform switching) |
+| `--strandedness` | No | `auto` | `auto` (RSeQC infers it for STAR/HISAT2), `unstranded`, `forward`, `reverse`. `forward`/`reverse` also set kallisto `--fr-stranded`/`--rf-stranded` |
+| `--gtf` | Yes* | - | Gene annotation (GTF, may be gzipped) |
+| `--star_index` | Yes* | - | STAR index directory (if `--aligner star`) |
+| `--hisat2_index` | Yes* | - | HISAT2 index directory (if `--aligner hisat2`) |
+| `--salmon_index` | Yes* | - | Salmon index directory (if `--aligner salmon`) |
+| `--kallisto_index` | Yes* | - | Kallisto index file (if `--aligner kallisto`) |
+| `--transcript_fasta` | Yes* | - | Transcript FASTA (isoform switching) |
 
 ### Analysis options
 
 | Parameter | Required | Default | Description |
 |---|---|---|---|
 | `--read_length` | No | `100` | Read length passed to rMATS |
-| `--ctat_lib` | No | — | CTAT genome library directory — enables STAR-Fusion |
+| `--ctat_lib` | No | - | CTAT genome library directory (enables STAR-Fusion) |
 | `--isoform_switch` | No | `false` | Enable IsoformSwitchAnalyzeR (needs `--aligner salmon`) |
 | `--dtu` | No | `false` | Enable DEXSeq differential transcript usage (needs `--aligner salmon`/`kallisto` and `--gtf`) |
-| `--diffsplice` | No | `false` | Enable edgeR `diffSpliceDGE` — exon-level usage (STAR/HISAT2) or transcript-level usage (Salmon/Kallisto); needs `--gtf` |
+| `--diffsplice` | No | `false` | Enable edgeR `diffSpliceDGE`: exon-level usage (STAR/HISAT2) or transcript-level usage (Salmon/Kallisto); needs `--gtf` |
 | `--design` | No | auto | DESeq2/edgeR model formula, e.g. `~ batch + condition`. Default: `~ batch + condition` if the samplesheet has a `batch` column, else `~ condition` |
-| `--reference_level` | No | `REF` | Baseline condition — the denominator of every contrast. Decides which way fold changes and PSI differences point |
-| `--gmt` | No | — | GMT gene-set file — enables GSEA |
+| `--reference_level` | No | `REF` | Baseline condition, the denominator of every contrast. Decides which way fold changes and PSI differences point |
+| `--gmt` | No | - | GMT gene-set file (enables GSEA) |
 | `--organism` | No | `hsapiens` | Organism ID for gProfiler / GMT download |
 
 ### Helper workflows
@@ -329,7 +338,7 @@ silently ignored.
 | `--download_release` | No | `current` | Pin an Ensembl release (e.g. `102`) for a reproducible download; output goes to `<outdir>/v<release>` |
 | `--download_gmt` | No | `false` | Also download MSigDB GMT gene sets |
 | `--build_indices` | No | `false` | Run the index-building workflow |
-| `--genome_fasta` | Yes* | — | Genome FASTA for index building |
+| `--genome_fasta` | Yes* | - | Genome FASTA for index building |
 
 ### Resources
 
@@ -350,7 +359,7 @@ silently ignored.
 
 > **Check the samplesheet first.** `--validate_only` runs the same validation a
 > real run performs, reports every problem at once, and stops before any process
-> is scheduled — worth a few seconds before submitting to a cluster. See
+> is scheduled. Worth a few seconds before submitting to a cluster. See
 > [USAGE.md](USAGE.md#check-a-samplesheet-before-running---validate_only).
 
 ---
@@ -378,7 +387,7 @@ silently ignored.
 |---|---|
 | [USAGE.md](USAGE.md) | Detailed run instructions, worked scenarios, troubleshooting |
 | [OUTPUTS.md](OUTPUTS.md) | Every output directory and how to interpret each file |
-| [overview.html](overview.html) | Interactive workflow diagram — DAG and metro-map views (open in a browser) |
+| [overview.html](overview.html) | Interactive workflow diagram: DAG and metro-map views (open in a browser) |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CITATIONS.md](CITATIONS.md) | Every tool with its publication, plus a methods-paragraph template |
 | [CITATIONS.html](CITATIONS.html) | The citations page as a styled HTML report (open in a browser) |
@@ -406,10 +415,11 @@ silently ignored.
 |---|---|
 | `nextflow.config` | Parameters, profiles, manifest, `check_max` resource function |
 | `conf/base.config` | Default CPU/memory/time per process label |
-| `conf/modules.config` | `publishDir` rules — controls what lands in `--outdir` |
-| `nextflow_schema.json` | Parameter schema — powers `--help`, typo detection, and nf-core tooling |
-| `assets/multiqc_config.yml` | MultiQC report config — title, module order, sample-name cleaning, and a custom CSS/logo theme |
-| `assets/analysis_report.qmd` | Quarto template for the interactive analysis report (QC summary, DE tables and plotly volcano plots, enrichment) |
+| `conf/modules.config` | `publishDir` rules: controls what lands in `--outdir` |
+| `nextflow_schema.json` | Parameter schema: powers `--help`, typo detection, and nf-core tooling |
+| `assets/multiqc_config.yml` | MultiQC report config: title, module order, sample-name cleaning, and a custom CSS/logo theme |
+| `assets/analysis_report.qmd` | Quarto template for the interactive analysis report (run overview, sample design, QC, DE, splicing, enrichment, files index) |
+| `assets/test/check_report.py` | Static guard for the report and modules: non-ASCII in emitted R, chunk syntax, `eval=` gates, and module heredocs. Run it after editing the `.qmd` |
 
 ---
 

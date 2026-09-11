@@ -2,39 +2,39 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>rnaseq-flow — introduction</title>
+<title>rnaseq-flow: introduction</title>
 <script src="deck-stage.js"></script>
 <script type="application/json" id="speaker-notes">
 [
-  "Welcome. Today I want to introduce rnaseq-flow — a modular bulk RNA-seq pipeline built in Nextflow DSL2. The talk is roughly ten minutes. I'll cover what the pipeline does, the design choices behind its modularity, walk through each analysis stage, and finish with what you need to actually run it.",
-  "Before we dive in, the headline. rnaseq-flow takes raw FASTQ files and produces differential expression results, splicing tables, fusion calls and pathway enrichment — and aggregates everything into interactive HTML reports. The modularity is the key idea here. You choose the aligner, you choose which analysis stages run, and you choose whether to bring your own references or generate them with the bundled helper workflows. Same entry point, very different runs.",
-  "This is the workflow map — and it's the single most useful picture of the pipeline. The four coloured lines are the four aligner routes — STAR in magenta, HISAT2 in blue, Kallisto in purple, Salmon in orange. They each take their own path through the alignment stage and then converge on common downstream steps — differential expression on the right, enrichment further right. The green branch is the QC and splicing side-track, and the grey line along the bottom is the reporting line where everything funnels into MultiQC and the Quarto report. Only one aligner runs per execution — you'll see this map a few more times in coloured form as we walk the stages.",
-  "Quick word on setup before we get to the science. Four things. First, install Nextflow — it's a one-line curl. Second, make sure you have Java 17 to 26 on the system. Third, pick a container engine — Docker, Singularity, or Conda — and you select it at run time with the profile flag. Every process in the pipeline declares its own container, so no bioinformatics tool needs to be installed by hand. And fourth — and this is a really useful one — every process ships a stub block, so the entire workflow graph can dry-run in seconds with the stub-run flag. That's how you sanity-check the wiring without spending compute.",
-  "main.nf has one entry point that dispatches to one of three workflows depending on the flags you pass. Mode one — download_refs — fetches genome FASTA and GTF from Ensembl, and optionally MSigDB gene sets for GSEA. You can pin a specific Ensembl release for reproducibility. Mode two — build_indices — builds the index for whichever aligner you pick, or all four at once. And mode three is the actual analysis, which kicks off whenever you supply an input samplesheet. Only one mode runs per invocation.",
-  "Stage one of the analysis: read QC. FastQC profiles the raw reads, fastp trims adapters and low-quality bases. Two things worth knowing here. First, you can stop the pipeline early — stop_at preQC halts after FastQC, postQC halts after alignment QC. That's how you do a fast sanity-check on a new dataset without spending compute on differential expression. Second, all the FastQC and fastp metrics get aggregated into the MultiQC report later, so don't read them sample-by-sample.",
-  "Stage two: alignment. This is where the aligner choice matters. STAR is the default genome aligner and unlocks the full downstream stack — featureCounts, RSeQC, rMATS, fusion calling, the lot. HISAT2 is a lighter-weight genome aligner with essentially the same downstream stack minus fusion detection. Salmon and Kallisto are pseudo-aligners — much faster, transcript-level quantification rather than full alignments. Salmon additionally unlocks isoform-switch analysis. One flag — aligner — picks the route, and the downstream stages adapt automatically.",
-  "Stage three is gene quantification — and this is where the two paths converge. If you used STAR or HISAT2, featureCounts counts reads overlapping each gene on the sorted BAM. RSeQC auto-detects strandedness per sample, and that verdict feeds straight into featureCounts — so you don't need to know your library type in advance. If you used Salmon or Kallisto, tximport summarises the transcript-level quantifications to gene level, with proper length-aware normalisation. Either way, you end up with a gene-by-sample count matrix in the exact shape DESeq2 and edgeR want.",
-  "Stage four: differential expression. We run DESeq2 and edgeR in parallel on the same gene counts. They're two independent callers with very similar statistical machinery — DESeq2 uses a Wald test with apeglm log-fold-change shrinkage, edgeR uses a quasi-likelihood GLM throughout. Both honour the same design matrix — covariates and batch effects are handled the same way in both. The key insight here is the cross-check: genes called significant by both are the most robust hits. Only the DESeq2 route continues to functional enrichment downstream — that's the convention.",
-  "Stage 5a — alternative splicing on the genome-aligner route. Two complementary views. rMATS is event-based — it detects skipped exons, mutually-exclusive exons, alternative splice sites, retained introns — five event classes — and reports inclusion-level differences with FDR. edgeR diffSplice is exon-usage based — it asks whether an exon's fold-change between conditions departs from the gene's overall fold-change, which catches differential usage even when total expression looks similar. diffSplice is opt-in via the diffsplice flag.",
-  "Stage 5b — transcript isoforms and fusions. This is the territory where gene-level differential expression can miss things entirely. IsoformSwitchAnalyzeR flags genes whose dominant transcript actually flips between conditions, even when total expression doesn't change. DEXSeq tests differential transcript usage — significant shifts in transcript proportions. And STAR-Fusion detects gene fusions from STAR's chimeric alignments — needs a CTAT library to run. Three independent tools, three windows on the transcriptome that gene-level DE simply can't see.",
-  "Stage 6 is functional enrichment. Two methods, intentionally complementary. GSEA via fgsea runs on the whole ranked DESeq2 gene list — no cutoffs — and reports normalised enrichment scores per pathway. Its sign tells you direction. gProfiler runs over-representation testing on the thresholded significant up- and down-regulated lists separately, against GO terms and pathway databases. Different statistical approaches, often agreeing on the same biology. When they do agree, you can be much more confident in the result.",
-  "Stage seven, the final stage, is reporting. Every run produces three pieces of self-contained HTML. MultiQC is the QC aggregation — one page combining metrics from every QC tool across every sample. Start there. The Quarto report is the analysis narrative — interactive plotly volcano plots, PCA, MDS, heatmaps, searchable result tables, a DESeq2-vs-edgeR agreement table — sections appear only when their data is present, so a smaller run gives a smaller report. And there's a third, the run summary, which I'll come back to in a moment.",
-  "Now usage. Everything starts with this four-column CSV. Sample ID, R1 path, R2 path — empty for single-end data — and condition. The pipeline auto-detects paired versus single-end from whether R2 is present. There's an important convention here: a condition literally named REF is treated as the baseline of every contrast. Name your control group REF and positive log2 fold changes mean up in the other condition. Optional batch column? Add it and the design becomes batch plus condition automatically. The samplesheet is validated before any process is scheduled, so typos and missing files surface immediately.",
-  "Here's a comprehensive STAR run end-to-end. Input samplesheet, STAR aligner with its index, the GTF, stranded library — note this could be set to 'auto' to let RSeQC infer it — the CTAT library for fusion calling, opt-in diffsplice for exon-level splicing, a GMT for GSEA, the output directory, and the Docker profile. That's one invocation, end-to-end. For the Salmon route, swap aligner to salmon, point at the salmon_index and transcript fasta, and add isoform_switch and dtu for the transcript-level analyses. Same samplesheet, same output structure.",
-  "When the run finishes, this is what you get. The two HTML files I keep mentioning — multiqc_report and analysis_report — are your entry points. Then there's a directory per analysis stage. Per-contrast result CSVs from DESeq2 and edgeR carry gene_name and gene_biotype annotation so you can read them without an ID-mapping step. The RSeQC strandedness file per sample is worth knowing about — it's the auto-detected verdict that feeds featureCounts. And run_summary.html under pipeline_info is written automatically at the end of every run, success or failure — it has the resource usage per process and links to everything that was produced.",
-  "What's new in 1.5.0 — this one is about reproducibility, and it is the feature I would most want you to take away. Every figure the pipeline publishes can now be redrawn from the results directory alone. Each output folder gets a reproduce subfolder containing the R objects the plot call consumes, gzipped copies of the tables behind them, and a standalone, commented R script per figure type. Those scripts are written to be adapted, not just run: the contrast, the cutoffs, the colours, the figure dimensions are all named constants in the first twenty lines, so changing a legend does not mean reading a ggplot chain. They work from a terminal or from RStudio, and they need nothing except the files sitting beside them, so you can copy that folder to a collaborator and it still works. Objects are only saved where a plot genuinely needs one, and always the smallest that will do — the small MDS object rather than the whole DGEList, which is about twenty-eight times larger even on a small dataset. GSEA is the case that most needs it, because plotGseaTable needs the gene set membership, and that lives in the GMT, which is an input and was never published with the results. Alongside that, every figure is now written as SVG as well as PNG, and the PNG is at three hundred dpi, so you have a vector copy for publication. The analysis report is largely interactive now — PCA, MDS, the heatmap with dendrograms, volcano, MA and the enrichment plots are all plotly widgets you can hover and zoom, with the static copies still published as the fallback. There are new panels too: a shrinkage before-and-after, so you can see how much apeglm actually moved your fold changes, and dot plots for GSEA and gProfiler, which previously only appeared as tables. On the fixes: MultiQC's General Statistics table was rendering blank — our own report theme was painting over cells that MultiQC draws at negative z-index — and separately the three QC tools each named samples differently, so six samples were showing up as twenty-four mostly empty rows. That is reconciled at display time rather than by renaming the reads, deliberately, because the accession in the published filename is what ties your results back to the archive. And software versions now actually reach the report: they were being collected and then silently dropped, so you saw two tools where there are seventeen.",
-  "Before that, 1.4.3 — that release was about the gene sets. The headline is a bug that had been sitting there quietly: the download_gmt step asked conda for a package called r-msigdbr from the bioconda channel, and msigdbr is a CRAN package that has never existed in bioconda. So the environment could never be solved and that step could never run — it's conda-forge now. The same wrong assumption, that msigdbr was a Bioconductor package, had also produced a BiocManager install call inside the script as a fallback, which couldn't have worked either; that's gone, and the environment is the process definition's job rather than something a running container installs for itself. While fixing the channel we took the chance to upgrade from seven point five point one to twenty-six point one, so you get MSigDB twenty twenty-six point one gene sets instead of a twenty twenty-two vintage — for human that's fifty hallmark sets, seven and a half thousand curated sets, sixteen thousand ontology sets. That needed an API migration, because msigdbr version ten renamed the category argument to collection and the gs underscore subcat column to gs underscore subcollection. Two smaller fixes fell out of actually testing it: passing a scientific name like Danio rerio to the organism flag was always rejected, because the resolver lower-cased its input and then handed back the lower-cased version; and the script used to log an error per collection, then print 'Download complete' and exit zero having written nothing at all. One thing to be aware of operationally: from msigdbr twenty-four the gene sets are fetched over the network on first use rather than being bundled in the package, so this step now needs internet access wherever it runs. On a cluster whose compute nodes have no outbound route, run the download somewhere that does and pass the file in with the gmt flag afterwards.",
-  "Before that, 1.4.2 — that one was about running the pipeline on a cluster rather than on a workstation. There's a new sge profile, tuned for the UCL Research Computing clusters, derived from the nf-core Myriad config by Chris Wyatt and Fernando Duarte. Three things it gets right that the stock config didn't. First, memory: UCL clusters take memory per core, not per job, and the original divided memory by cores without rounding — Groovy returns a decimal there, so an uneven request produced 'minus l mem equals three thousand two hundred and forty two point six six six', which the scheduler simply rejects. That hit STAR and HISAT2 index building specifically. Rounding up fixes it. Second, wall time: the pipeline defaults to 240 hours, which is above the queue limit, so every job would have been rejected at submission — the profile sets 48. Third, scratch: the original asked for node-local disk and then didn't use it, so all the BAM sorting went to the shared filesystem; now it asks and uses it. One caveat worth flagging, and it's a useful mental model for any SGE cluster: memory is allocated per slot, not per job, so what decides where a job can run is the memory-per-core ratio, not the total. Everything in this pipeline asks for four gigabytes per core or less, which fits Myriad's three hundred and forty two standard nodes. The exception is a splice-aware HISAT2 index — that's seventeen gigabytes per core for human, so it can only run on the seventeen high-memory nodes, no matter what total you ask for. The profile handles that for you, in two ways. Anything above four point four gigabytes per core gets Myriad's node-type selector appended automatically, so it queues against the high-memory nodes rather than matching nothing; and the HISAT2 index step is exempted from the standard-node memory ceiling, so its estimate isn't clamped down and the index comes out splice-aware. That last part matters because the failure mode was silent — a clamped build quietly drops the splice-site flags and you get a usable but less sensitive index, with only a warning in the log. Human, mouse, zebrafish and yeast all build splice-aware now with no extra flags. The one thing to expect is a longer queue wait for a mammalian build, because it's competing for seventeen nodes rather than three hundred and forty two.",
-  "One before that, 1.4.0 added a second way into the pipeline. Normally you start from FASTQs; the new counts flag lets you start from a gene count matrix instead, skipping QC and alignment and going straight to differential expression. That's for re-analysing someone else's counts — a GEO supplementary file, or another pipeline's output. It auto-detects featureCounts wide format or a plain gene-by-sample matrix, handles gzipped and header-less files, and refuses the things that would silently give you wrong statistics: TPMs, FPKMs, anything non-integer, and matrices keyed by Entrez or RefSeq IDs. The same release fixed a real GSEA bug — genes were being ranked by Ensembl ID while the MSigDB gene sets are keyed by symbol, so the two lists overlapped at essentially zero genes, fgsea returned nothing, and the report just showed 'no data' with no error. It now ranks by whichever identifier the gene sets actually use, and warns if the overlap is too low to trust.",
-  "Going further back — 1.3.0 was about Nextflow itself. Nextflow's strict language parser became the default in version 25.10, and it's what the built-in linter uses. It rejected several things the pipeline relied on, so on current Nextflow the pipeline simply wouldn't run — you'd have hit this on version 26. So we migrated the whole thing: the resource-ceiling helper became Nextflow's native resourceLimits, the run-completion summary moved into the workflow's onComplete section, top-level script statements moved into functions, and a handful of deprecated idioms were modernised — Channel with a capital C, implicit closure variables, a while loop. The pipeline now passes nextflow lint with zero errors and zero warnings, and I verified it end-to-end on 26.04 across the STAR, Salmon and download paths. The one thing to know: the minimum Nextflow is now 25.10. Nothing about the analysis changed — same processes, same resources, same outputs.",
-  "Before that, version 1.2.0. This was a reference-download release, and it fixes something important, so please listen to this bit if you've used the download_refs mode. Ensembl publishes several GTFs per species, and the old code picked the annotation by excluding the ones it recognised — which, because of the alphabetical ordering, always left the chr_patch_hapl_scaff file. That's a patch-and-haplotype annotation, and it does not describe the primary-assembly genome we download alongside it. On human release 116 that GTF spans five hundred and twenty-eight contigs against the genome's seventy. The GTF and the transcriptome are now chosen by the assembly named in the genome FASTA, and anything ambiguous is a hard error rather than a guess. If you built a reference set with an earlier version, re-download it. Two other fixes: Ensembl quietly removed the current_gtf directory, so 'current' downloads were finding no annotation at all — we now resolve 'current' to a concrete release number up front; and a failed download used to exit zero with a half-finished reference set, which now fails the run properly. On the new side, the download finally fetches the cDNA transcriptome, so download_refs can feed build_indices for Salmon and Kallisto — previously you had to go and get that file by hand. And one more fix outside the downloader: the HISAT2 index build used to ask for only 48 gigabytes, but a splice-aware human index needs around 200, so it was being killed by the out-of-memory reaper. It now sizes its memory request from the GTF — roughly 200 gigabytes for human, 9 for yeast — and if the machine can't provide that, it falls back to a non-splice-aware index instead of dying.",
-  "Briefly, the release before that — 1.1.0. Differential splicing — the diffsplice flag I mentioned — was added there. So was batch and covariate modelling: a batch column is auto-detected and the design flag accepts any formula. Every DE result table carries gene_name and gene_biotype columns. Per-contrast volcano plots are written for both DESeq2 and edgeR. DESeq2 log-fold-changes are shrunk with apeglm for better effect-size estimates. And the Quarto report grew into a full analysis report — searchable tables, plotly volcanoes — plus an automatic run-summary page at the end of every run.",
-  "To wrap up — the quick start, four commands. One, validate the workflow without data using stub-run. Two, fetch references for your species, pinned to a specific Ensembl release. Three, build the index for your chosen aligner — or pass aligner=all to build all four. Four, run the analysis itself. Once it finishes, open results/multiqc/multiqc_report.html and you're in. That's rnaseq-flow. Happy to take questions."
+  "Welcome. Today I want to introduce rnaseq-flow, a modular bulk RNA-seq pipeline built in Nextflow DSL2. The talk is roughly ten minutes. I'll cover what the pipeline does, the design choices behind its modularity, walk through each analysis stage, and finish with what you need to actually run it.",
+  "Before we dive in, the headline. rnaseq-flow takes raw FASTQ files and produces differential expression results, splicing tables, fusion calls and pathway enrichment, and aggregates everything into interactive HTML reports. The modularity is the key idea here. You choose the aligner, you choose which analysis stages run, and you choose whether to bring your own references or generate them with the bundled helper workflows. Same entry point, very different runs.",
+  "This is the workflow map, and it's the single most useful picture of the pipeline. The four coloured lines are the four aligner routes: STAR in magenta, HISAT2 in blue, Kallisto in purple, Salmon in orange. They each take their own path through the alignment stage and then converge on common downstream steps: differential expression on the right, enrichment further right. The green branch is the QC and splicing side-track, and the grey line along the bottom is the reporting line where everything funnels into MultiQC and the Quarto report. Only one aligner runs per execution. You'll see this map a few more times in coloured form as we walk the stages.",
+  "Quick word on setup before we get to the science. Four things. First, install Nextflow: it's a one-line curl. Second, make sure you have Java 17 to 26 on the system. Third, pick a container engine, Docker, Singularity, or Conda, and you select it at run time with the profile flag. Every process in the pipeline declares its own container, so no bioinformatics tool needs to be installed by hand. And fourth (and this is a really useful one) every process ships a stub block, so the entire workflow graph can dry-run in seconds with the stub-run flag. That's how you sanity-check the wiring without spending compute.",
+  "main.nf has one entry point that dispatches to one of three workflows depending on the flags you pass. Mode one (download_refs) fetches genome FASTA and GTF from Ensembl, and optionally MSigDB gene sets for GSEA. You can pin a specific Ensembl release for reproducibility. Mode two (build_indices) builds the index for whichever aligner you pick, or all four at once. And mode three is the actual analysis, which kicks off whenever you supply an input samplesheet. Only one mode runs per invocation.",
+  "Stage one of the analysis: read QC. FastQC profiles the raw reads, fastp trims adapters and low-quality bases. Two things worth knowing here. First, you can stop the pipeline early: stop_at preQC halts after FastQC, postQC halts after alignment QC. That's how you do a fast sanity-check on a new dataset without spending compute on differential expression. Second, all the FastQC and fastp metrics get aggregated into the MultiQC report later, so don't read them sample-by-sample.",
+  "Stage two: alignment. This is where the aligner choice matters. STAR is the default genome aligner and unlocks the full downstream stack: featureCounts, RSeQC, rMATS, fusion calling, the lot. HISAT2 is a lighter-weight genome aligner with essentially the same downstream stack minus fusion detection. Salmon and Kallisto are pseudo-aligners: much faster, transcript-level quantification rather than full alignments. Salmon additionally unlocks isoform-switch analysis. One flag (aligner) picks the route, and the downstream stages adapt automatically.",
+  "Stage three is gene quantification, and this is where the two paths converge. If you used STAR or HISAT2, featureCounts counts reads overlapping each gene on the sorted BAM. RSeQC auto-detects strandedness per sample, and that verdict feeds straight into featureCounts, so you don't need to know your library type in advance. If you used Salmon or Kallisto, tximport summarises the transcript-level quantifications to gene level, with proper length-aware normalisation. Either way, you end up with a gene-by-sample count matrix in the exact shape DESeq2 and edgeR want.",
+  "Stage four: differential expression. We run DESeq2 and edgeR in parallel on the same gene counts. They're two independent callers with very similar statistical machinery: DESeq2 uses a Wald test with apeglm log-fold-change shrinkage, edgeR uses a quasi-likelihood GLM throughout. Both honour the same design matrix: covariates and batch effects are handled the same way in both. The key insight here is the cross-check: genes called significant by both are the most robust hits. Only the DESeq2 route continues to functional enrichment downstream. That's the convention.",
+  "Stage 5a, alternative splicing on the genome-aligner route. Two complementary views. rMATS is event-based: it detects skipped exons, mutually-exclusive exons, alternative splice sites, retained introns (five event classes) and reports inclusion-level differences with FDR. edgeR diffSplice is exon-usage based: it asks whether an exon's fold-change between conditions departs from the gene's overall fold-change, which catches differential usage even when total expression looks similar. diffSplice is opt-in via the diffsplice flag.",
+  "Stage 5b, transcript isoforms and fusions. This is the territory where gene-level differential expression can miss things entirely. IsoformSwitchAnalyzeR flags genes whose dominant transcript actually flips between conditions, even when total expression doesn't change. DEXSeq tests differential transcript usage, significant shifts in transcript proportions. And STAR-Fusion detects gene fusions from STAR's chimeric alignments, and needs a CTAT library to run. Three independent tools, three windows on the transcriptome that gene-level DE simply can't see.",
+  "Stage 6 is functional enrichment. Two methods, intentionally complementary. GSEA via fgsea runs on the whole ranked DESeq2 gene list (no cutoffs) and reports normalised enrichment scores per pathway. Its sign tells you direction. gProfiler runs over-representation testing on the thresholded significant up- and down-regulated lists separately, against GO terms and pathway databases. Different statistical approaches, often agreeing on the same biology. When they do agree, you can be much more confident in the result.",
+  "Stage seven, the final stage, is reporting. Every run produces three pieces of self-contained HTML. MultiQC is the QC aggregation, one page combining metrics from every QC tool across every sample. Start there. The Quarto report is the analysis narrative: interactive plotly volcano plots, PCA, MDS, heatmaps, searchable result tables, a DESeq2-vs-edgeR agreement table. Sections appear only when their data is present, so a smaller run gives a smaller report. And there's a third, the run summary, which I'll come back to in a moment.",
+  "Now usage. Everything starts with this four-column CSV. Sample ID, R1 path, R2 path (empty for single-end data) and condition. The pipeline auto-detects paired versus single-end from whether R2 is present. There's an important convention here: one condition is the baseline of every contrast, and it defaults to a condition literally named REF. Name your control group REF, or point reference level at whatever you called it, and positive log2 fold changes mean up in the other condition. A baseline you name has to exist in the samplesheet, or the run stops at launch. Optional batch column? Add it and the design becomes batch plus condition automatically. The samplesheet is validated before any process is scheduled, so typos and missing files surface immediately.",
+  "Here's a comprehensive STAR run end-to-end. Input samplesheet, STAR aligner with its index, the GTF, stranded library (note this could be set to 'auto' to let RSeQC infer it), the CTAT library for fusion calling, opt-in diffsplice for exon-level splicing, a GMT for GSEA, the output directory, and the Docker profile. That's one invocation, end-to-end. For the Salmon route, swap aligner to salmon, point at the salmon_index and transcript fasta, and add isoform_switch and dtu for the transcript-level analyses. Same samplesheet, same output structure.",
+  "When the run finishes, this is what you get. The two HTML files I keep mentioning (multiqc_report and analysis_report) are your entry points. Then there's a directory per analysis stage. Per-contrast result CSVs from DESeq2 and edgeR carry gene_name and gene_biotype annotation so you can read them without an ID-mapping step. The RSeQC strandedness file per sample is worth knowing about: it's the auto-detected verdict that feeds featureCounts. And run_summary.html under pipeline_info is written automatically at the end of every run, success or failure. It has the resource usage per process and links to everything that was produced.",
+  "What's new in 1.5.0. This one is about reproducibility, and it is the feature I would most want you to take away. Every figure the pipeline publishes can now be redrawn from the results directory alone. Each output folder gets a reproduce subfolder containing the R objects the plot call consumes, gzipped copies of the tables behind them, and a standalone, commented R script per figure type. Those scripts are written to be adapted, not just run: the contrast, the cutoffs, the colours, the figure dimensions are all named constants in the first twenty lines, so changing a legend does not mean reading a ggplot chain. They work from a terminal or from RStudio, and they need nothing except the files sitting beside them, so you can copy that folder to a collaborator and it still works. Objects are only saved where a plot genuinely needs one, and always the smallest that will do: the small MDS object rather than the whole DGEList, which is about twenty-eight times larger even on a small dataset. GSEA is the case that most needs it, because plotGseaTable needs the gene set membership, and that lives in the GMT, which is an input and was never published with the results. Alongside that, every figure is now written as SVG as well as PNG, and the PNG is at three hundred dpi, so you have a vector copy for publication. The analysis report is largely interactive now: PCA, MDS, the heatmap with dendrograms, volcano, MA and the enrichment plots are all plotly widgets you can hover and zoom, with the static copies still published as the fallback. There are new panels too: a shrinkage before-and-after, so you can see how much apeglm actually moved your fold changes, and dot plots for GSEA and gProfiler, which previously only appeared as tables. On the fixes: MultiQC's General Statistics table was rendering blank (our own report theme was painting over cells that MultiQC draws at negative z-index), and separately the three QC tools each named samples differently, so six samples were showing up as twenty-four mostly empty rows. That is reconciled at display time rather than by renaming the reads, deliberately, because the accession in the published filename is what ties your results back to the archive. And software versions now actually reach the report: they were being collected and then silently dropped, so you saw two tools where there are seventeen.",
+  "Before that, 1.4.3. That release was about the gene sets. The headline is a bug that had been sitting there quietly: the download_gmt step asked conda for a package called r-msigdbr from the bioconda channel, and msigdbr is a CRAN package that has never existed in bioconda. So the environment could never be solved and that step could never run: it's conda-forge now. The same wrong assumption, that msigdbr was a Bioconductor package, had also produced a BiocManager install call inside the script as a fallback, which couldn't have worked either; that's gone, and the environment is the process definition's job rather than something a running container installs for itself. While fixing the channel we took the chance to upgrade from seven point five point one to twenty-six point one, so you get MSigDB twenty twenty-six point one gene sets instead of a twenty twenty-two vintage: for human that's fifty hallmark sets, seven and a half thousand curated sets, sixteen thousand ontology sets. That needed an API migration, because msigdbr version ten renamed the category argument to collection and the gs underscore subcat column to gs underscore subcollection. Two smaller fixes fell out of actually testing it: passing a scientific name like Danio rerio to the organism flag was always rejected, because the resolver lower-cased its input and then handed back the lower-cased version; and the script used to log an error per collection, then print 'Download complete' and exit zero having written nothing at all. One thing to be aware of operationally: from msigdbr twenty-four the gene sets are fetched over the network on first use rather than being bundled in the package, so this step now needs internet access wherever it runs. On a cluster whose compute nodes have no outbound route, run the download somewhere that does and pass the file in with the gmt flag afterwards.",
+  "Before that, 1.4.2. That one was about running the pipeline on a cluster rather than on a workstation. There's a new sge profile, tuned for the UCL Research Computing clusters, derived from the nf-core Myriad config by Chris Wyatt and Fernando Duarte. Three things it gets right that the stock config didn't. First, memory: UCL clusters take memory per core, not per job, and the original divided memory by cores without rounding: Groovy returns a decimal there, so an uneven request produced 'minus l mem equals three thousand two hundred and forty two point six six six', which the scheduler simply rejects. That hit STAR and HISAT2 index building specifically. Rounding up fixes it. Second, wall time: the pipeline defaults to 240 hours, which is above the queue limit, so every job would have been rejected at submission: the profile sets 48. Third, scratch: the original asked for node-local disk and then didn't use it, so all the BAM sorting went to the shared filesystem; now it asks and uses it. One caveat worth flagging, and it's a useful mental model for any SGE cluster: memory is allocated per slot, not per job, so what decides where a job can run is the memory-per-core ratio, not the total. Everything in this pipeline asks for four gigabytes per core or less, which fits Myriad's three hundred and forty two standard nodes. The exception is a splice-aware HISAT2 index: that's seventeen gigabytes per core for human, so it can only run on the seventeen high-memory nodes, no matter what total you ask for. The profile handles that for you, in two ways. Anything above four point four gigabytes per core gets Myriad's node-type selector appended automatically, so it queues against the high-memory nodes rather than matching nothing; and the HISAT2 index step is exempted from the standard-node memory ceiling, so its estimate isn't clamped down and the index comes out splice-aware. That last part matters because the failure mode was silent: a clamped build quietly drops the splice-site flags and you get a usable but less sensitive index, with only a warning in the log. Human, mouse, zebrafish and yeast all build splice-aware now with no extra flags. The one thing to expect is a longer queue wait for a mammalian build, because it's competing for seventeen nodes rather than three hundred and forty two.",
+  "One before that, 1.4.0 added a second way into the pipeline. Normally you start from FASTQs; the new counts flag lets you start from a gene count matrix instead, skipping QC and alignment and going straight to differential expression. That's for re-analysing someone else's counts: a GEO supplementary file, or another pipeline's output. It auto-detects featureCounts wide format or a plain gene-by-sample matrix, handles gzipped and header-less files, and refuses the things that would silently give you wrong statistics: TPMs, FPKMs, anything non-integer, and matrices keyed by Entrez or RefSeq IDs. The same release fixed a real GSEA bug: genes were being ranked by Ensembl ID while the MSigDB gene sets are keyed by symbol, so the two lists overlapped at essentially zero genes, fgsea returned nothing, and the report just showed 'no data' with no error. It now ranks by whichever identifier the gene sets actually use, and warns if the overlap is too low to trust.",
+  "Going further back: 1.3.0 was about Nextflow itself. Nextflow's strict language parser became the default in version 25.10, and it's what the built-in linter uses. It rejected several things the pipeline relied on, so on current Nextflow the pipeline simply wouldn't run. You'd have hit this on version 26. So we migrated the whole thing: the resource-ceiling helper became Nextflow's native resourceLimits, the run-completion summary moved into the workflow's onComplete section, top-level script statements moved into functions, and a handful of deprecated idioms were modernised: Channel with a capital C, implicit closure variables, a while loop. The pipeline now passes nextflow lint with zero errors and zero warnings, and I verified it end-to-end on 26.04 across the STAR, Salmon and download paths. The one thing to know: the minimum Nextflow is now 25.10. Nothing about the analysis changed: same processes, same resources, same outputs.",
+  "Before that, version 1.2.0. This was a reference-download release, and it fixes something important, so please listen to this bit if you've used the download_refs mode. Ensembl publishes several GTFs per species, and the old code picked the annotation by excluding the ones it recognised, which, because of the alphabetical ordering, always left the chr_patch_hapl_scaff file. That's a patch-and-haplotype annotation, and it does not describe the primary-assembly genome we download alongside it. On human release 116 that GTF spans five hundred and twenty-eight contigs against the genome's seventy. The GTF and the transcriptome are now chosen by the assembly named in the genome FASTA, and anything ambiguous is a hard error rather than a guess. If you built a reference set with an earlier version, re-download it. Two other fixes: Ensembl quietly removed the current_gtf directory, so 'current' downloads were finding no annotation at all. We now resolve 'current' to a concrete release number up front; and a failed download used to exit zero with a half-finished reference set, which now fails the run properly. On the new side, the download finally fetches the cDNA transcriptome, so download_refs can feed build_indices for Salmon and Kallisto. Previously you had to go and get that file by hand. And one more fix outside the downloader: the HISAT2 index build used to ask for only 48 gigabytes, but a splice-aware human index needs around 200, so it was being killed by the out-of-memory reaper. It now sizes its memory request from the GTF (roughly 200 gigabytes for human, 9 for yeast), and if the machine can't provide that, it falls back to a non-splice-aware index instead of dying.",
+  "Briefly, the release before that, 1.1.0. Differential splicing (the diffsplice flag I mentioned) was added there. So was batch and covariate modelling: a batch column is auto-detected and the design flag accepts any formula. Every DE result table carries gene_name and gene_biotype columns. Per-contrast volcano plots are written for both DESeq2 and edgeR. DESeq2 log-fold-changes are shrunk with apeglm for better effect-size estimates. And the Quarto report grew into a full analysis report (searchable tables, plotly volcanoes), plus an automatic run-summary page at the end of every run.",
+  "To wrap up: the quick start, four commands. One, validate the workflow without data using stub-run. Two, fetch references for your species, pinned to a specific Ensembl release. Three, build the index for your chosen aligner, or pass aligner=all to build all four. Four, run the analysis itself. Once it finishes, open results/multiqc/rnaseq-flow_multiqc_report.html and you're in. That's rnaseq-flow. Happy to take questions."
 ]
 </script>
 <style>
   :root {
-    /* Palette — pulled from the metro map */
+    /* Palette: pulled from the metro map */
     --ink:        #1f2533;
     --ink-2:      #495057;
     --ink-mute:   #868e96;
@@ -53,7 +53,7 @@
     --route-qc:      #0ca678;
     --route-report:  #495057;
 
-    /* Type — px at 1920×1080 */
+    /* Type: px at 1920×1080 */
     --type-eyebrow:  24px;
     --type-title:    72px;
     --type-subtitle: 40px;
@@ -122,7 +122,7 @@
     margin: 36px 0 var(--gap-title);
   }
 
-  /* Page chrome — small label bottom-left */
+  /* Page chrome: small label bottom-left */
   .pagemark {
     position: absolute;
     left: var(--pad-x);
@@ -1045,13 +1045,13 @@
 <deck-stage width="1920" height="1080">
 
 <!-- ============================================================
-  SLIDE 1 — TITLE
+  SLIDE 1: TITLE
 ============================================================ -->
 <section data-label="01 Title" class="title-slide">
   <div class="frame">
     <p class="title-eyebrow">Modular bulk RNA-seq · Nextflow DSL2</p>
     <h1 class="title-name">rnaseq-flow</h1>
-    <p class="title-tag">From FASTQ to differential expression, splicing and enrichment — one pipeline, four aligners, three run modes.</p>
+    <p class="title-tag">From FASTQ to differential expression, splicing and enrichment: one pipeline, four aligners, three run modes.</p>
   </div>
   <div class="title-meta">
     <div class="title-routes">
@@ -1061,13 +1061,13 @@
       <span style="background: var(--route-salmon)"></span>
       <span style="background: var(--route-qc)"></span>
     </div>
-    <div>Version 1.5.1 &nbsp;·&nbsp; August 2026</div>
+    <div>Version 1.6.0 &nbsp;·&nbsp; September 2026</div>
   </div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 2 — WHAT IT IS
+  SLIDE 2: WHAT IT IS
 ============================================================ -->
 <section data-label="02 What it is">
   <div class="frame">
@@ -1078,13 +1078,13 @@
     <div class="stage-grid">
       <div class="stage-left">
         <p class="lead">rnaseq-flow processes raw FASTQs through <em>QC, alignment, quantification, differential expression, splicing, fusions and enrichment</em>, and aggregates everything into interactive HTML reports.</p>
-        <p class="lead">It is modular in three senses — and you compose them per run.</p>
+        <p class="lead">It is modular in three senses, and you compose them per run.</p>
       </div>
 
       <div class="stage-right">
         <div class="tool-card" style="border-left-color: var(--route-star)">
           <div class="name">Aligner<small>--aligner</small></div>
-          <div class="desc">STAR, HISAT2, Salmon or Kallisto — pick one per run; downstream stages adapt to the choice.</div>
+          <div class="desc">STAR, HISAT2, Salmon or Kallisto: pick one per run; downstream stages adapt to the choice.</div>
         </div>
         <div class="tool-card" style="border-left-color: var(--route-hisat)">
           <div class="name">Stages<small>--stop_at, --dtu, --diffsplice</small></div>
@@ -1102,14 +1102,14 @@
 
 
 <!-- ============================================================
-  SLIDE 3 — METRO MAP (full bleed)
+  SLIDE 3: METRO MAP (full bleed)
 ============================================================ -->
 <section data-label="03 Pipeline at a glance" class="map-slide">
   <div class="frame">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1960 1070" preserveAspectRatio="xMidYMid meet" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
       <rect width="1960" height="1070" fill="#fbfcfe"></rect>
       <text x="70" y="56" font-size="34" font-weight="800" text-anchor="start" fill="#1f4e79"><tspan x="70" dy="0">rnaseq-flow</tspan></text>
-      <text x="70" y="82" font-size="16" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="70" dy="0">Bulk RNA-seq pipeline — workflow map</tspan></text>
+      <text x="70" y="82" font-size="16" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="70" dy="0">Bulk RNA-seq pipeline: workflow map</tspan></text>
       <text x="300" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="300" dy="0">INPUT  &amp;  READ QC</tspan></text>
       <text x="905" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="905" dy="0">ALIGNMENT  /  QUANTIFICATION</tspan></text>
       <text x="1500" y="104" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6"><tspan x="1500" dy="0">DIFFERENTIAL EXPRESSION</tspan></text>
@@ -1185,9 +1185,9 @@
       <text x="1340" y="943" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1340" dy="0">MultiQC</tspan></text>
       <circle cx="1500" cy="968" r="9.5" fill="#fff" stroke="#495057" stroke-width="4.2"></circle>
       <text x="1500" y="943" font-size="15" font-weight="600" text-anchor="middle" fill="#212529"><tspan x="1500" dy="0">Quarto report</tspan></text>
-      <text x="250" y="1014" font-size="13" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="250" dy="0">Reporting line — MultiQC aggregates QC logs from FastQC, fastp, alignment, RSeQC and featureCounts; Quarto renders the final HTML report.</tspan></text>
+      <text x="250" y="1014" font-size="13" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="250" dy="0">Reporting line: MultiQC aggregates QC logs from FastQC, fastp, alignment, RSeQC and featureCounts; Quarto renders the final HTML report.</tspan></text>
       <text x="1600" y="696" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96"><tspan x="1600" dy="0">DESeq2 and edgeR both run on the same gene counts as independent</tspan></text>
-      <text x="1600" y="713" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96"><tspan x="1600" dy="0">callers — only the DESeq2 route continues to GSEA / gProfiler.</tspan></text>
+      <text x="1600" y="713" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96"><tspan x="1600" dy="0">callers: only the DESeq2 route continues to GSEA / gProfiler.</tspan></text>
       <rect x="92" y="150" width="372" height="322" rx="14" fill="#fff" stroke="#dde2ea" stroke-width="2"></rect>
       <text x="114" y="184" font-size="18" font-weight="800" text-anchor="start" fill="#1f4e79"><tspan x="114" dy="0">Legend</tspan></text>
       <line x1="116" y1="214" x2="162" y2="214" stroke="#c2255c" stroke-width="8" stroke-linecap="round"></line>
@@ -1203,9 +1203,9 @@
       <line x1="116" y1="364" x2="162" y2="364" stroke="#495057" stroke-width="8" stroke-linecap="round"></line>
       <text x="176" y="369" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">MultiQC reporting line</tspan></text>
       <rect x="126" y="389" width="26" height="26" rx="13" fill="#fff" stroke="#212529" stroke-width="3.2"></rect>
-      <text x="176" y="407" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Interchange — step shared by routes</tspan></text>
+      <text x="176" y="407" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Interchange: step shared by routes</tspan></text>
       <circle cx="139" cy="435" r="9.5" fill="#fff" stroke="#868e96" stroke-width="4.2"></circle>
-      <text x="176" y="440" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Stop — single-route step</tspan></text>
+      <text x="176" y="440" font-size="14" font-weight="500" text-anchor="start" fill="#212529"><tspan x="176" dy="0">Stop: single-route step</tspan></text>
       <text x="114" y="454" font-size="12" font-weight="500" text-anchor="start" fill="#868e96"><tspan x="114" dy="0">One aligner runs per execution. Reference download</tspan><tspan x="114" dy="15">and index building are separate helper workflows.</tspan></text>
       <circle cx="1405" cy="402" r="9.5" fill="#fff" stroke="#0b7285" stroke-width="4.2"></circle>
       <text x="1405" y="386" font-size="13" font-weight="700" text-anchor="middle" fill="#0b7285"><tspan x="1405" dy="0">Count matrix (--counts)</tspan></text>
@@ -1215,13 +1215,13 @@
 
 
 <!-- ============================================================
-  SLIDE 4 — NEXTFLOW SETUP
+  SLIDE 4: NEXTFLOW SETUP
 ============================================================ -->
 <section data-label="04 Setup">
   <div class="frame">
     <p class="eyebrow">Requirements &amp; install</p>
     <h2 class="slide-title">Setup is four small things</h2>
-    <p class="slide-subtitle">Nextflow itself, a Java runtime, a container engine and a dry-run check. Every pipeline tool lives inside its own container — nothing to install by hand.</p>
+    <p class="slide-subtitle">Nextflow itself, a Java runtime, a container engine and a dry-run check. Every pipeline tool lives inside its own container: nothing to install by hand.</p>
     <div class="rule"></div>
 
     <div class="setup">
@@ -1229,7 +1229,7 @@
         <div class="s-num">01</div>
         <div class="s-body">
           <h3>Install Nextflow</h3>
-          <p>One-liner — drop the binary on your <span class="chip">PATH</span> and check the version.</p>
+          <p>One-liner: drop the binary on your <span class="chip">PATH</span> and check the version.</p>
           <span class="s-cmd"><span class="p">$</span> <span class="c">curl -s</span> https://get.nextflow.io | bash<br><span class="p">$</span> <span class="c">nextflow</span> -version</span>
         </div>
       </div>
@@ -1256,7 +1256,7 @@
         <div class="s-num">04</div>
         <div class="s-body">
           <h3>Dry-run the graph</h3>
-          <p>Every process ships a <span class="chip">stub</span> block — the full workflow validates in seconds, no data needed.</p>
+          <p>Every process ships a <span class="chip">stub</span> block: the full workflow validates in seconds, no data needed.</p>
           <span class="s-cmd"><span class="p">$</span> <span class="c">nextflow run</span> main.nf <span class="f">-stub-run</span> ...</span>
         </div>
       </div>
@@ -1267,7 +1267,7 @@
 
 
 <!-- ============================================================
-  SLIDE 5 — THREE RUN MODES
+  SLIDE 5: THREE RUN MODES
 ============================================================ -->
 <section data-label="04 Three run modes">
   <div class="frame">
@@ -1287,7 +1287,7 @@
       <div class="mode-card" style="border-top-color: var(--route-hisat)">
         <p class="num">02</p>
         <h3>Build indices</h3>
-        <p>Build the index for one aligner — or all four at once with <span class="chip">--aligner all</span>. Accepts gzipped FASTA / GTF inputs and writes each index into its own directory.</p>
+        <p>Build the index for one aligner, or all four at once with <span class="chip">--aligner all</span>. Accepts gzipped FASTA / GTF inputs and writes each index into its own directory.</p>
         <div class="flag">--build_indices</div>
       </div>
 
@@ -1304,7 +1304,7 @@
 
 
 <!-- ============================================================
-  SLIDE 5 — READ QC
+  SLIDE 5: READ QC
 ============================================================ -->
 <section data-label="05 Read QC">
   <div class="frame">
@@ -1334,7 +1334,7 @@
     </div>
 
     <ul class="bullets" style="max-width: 1500px;">
-      <li><strong>Stop early.</strong> <span class="chip">--stop_at preQC</span> halts after FastQC; <span class="chip">postQC</span> halts after alignment QC — fast end-to-end sanity checks without spending compute on DE.</li>
+      <li><strong>Stop early.</strong> <span class="chip">--stop_at preQC</span> halts after FastQC; <span class="chip">postQC</span> halts after alignment QC: fast end-to-end sanity checks without spending compute on DE.</li>
       <li><strong>Aggregated, not isolated.</strong> All FastQC and fastp metrics are picked up by MultiQC for cross-sample comparison.</li>
     </ul>
   </div>
@@ -1343,13 +1343,13 @@
 
 
 <!-- ============================================================
-  SLIDE 6 — ALIGNERS
+  SLIDE 6: ALIGNERS
 ============================================================ -->
 <section data-label="06 Aligners">
   <div class="frame">
     <p class="eyebrow">Stage 2 · Alignment and quantification</p>
     <h2 class="slide-title">Four aligners, one --aligner flag</h2>
-    <p class="slide-subtitle">Two genome aligners (STAR, HISAT2) and two pseudo-aligners (Salmon, Kallisto). Pick one — downstream stages adapt automatically.</p>
+    <p class="slide-subtitle">Two genome aligners (STAR, HISAT2) and two pseudo-aligners (Salmon, Kallisto). Pick one: downstream stages adapt automatically.</p>
     <div class="rule"></div>
 
     <div class="aligners">
@@ -1380,13 +1380,13 @@
 
 
 <!-- ============================================================
-  SLIDE 7 — QUANTIFICATION
+  SLIDE 7: QUANTIFICATION
 ============================================================ -->
 <section data-label="07 Quantification">
   <div class="frame">
     <p class="eyebrow">Stage 3 · Gene-level counts</p>
     <h2 class="slide-title">Two paths converge on one count matrix</h2>
-    <p class="slide-subtitle">Both routes produce a gene × sample count matrix in the shape DESeq2 and edgeR expect — no manual reshaping.</p>
+    <p class="slide-subtitle">Both routes produce a gene × sample count matrix in the shape DESeq2 and edgeR expect, with no manual reshaping.</p>
     <div class="rule"></div>
 
     <div class="quant">
@@ -1403,20 +1403,20 @@
         <p class="feat-flag">→ tximport/txi.rds</p>
       </div>
     </div>
-    <p class="slide-subtitle" style="margin-top: 22px;">Already have counts? Skip QC and alignment entirely — <span class="chip">--counts matrix.tsv</span> enters the pipeline right here. Feed a featureCounts table or a plain gene × sample matrix (e.g. a GEO supplementary file), add <span class="chip">--gtf</span> for gene annotation, and DESeq2, edgeR and everything downstream run unchanged.</p>
+    <p class="slide-subtitle" style="margin-top: 22px;">Already have counts? Skip QC and alignment entirely: <span class="chip">--counts matrix.tsv</span> enters the pipeline right here. Feed a featureCounts table or a plain gene × sample matrix (e.g. a GEO supplementary file), add <span class="chip">--gtf</span> for gene annotation, and DESeq2, edgeR and everything downstream run unchanged.</p>
   </div>
   <div class="pagemark"><span class="dot"></span>08 · Quantification</div>
 </section>
 
 
 <!-- ============================================================
-  SLIDE 8 — DIFFERENTIAL EXPRESSION (parallel rails)
+  SLIDE 8: DIFFERENTIAL EXPRESSION (parallel rails)
 ============================================================ -->
 <section data-label="08 Differential expression">
   <div class="frame">
     <p class="eyebrow">Stage 4 · Differential expression</p>
     <h2 class="slide-title">DESeq2 and edgeR run in parallel</h2>
-    <p class="slide-subtitle">Two independent callers on the same gene counts — genes called significant by both are the most robust hits.</p>
+    <p class="slide-subtitle">Two independent callers on the same gene counts: genes called significant by both are the most robust hits.</p>
     <div class="rule"></div>
 
     <div class="de-canvas">
@@ -1440,10 +1440,10 @@
         <h3 style="color: var(--route-qc)">edgeR</h3>
         <p class="rail-sub">Quasi-likelihood GLM (glmQLFTest)</p>
         <ul>
-          <li>Same design matrix and covariate handling as DESeq2 — comparable methodology.</li>
+          <li>Same design matrix and covariate handling as DESeq2, so comparable methodology.</li>
           <li>Per-contrast CSVs with <span class="chip">logFC</span>, <span class="chip">FDR</span> and annotation columns.</li>
           <li>MDS, smear and per-contrast volcano plots.</li>
-          <li>Independent cross-check — agreement strengthens calls.</li>
+          <li>Independent cross-check: agreement strengthens calls.</li>
         </ul>
       </div>
 
@@ -1458,12 +1458,12 @@
 
 
 <!-- ============================================================
-  SLIDE 10 — ALTERNATIVE SPLICING (split A)
+  SLIDE 10: ALTERNATIVE SPLICING (split A)
 ============================================================ -->
 <section data-label="10 Alternative splicing">
   <div class="frame">
     <p class="eyebrow">Stage 5a · Alternative splicing</p>
-    <h2 class="slide-title">Two windows on splicing — events and exons</h2>
+    <h2 class="slide-title">Two windows on splicing: events and exons</h2>
     <p class="slide-subtitle">Both run on the genome-aligner route. They answer related but distinct questions, and complement each other.</p>
     <div class="rule"></div>
 
@@ -1473,12 +1473,12 @@
         <p class="feat-kind">Event-based splicing</p>
         <p class="feat-desc">Five event classes detected per condition pair:</p>
         <ul class="bullets" style="margin-top: 18px;">
-          <li><strong>SE</strong> — skipped exons</li>
-          <li><strong>MXE</strong> — mutually exclusive exons</li>
-          <li><strong>A3SS / A5SS</strong> — alternative splice sites</li>
-          <li><strong>RI</strong> — retained introns</li>
+          <li><strong>SE</strong>: skipped exons</li>
+          <li><strong>MXE</strong>: mutually exclusive exons</li>
+          <li><strong>A3SS / A5SS</strong>: alternative splice sites</li>
+          <li><strong>RI</strong>: retained introns</li>
         </ul>
-        <p class="feat-flag">→ rmats_output/  ·  cutoff: FDR &lt; 0.05, |ΔPSI| &gt; 0.1</p>
+        <p class="feat-flag">→ rmats_output/&lt;condition&gt;_vs_REF/  ·  cutoff: FDR &lt; 0.05, |ΔPSI| &gt; 0.1  ·  positive ΔPSI = more included in the condition</p>
       </div>
 
       <div class="feat-card" style="color: var(--navy)">
@@ -1486,8 +1486,8 @@
         <p class="feat-kind">Differential exon usage</p>
         <p class="feat-desc">For each exon, tests whether its log-fold-change between conditions departs from the gene's overall log-fold-change.</p>
         <ul class="bullets" style="margin-top: 18px;">
-          <li><strong>Per-feature table</strong> — which exon drives the change</li>
-          <li><strong>Per-gene table</strong> — Simes-aggregated across the gene's exons</li>
+          <li><strong>Per-feature table</strong>: which exon drives the change</li>
+          <li><strong>Per-gene table</strong>: Simes-aggregated across the gene's exons</li>
           <li><strong>Annotated</strong> with <span class="chip">gene_name</span>, <span class="chip">gene_biotype</span></li>
         </ul>
         <p class="feat-flag">opt-in · --diffsplice · needs --gtf</p>
@@ -1499,7 +1499,7 @@
 
 
 <!-- ============================================================
-  SLIDE 11 — ISOFORMS & FUSIONS (split B)
+  SLIDE 11: ISOFORMS & FUSIONS (split B)
 ============================================================ -->
 <section data-label="11 Isoforms and fusions">
   <div class="frame">
@@ -1512,7 +1512,7 @@
       <div class="feat-card" style="color: var(--route-salmon)">
         <p class="feat-tool">IsoformSwitchAnalyzeR</p>
         <p class="feat-kind">Dominant-isoform changes</p>
-        <p class="feat-desc">Flags genes whose dominant transcript flips between conditions — even when total gene expression is flat. Per-gene switch plots included.</p>
+        <p class="feat-desc">Flags genes whose dominant transcript flips between conditions, even when total gene expression is flat. Per-gene switch plots included.</p>
         <p class="feat-flag">Salmon · --isoform_switch</p>
       </div>
       <div class="feat-card" style="color: var(--route-kallis)">
@@ -1534,13 +1534,13 @@
 
 
 <!-- ============================================================
-  SLIDE 10 — ENRICHMENT
+  SLIDE 10: ENRICHMENT
 ============================================================ -->
 <section data-label="10 Functional enrichment">
   <div class="frame">
     <p class="eyebrow">Stage 6 · Functional enrichment</p>
     <h2 class="slide-title">From gene lists to pathway biology</h2>
-    <p class="slide-subtitle">Two complementary methods downstream of DESeq2 — one ranked, one thresholded. Agreement strengthens the conclusion.</p>
+    <p class="slide-subtitle">Two complementary methods downstream of DESeq2: one ranked, one thresholded. Agreement strengthens the conclusion.</p>
     <div class="rule"></div>
 
     <div class="enrich">
@@ -1563,13 +1563,13 @@
 
 
 <!-- ============================================================
-  SLIDE 11 — REPORTING
+  SLIDE 11: REPORTING
 ============================================================ -->
 <section data-label="11 Reporting">
   <div class="frame">
     <p class="eyebrow">Stage 7 · Reporting</p>
     <h2 class="slide-title">Three reports per run, no clicking required</h2>
-    <p class="slide-subtitle">Every run produces self-contained HTML — start with MultiQC, drill into Quarto, hand off the run summary.</p>
+    <p class="slide-subtitle">Every run produces self-contained HTML: start with MultiQC, drill into Quarto, hand off the run summary.</p>
     <div class="rule"></div>
 
     <div class="reports">
@@ -1582,7 +1582,7 @@
           <li>Custom rnaseq-flow theme and ordered modules</li>
           <li>Best starting point for run-wide QC</li>
         </ul>
-        <div class="filepath">multiqc/multiqc_report.html</div>
+        <div class="filepath">multiqc/rnaseq-flow_multiqc_report.html</div>
       </div>
 
       <div class="report-card">
@@ -1590,10 +1590,11 @@
         <h3>Quarto report</h3>
         <p>Interactive analysis report that brings every stage's results together in one place; sections appear only when their data is present.</p>
         <ul>
-          <li>Plotly volcano plots (DESeq2 + edgeR)</li>
-          <li>PCA / MDS / heatmap panels</li>
-          <li>Searchable DESeq2, edgeR, GSEA, gProfiler tables</li>
-          <li>DESeq2-vs-edgeR agreement table</li>
+          <li>Run overview and sample design, read from the run manifest</li>
+          <li>Plotly volcano, MA, PCA, MDS and heatmap panels (DESeq2 + edgeR)</li>
+          <li>Alternative splicing: events per type, PSI volcano, per-replicate PSI</li>
+          <li>Searchable DESeq2, edgeR, rMATS, GSEA, gProfiler tables</li>
+          <li>A files-and-locations index of everything the run wrote</li>
         </ul>
         <div class="filepath">quarto_report/analysis_report.html</div>
       </div>
@@ -1604,13 +1605,13 @@
 
 
 <!-- ============================================================
-  SLIDE 12 — SAMPLESHEET
+  SLIDE 12: SAMPLESHEET
 ============================================================ -->
 <section data-label="12 Samplesheet">
   <div class="frame">
     <p class="eyebrow">Usage · The input</p>
     <h2 class="slide-title">Everything starts with a four-column CSV</h2>
-    <p class="slide-subtitle">Validated before any process is scheduled — typos and missing files surface immediately.</p>
+    <p class="slide-subtitle">Validated before any process is scheduled: typos and missing files surface immediately.</p>
     <div class="rule"></div>
 
     <div class="csv-block">
@@ -1655,7 +1656,7 @@
     <div class="csv-notes">
       <div class="csv-note">
         <h4>REF is the baseline</h4>
-        <p>Naming a group <code>REF</code> makes it the denominator of every contrast — positive log2FC means up in the other condition.</p>
+        <p>Naming a group <code>REF</code> makes it the denominator of every contrast: positive log2FC means up in the other condition.</p>
       </div>
       <div class="csv-note">
         <h4>R2 is optional</h4>
@@ -1672,12 +1673,12 @@
 
 
 <!-- ============================================================
-  SLIDE 13 — WORKED SCENARIO
+  SLIDE 13: WORKED SCENARIO
 ============================================================ -->
 <section data-label="13 Worked scenario">
   <div class="frame">
     <p class="eyebrow">Usage · End-to-end</p>
-    <h2 class="slide-title">Scenario A — comprehensive STAR run</h2>
+    <h2 class="slide-title">Scenario A: comprehensive STAR run</h2>
     <p class="slide-subtitle">Fusions, splicing, differential expression and enrichment, all from a single invocation.</p>
     <div class="rule"></div>
 
@@ -1704,7 +1705,7 @@
 
 
 <!-- ============================================================
-  SLIDE 16 — RESULTS TO EXPECT
+  SLIDE 16: RESULTS TO EXPECT
 ============================================================ -->
 <section data-label="16 Results to expect">
   <div class="frame">
@@ -1717,7 +1718,7 @@
       <div class="tree">
         <div class="t-title">results/ &nbsp; (STAR run · all stages)</div>
 <pre style="margin: 0; white-space: pre;"><span class="dir">results/</span>
-├── <span class="acc">multiqc/multiqc_report.html</span>
+├── <span class="acc">multiqc/rnaseq-flow_multiqc_report.html</span>
 ├── <span class="acc">quarto_report/analysis_report.html</span>
 ├── <span class="dir">fastqc/</span>           <span class="com">raw read QC</span>
 ├── <span class="dir">fastp/</span>            <span class="com">trim + filter</span>
@@ -1725,29 +1726,30 @@
 ├── <span class="dir">rseqc/</span>            <span class="com">strandedness</span>
 ├── <span class="dir">bam_to_bigwig/</span>    <span class="com">CPM tracks</span>
 ├── <span class="dir">featurecounts/</span>    <span class="com">gene counts</span>
-├── <span class="dir">deseq2_output/</span>    <span class="com">DE + volcanoes</span>
-├── <span class="dir">edger_output/</span>     <span class="com">DE cross-check</span>
+├── <span class="dir">deseq2_output/</span>    <span class="com">DE, figures, reproduce/</span>
+├── <span class="dir">edger_output/</span>     <span class="com">DE cross-check, reproduce/</span>
 ├── <span class="dir">rmats_output/</span>     <span class="com">splicing</span>
-├── <span class="dir">gsea_output/</span>      <span class="com">enrichment</span>
-└── <span class="dir">pipeline_info/</span>    <span class="com">run summary</span></pre>
+├── <span class="dir">gsea_output/</span>      <span class="com">GSEA, reproduce/</span>
+├── <span class="dir">gprofiler_output/</span> <span class="com">over-representation</span>
+└── <span class="dir">pipeline_info/</span>    <span class="com">manifest, versions, summary</span></pre>
       </div>
 
       <div class="key-outputs">
         <div class="key-output report">
-          <div class="ko-file">multiqc/multiqc_report.html</div>
+          <div class="ko-file">multiqc/rnaseq-flow_multiqc_report.html</div>
           <div class="ko-desc">Start here. One page combining every QC tool's metrics across all samples.</div>
         </div>
         <div class="key-output report">
           <div class="ko-file">quarto_report/analysis_report.html</div>
-          <div class="ko-desc">Interactive narrative — plotly volcanoes, PCA / MDS / heatmaps, searchable tables.</div>
+          <div class="ko-desc">Run overview, then plotly volcanoes, PCA / MDS / heatmaps, a splicing section, searchable tables.</div>
         </div>
         <div class="key-output de">
           <div class="ko-file">deseq2_output/deseq2_results_&lt;A&gt;_vs_&lt;B&gt;.csv</div>
-          <div class="ko-desc">Per-contrast DE — gene_name, log2FC (apeglm), padj, plus volcano + MA plots.</div>
+          <div class="ko-desc">Per-contrast DE: gene_id, gene_name, log2FC (apeglm and MLE), padj, plus volcano + MA plots as SVG and PNG.</div>
         </div>
         <div class="key-output de">
           <div class="ko-file">edger_output/edger_results_&lt;A&gt;_vs_&lt;B&gt;.csv</div>
-          <div class="ko-desc">Independent edgeR cross-check — logFC, FDR, MDS and smear plots.</div>
+          <div class="ko-desc">Independent edgeR cross-check: logFC, FDR, MDS and smear plots.</div>
         </div>
       </div>
     </div>
@@ -1757,12 +1759,58 @@
 
 
 <!-- ============================================================
-  SLIDE 17 — WHAT'S NEW IN 1.5.0
+  SLIDE 17: WHAT'S NEW IN 1.6.0
 ============================================================ -->
-<section data-label="14 What's new in 1.5.0">
+<section data-label="14 What's new in 1.6.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">What's new in 1.5.0</h2>
+    <h2 class="slide-title">What's new in 1.6.0</h2>
+    <div class="release-head" style="margin-top: 18px;">
+      <span class="release-tag">v1.6.0</span>
+      <span class="release-date">2 September 2026</span>
+    </div>
+    <div class="rule" style="margin-top: 6px;"></div>
+
+    <div class="changes">
+      <div class="change">
+        <h4>Breaking: rMATS results change sign and directory name</h4>
+        <p>Directories are now <code>&lt;condition&gt;_vs_REF</code> rather than <code>REF_vs_&lt;condition&gt;</code>, and <code>IncLevelDifference</code> is PSI(condition) minus PSI(REF): positive means higher inclusion in the treatment, the same direction as every fold change beside it. Splicing results from earlier releases point the other way, and only the sign differs, so do not compare across the boundary without checking.</p>
+      </div>
+      <div class="change">
+        <h4>New: an alternative splicing section in the report</h4>
+        <p>rMATS results were published and appeared nowhere in the document that travels. The report now reads <code>rmats_output/</code>: events per type, JC against JCEC agreement, a PSI volcano, per-replicate PSI for the top events, a concordance scatter, a results table, and the genes whose splicing changed while their expression did not. Counts are recomputed from the result files rather than taken from <code>summary.txt</code>, which uses an effect-size cutoff of 0.</p>
+      </div>
+      <div class="change">
+        <h4>New: <code>--reference_level</code> names the baseline</h4>
+        <p>Replaces a <code>REF</code> string hardcoded twenty times across five scripts. It reaches DESeq2, edgeR, rMATS, DEXSeq and diffSplice alike, is recorded in the run manifest, and a level that is not in the samplesheet stops the run at launch rather than falling back to alphabetical order silently.</p>
+      </div>
+      <div class="change">
+        <h4>New: <code>--validate_only</code></h4>
+        <p>Runs the samplesheet and input validation a real run performs, reports every problem at once, and exits before a process is scheduled. Non-zero on failure, so it gates a script.</p>
+      </div>
+      <div class="change">
+        <h4>New: provenance that travels with the results</h4>
+        <p><code>--download_refs</code> writes <code>reference_metadata.json</code> beside the references, and every run writes <code>pipeline_info/run_manifest.json</code>. The report opens with a Run overview built from both, so a reader of the HTML alone can tell what was aligned, against which release, with which baseline.</p>
+      </div>
+      <div class="change">
+        <h4>New: running without internet access</h4>
+        <p>Wave provisions containers by contacting an external service at run time, so the pipeline did not run in a TRE. An offline bundle of all 27 Singularity images is on Zenodo, used with <code>-profile tre</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: rMATS matched BAMs to samples by substring</h4>
+        <p>Sample <code>ctrl1</code> claimed <code>ctrl10.bam</code>: wrong BAM, wrong splicing calls, no error. Pairing is now positional and a mismatch fails the run.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  SLIDE 17: WHAT'S NEW IN 1.5.0
+============================================================ -->
+<section data-label="15 Previously: 1.5.0">
+  <div class="frame">
+    <p class="eyebrow">Release notes</p>
+    <h2 class="slide-title">Previously: 1.5.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.5.0</span>
       <span class="release-date">8 August 2026</span>
@@ -1771,44 +1819,44 @@
 
     <div class="changes">
       <div class="change">
-        <h4>New — every figure can be redrawn from the results</h4>
-        <p>Each output directory now carries a <code>reproduce/</code> folder: the R objects a plot consumes, gzipped copies of the tables behind it, and a standalone script per figure. Settings worth changing — contrast, cutoffs, colours, size — are named constants at the top. The scripts run from a terminal or RStudio and need nothing but the files beside them.</p>
+        <h4>New: every figure can be redrawn from the results</h4>
+        <p>Each output directory now carries a <code>reproduce/</code> folder: the R objects a plot consumes, gzipped copies of the tables behind it, and a standalone script per figure. Settings worth changing (contrast, cutoffs, colours, size) are named constants at the top. The scripts run from a terminal or RStudio and need nothing but the files beside them.</p>
       </div>
       <div class="change">
-        <h4>New — SVG alongside PNG, at 300 dpi</h4>
+        <h4>New: SVG alongside PNG, at 300 dpi</h4>
         <p>Vector copies of every figure, for publication and for editing. Written with <code>grDevices::svg()</code> rather than <code>ggsave()</code>, which delegates SVG to a package the containers do not carry.</p>
       </div>
       <div class="change">
-        <h4>New — an interactive analysis report</h4>
+        <h4>New: an interactive analysis report</h4>
         <p>PCA, MDS, the top-variable-gene heatmap (with dendrograms), volcano, MA and enrichment plots are now plotly widgets with hover detail. New panels: an apeglm shrinkage before/after, edgeR fold change vs abundance, a GSEA dot plot and a gProfiler Manhattan plot.</p>
       </div>
       <div class="change">
-        <h4>New — software versions actually reach the report</h4>
+        <h4>New: software versions actually reach the report</h4>
         <p>Every process's versions were collected and then dropped: MultiQC has no parser for the raw mapping, so the report listed only the two tools whose own output embeds a version. All 17 now appear, and the file is published to <code>pipeline_info/</code>.</p>
       </div>
       <div class="change">
-        <h4>Fixed — General Statistics was blank, and fragmented</h4>
+        <h4>Fixed: General Statistics was blank, and fragmented</h4>
         <p>The report theme painted an opaque background over cells MultiQC draws at negative z-index. Separately, each tool named samples differently, so six samples appeared as 24 mostly-empty rows; they are reconciled at display time, leaving the accessions intact in the published filenames.</p>
       </div>
       <div class="change">
-        <h4>Fixed — gProfiler results with a single enriched term</h4>
-        <p><code>apply()</code> returns a matrix for many rows but a vector for one, so a direction with exactly one enriched term was written as a single column of values — real data, unreadable shape, no error.</p>
+        <h4>Fixed: gProfiler results with a single enriched term</h4>
+        <p><code>apply()</code> returns a matrix for many rows but a vector for one, so a direction with exactly one enriched term was written as a single column of values: real data, unreadable shape, no error.</p>
       </div>
       <div class="change">
-        <h4>Fixed — <code>gene_id</code> had no column header</h4>
-        <p>Gene IDs were written as row names, which <code>write.csv()</code> emits under an empty header — so the authoritative identifier was the one field without a label. Symbols are neither unique nor stable across releases; the stable ID now carries a name.</p>
+        <h4>Fixed: <code>gene_id</code> had no column header</h4>
+        <p>Gene IDs were written as row names, which <code>write.csv()</code> emits under an empty header, so the authoritative identifier was the one field without a label. Symbols are neither unique nor stable across releases; the stable ID now carries a name.</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ============================================================
-  SLIDE 18 — PREVIOUSLY 1.4.3
+  SLIDE 18: PREVIOUSLY 1.4.3
 ============================================================ -->
-<section data-label="15 Previously — 1.4.3">
+<section data-label="15 Previously: 1.4.3">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">Previously — 1.4.3</h2>
+    <h2 class="slide-title">Previously: 1.4.3</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.4.3</span>
       <span class="release-date">4 August 2026</span>
@@ -1817,11 +1865,11 @@
 
     <div class="changes">
       <div class="change">
-        <h4>Fixed — <code>--download_gmt</code> could not run at all</h4>
+        <h4>Fixed: <code>--download_gmt</code> could not run at all</h4>
         <p><code>DOWNLOAD_GMT</code> asked for <code>bioconda::r-msigdbr</code>, but msigdbr is a CRAN package and has never existed in bioconda, so the environment could never be solved. Now <code>conda-forge::r-msigdbr</code>.</p>
       </div>
       <div class="change">
-        <h4>Current gene sets — msigdbr 7.5.1 → 26.1.0</h4>
+        <h4>Current gene sets: msigdbr 7.5.1 → 26.1.0</h4>
         <p>Gene sets are now MSigDB release 2026.1 rather than the 2022 vintage 7.5.1 shipped. A human run produces 50 hallmark, 7,670 C2 and 16,283 C5 gene sets.</p>
       </div>
       <div class="change">
@@ -1829,19 +1877,19 @@
         <p><code>category</code> → <code>collection</code>, and the <code>gs_subcat</code> column → <code>gs_subcollection</code> (values such as <code>GO:BP</code> are unchanged). The script now asserts the version up front instead of failing deep inside a <code>tryCatch</code>.</p>
       </div>
       <div class="change">
-        <h4>Removed — runtime package installation</h4>
-        <p>The script tried <code>BiocManager::install("msigdbr")</code> when the package was missing — which could never have worked, msigdbr being CRAN, not Bioconductor. The environment is the process definition's job; a missing package now fails with a clear message.</p>
+        <h4>Removed: runtime package installation</h4>
+        <p>The script tried <code>BiocManager::install("msigdbr")</code> when the package was missing, which could never have worked, msigdbr being CRAN, not Bioconductor. The environment is the process definition's job; a missing package now fails with a clear message.</p>
       </div>
       <div class="change">
-        <h4>Fixed — scientific names to <code>--organism</code> were rejected</h4>
+        <h4>Fixed: scientific names to <code>--organism</code> were rejected</h4>
         <p>The resolver lower-cased its input and returned that, so <code>"Danio rerio"</code> became <code>"danio rerio"</code> and failed lookup even though the species is available. Matching is now case-insensitive against both scientific and common names.</p>
       </div>
       <div class="change">
-        <h4>Fixed — no more silent success</h4>
+        <h4>Fixed: no more silent success</h4>
         <p>Per-collection errors were logged, then the script printed "Download complete." and exited 0 having written nothing. It now tracks what was written and exits non-zero if no gene sets were retrieved.</p>
       </div>
       <div class="change">
-        <h4>Note — <code>--download_gmt</code> now needs network</h4>
+        <h4>Note: <code>--download_gmt</code> now needs network</h4>
         <p>From msigdbr 24 the gene sets are fetched over HTTPS on first use rather than bundled in the package, so this step fails on a compute node with no outbound route. Run it somewhere with internet and pass the result with <code>--gmt</code>.</p>
       </div>
     </div>
@@ -1851,12 +1899,12 @@
 
 
 <!-- ============================================================
-  SLIDE 19 — PREVIOUSLY 1.4.2
+  SLIDE 19: PREVIOUSLY 1.4.2
 ============================================================ -->
-<section data-label="16 Previously — 1.4.2">
+<section data-label="16 Previously: 1.4.2">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">Previously — 1.4.2</h2>
+    <h2 class="slide-title">Previously: 1.4.2</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.4.2</span>
       <span class="release-date">4 August 2026</span>
@@ -1865,12 +1913,12 @@
 
     <div class="changes">
       <div class="change">
-        <h4>New — SGE cluster profile <code>-profile sge</code></h4>
+        <h4>New: SGE cluster profile <code>-profile sge</code></h4>
         <p>Submits every process to an SGE cluster with Singularity, tuned for the UCL Research Computing clusters (Myriad / Kathleen / Young). Derived from the nf-core UCL Myriad config by Chris Wyatt and Fernando Duarte.</p>
       </div>
       <div class="change">
         <h4>Memory requested per core, rounded up</h4>
-        <p>UCL clusters take memory per slot, not per job. Groovy's <code>/</code> returns a decimal, so an uneven request emitted <code>-l mem=3242.6666666667M</code> and was rejected — <code>Math.ceil</code> fixes it for STAR and HISAT2 index building.</p>
+        <p>UCL clusters take memory per slot, not per job. Groovy's <code>/</code> returns a decimal, so an uneven request emitted <code>-l mem=3242.6666666667M</code> and was rejected: <code>Math.ceil</code> fixes it for STAR and HISAT2 index building.</p>
       </div>
       <div class="change">
         <h4>Wall-time ceiling set to 48 h</h4>
@@ -1899,12 +1947,12 @@
 
 
 <!-- ============================================================
-  SLIDE 20 — PREVIOUSLY 1.4.0
+  SLIDE 20: PREVIOUSLY 1.4.0
 ============================================================ -->
-<section data-label="17 Previously — 1.4.0">
+<section data-label="17 Previously: 1.4.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">Previously — 1.4.0</h2>
+    <h2 class="slide-title">Previously: 1.4.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.4.0</span>
       <span class="release-date">17 July 2026</span>
@@ -1913,8 +1961,8 @@
 
     <div class="changes">
       <div class="change">
-        <h4>New — count-matrix entry point <code>--counts</code></h4>
-        <p>Start from a pre-computed gene count matrix, skipping QC and alignment and entering directly at differential expression. For re-analysing published or collaborator count tables — a GEO supplementary file, or another pipeline's output.</p>
+        <h4>New: count-matrix entry point <code>--counts</code></h4>
+        <p>Start from a pre-computed gene count matrix, skipping QC and alignment and entering directly at differential expression. For re-analysing published or collaborator count tables: a GEO supplementary file, or another pipeline's output.</p>
       </div>
       <div class="change">
         <h4>Two layouts auto-detected</h4>
@@ -1925,8 +1973,8 @@
         <p>Non-integer matrices (TPM / FPKM / normalised, or Salmon/Kallisto estimates) and Entrez/RefSeq-keyed matrices are refused with guidance rather than silently producing wrong statistics.</p>
       </div>
       <div class="change">
-        <h4>Fixed — GSEA ranked by the wrong identifier</h4>
-        <p>Genes were ranked by Ensembl ID while MSigDB gene sets are keyed by symbol, so the overlap was essentially zero — fgsea returned an empty table and the report showed "no data". Ranking now uses whichever identifier the gene sets actually use, and warns when overlap is too low to trust.</p>
+        <h4>Fixed: GSEA ranked by the wrong identifier</h4>
+        <p>Genes were ranked by Ensembl ID while MSigDB gene sets are keyed by symbol, so the overlap was essentially zero: fgsea returned an empty table and the report showed "no data". Ranking now uses whichever identifier the gene sets actually use, and warns when overlap is too low to trust.</p>
       </div>
     </div>
   </div>
@@ -1935,12 +1983,12 @@
 
 
 <!-- ============================================================
-  SLIDE 21 — PREVIOUSLY 1.3.0
+  SLIDE 21: PREVIOUSLY 1.3.0
 ============================================================ -->
-<section data-label="18 Previously — 1.3.0">
+<section data-label="18 Previously: 1.3.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">Previously — 1.3.0</h2>
+    <h2 class="slide-title">Previously: 1.3.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.3.0</span>
       <span class="release-date">8 July 2026</span>
@@ -1950,7 +1998,7 @@
     <div class="changes">
       <div class="change">
         <h4>Nextflow 26 support</h4>
-        <p>Nextflow's strict language parser — the default from 25.10, and what <code>nextflow lint</code> uses — rejected several constructs, so the pipeline would not run on current Nextflow. The config and scripts are migrated; <code>nextflow lint</code> now reports zero errors and zero warnings, verified end-to-end on 26.04.</p>
+        <p>Nextflow's strict language parser (the default from 25.10, and what <code>nextflow lint</code> uses) rejected several constructs, so the pipeline would not run on current Nextflow. The config and scripts are migrated; <code>nextflow lint</code> now reports zero errors and zero warnings, verified end-to-end on 26.04.</p>
       </div>
       <div class="change">
         <h4>Minimum Nextflow is now 25.10</h4>
@@ -1966,7 +2014,7 @@
       </div>
       <div class="change">
         <h4>Deprecations cleared</h4>
-        <p><code>Channel.*</code> → <code>channel.*</code>, explicit closure parameters instead of implicit <code>it</code>, and a <code>while</code> loop replaced — no remaining lint warnings.</p>
+        <p><code>Channel.*</code> → <code>channel.*</code>, explicit closure parameters instead of implicit <code>it</code>, and a <code>while</code> loop replaced: no remaining lint warnings.</p>
       </div>
       <div class="change">
         <h4>Behaviour unchanged</h4>
@@ -1979,12 +2027,12 @@
 
 
 <!-- ============================================================
-  SLIDE 22 — PREVIOUS RELEASE 1.2.0
+  SLIDE 22: PREVIOUS RELEASE 1.2.0
 ============================================================ -->
-<section data-label="19 Previously — 1.2.0">
+<section data-label="19 Previously: 1.2.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">Previously — 1.2.0</h2>
+    <h2 class="slide-title">Previously: 1.2.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.2.0</span>
       <span class="release-date">8 July 2026</span>
@@ -1993,31 +2041,31 @@
 
     <div class="changes">
       <div class="change">
-        <h4>Fixed — <code>--download_refs</code> fetched the wrong GTF</h4>
-        <p>The annotation was chosen by excluding known variants, which always left <code>*.chr_patch_hapl_scaff.gtf.gz</code> — a patch/haplotype GTF that does not describe the <code>dna.primary_assembly</code> genome beside it. <strong>Re-download any reference set built before this release.</strong></p>
+        <h4>Fixed: <code>--download_refs</code> fetched the wrong GTF</h4>
+        <p>The annotation was chosen by excluding known variants, which always left <code>*.chr_patch_hapl_scaff.gtf.gz</code>, a patch/haplotype GTF that does not describe the <code>dna.primary_assembly</code> genome beside it. <strong>Re-download any reference set built before this release.</strong></p>
       </div>
       <div class="change">
-        <h4>Fixed — assembly-matched selection</h4>
+        <h4>Fixed: assembly-matched selection</h4>
         <p>The GTF and transcriptome are now chosen by the assembly named in the genome FASTA. Anything that does not match exactly one file is a hard error, never a guess.</p>
       </div>
       <div class="change">
-        <h4>Fixed — Ensembl removed <code>pub/current_gtf/</code></h4>
+        <h4>Fixed: Ensembl removed <code>pub/current_gtf/</code></h4>
         <p>That alias now 404s, so <code>current</code> downloads found no annotation at all. <code>current</code> is resolved to a concrete release up front, and all three files come from one <code>release-&lt;N&gt;/</code> directory.</p>
       </div>
       <div class="change">
-        <h4>Fixed — no more silent partial reference sets</h4>
+        <h4>Fixed: no more silent partial reference sets</h4>
         <p>A failed download used to exit 0 with whatever had arrived. <code>DOWNLOAD_REFS</code> now fails the run, and declares <code>fasta</code> and <code>gtf</code> as required outputs.</p>
       </div>
       <div class="change">
-        <h4>New — the transcriptome is downloaded</h4>
+        <h4>New: the transcriptome is downloaded</h4>
         <p><code>*.cdna.all.fa.gz</code>, matched to the genome's assembly, exposed as a <code>transcript_fasta</code> output. <code>--download_refs</code> can finally feed <code>--build_indices</code> for Salmon and Kallisto.</p>
       </div>
       <div class="change">
-        <h4>New — integrity checks and provenance</h4>
+        <h4>New: integrity checks and provenance</h4>
         <p>HTTPS with retries, a <code>Content-Length</code> check and a full gzip decode catch truncation. <code>download_log.txt</code> records the resolved release, the assembly, and the exact <code>--download_release</code> that reproduces the set.</p>
       </div>
       <div class="change">
-        <h4>Fixed — HISAT2 index build ran out of memory</h4>
+        <h4>Fixed: HISAT2 index build ran out of memory</h4>
         <p><code>hisat2-build --ss --exon</code> needs ~200 GB for human but only requested 48 GB. Memory is now estimated from the GTF size (~204 GB human, 9 GB yeast), capped by <code>--max_memory</code>; below that it degrades to a non-splice-aware index rather than being OOM-killed. New <code>--hisat2_build_memory</code> override.</p>
       </div>
     </div>
@@ -2027,12 +2075,12 @@
 
 
 <!-- ============================================================
-  SLIDE 23 — PREVIOUS RELEASE 1.1.0
+  SLIDE 23: PREVIOUS RELEASE 1.1.0
 ============================================================ -->
-<section data-label="20 Previously — 1.1.0">
+<section data-label="20 Previously: 1.1.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">Previously — 1.1.0</h2>
+    <h2 class="slide-title">Previously: 1.1.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.1.0</span>
       <span class="release-date">25 May 2026</span>
@@ -2041,7 +2089,7 @@
 
     <div class="changes">
       <div class="change">
-        <h4>Differential splicing — <code>--diffsplice</code></h4>
+        <h4>Differential splicing: <code>--diffsplice</code></h4>
         <p>edgeR <code>diffSpliceDGE</code> at exon level (STAR/HISAT2) or transcript level (Salmon/Kallisto). New <code>diffsplice_output/</code>.</p>
       </div>
       <div class="change">
@@ -2071,12 +2119,12 @@
 
 
 <!-- ============================================================
-  SLIDE 24 — QUICK START
+  SLIDE 24: QUICK START
 ============================================================ -->
 <section data-label="21 Quick start">
   <div class="frame">
     <p class="eyebrow">Closing</p>
-    <h2 class="slide-title">Quick start — four commands</h2>
+    <h2 class="slide-title">Quick start: four commands</h2>
     <p class="slide-subtitle">Validate, fetch, build, run. Each step is a separate invocation of <code style="font-family:'JetBrains Mono',monospace;font-size:30px;color:var(--navy);">main.nf</code>.</p>
     <div class="rule"></div>
 
@@ -2085,7 +2133,7 @@
         <div class="qs-num">01</div>
         <div class="qs-body">
           <h4>Validate the workflow without data</h4>
-          <p>Every process ships a stub block — the full graph dry-runs in seconds.</p>
+          <p>Every process ships a stub block: the full graph dry-runs in seconds.</p>
           <code>nextflow run main.nf --input test.csv --aligner star --star_index fake --gtf fake.gtf -stub-run</code>
         </div>
       </div>
@@ -2109,7 +2157,7 @@
         <div class="qs-num">04</div>
         <div class="qs-body">
           <h4>Run the analysis</h4>
-          <p>One invocation, end-to-end. Check <code>results/multiqc/multiqc_report.html</code> when it finishes.</p>
+          <p>One invocation, end-to-end. Check <code>results/multiqc/rnaseq-flow_multiqc_report.html</code> when it finishes.</p>
           <code>nextflow run main.nf --input samplesheet.csv --aligner star --star_index ... --gtf ... -profile docker</code>
         </div>
       </div>

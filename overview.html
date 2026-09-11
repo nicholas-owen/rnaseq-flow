@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>rnaseq-flow — Pipeline Overview (DAG)</title>
+<title>rnaseq-flow: Pipeline Overview (DAG)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
 <style>
   :root {
@@ -81,7 +81,7 @@
   </div>
 
   <header>
-    <h1>rnaseq-flow &mdash; Pipeline Overview</h1>
+    <h1>rnaseq-flow: Pipeline Overview</h1>
     <p>Directed acyclic graph of the modular bulk RNA-seq pipeline. Boxes are
        Nextflow processes; rounded stores are data inputs/references. Solid
        arrows are required data flow; dashed arrows are optional inputs or
@@ -110,7 +110,7 @@
   </div>
 
   <div class="card">
-    <h2>Main analysis workflow &mdash; RNASEQ</h2>
+    <h2>Main analysis workflow: RNASEQ</h2>
     <div class="sub">Entry point: <code>nextflow run main.nf --input samplesheet.csv</code>.
        Exactly one aligner runs per invocation (chosen with <code>--aligner</code>).</div>
     <pre class="mermaid">
@@ -153,7 +153,7 @@ flowchart TD
     GPROF["gProfiler"]:::enrich
 
     MQC["MultiQC"]:::report
-    QUARTO["Quarto analysis report<br/><small>QC + DE + enrichment</small>"]:::report
+    QUARTO["Quarto analysis report<br/><small>run overview + QC + DE + splicing + enrichment</small>"]:::report
 
     SS --> FASTQC
     SS --> FASTP
@@ -227,6 +227,7 @@ flowchart TD
     EDGER -->|results| QUARTO
     GSEA -.->|results| QUARTO
     GPROF -.->|results| QUARTO
+    RMATS -.->|results| QUARTO
 
     classDef input  fill:#e2e8f0,stroke:#94a3b8,color:#1e293b;
     classDef qc     fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
@@ -241,11 +242,11 @@ flowchart TD
   </div>
 
   <div class="card">
-    <h2>Workflow map &mdash; metro / underground style</h2>
+    <h2>Workflow map: metro / underground style</h2>
     <div class="sub">The same RNASEQ workflow drawn as an nf-core-style transit map.
        Each coloured line is one aligner route; white pills are interchange steps
        shared by routes; rings are single-route stops. DESeq2 and edgeR are two
-       parallel DE routes off the gene counts &mdash; both run, and only the
+       parallel DE routes off the gene counts: both run, and only the
        DESeq2 route carries on to GSEA and gProfiler.</div>
     <div class="metro">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1960 1070" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
@@ -254,7 +255,7 @@ flowchart TD
 <tspan x="70.0" dy="0">rnaseq-flow</tspan>
 </text>
 <text x="70.0" y="82.0" font-size="16" font-weight="500" text-anchor="start" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
-<tspan x="70.0" dy="0">Bulk RNA-seq pipeline — workflow map</tspan>
+<tspan x="70.0" dy="0">Bulk RNA-seq pipeline: workflow map</tspan>
 </text>
 <text x="300.0" y="104.0" font-size="13" font-weight="700" text-anchor="middle" fill="#b4bbc6" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
 <tspan x="300.0" dy="0">INPUT  &amp;  READ QC</tspan>
@@ -395,13 +396,13 @@ flowchart TD
 <tspan x="1500.0" dy="0">Quarto report</tspan>
 </text>
 <text x="250.0" y="1014.0" font-size="13" font-weight="500" text-anchor="start" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
-<tspan x="250.0" dy="0">Reporting line — MultiQC aggregates QC logs from FastQC, fastp, alignment, RSeQC and featureCounts; Quarto renders the final HTML report.</tspan>
+<tspan x="250.0" dy="0">Reporting line: MultiQC aggregates QC logs from FastQC, fastp, alignment, RSeQC and featureCounts; Quarto renders the final HTML report.</tspan>
 </text>
 <text x="1600.0" y="696.0" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
 <tspan x="1600.0" dy="0">DESeq2 and edgeR both run on the same gene counts as independent</tspan>
 </text>
 <text x="1600.0" y="713.0" font-size="12.5" font-weight="500" text-anchor="middle" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
-<tspan x="1600.0" dy="0">callers — only the DESeq2 route continues to GSEA / gProfiler.</tspan>
+<tspan x="1600.0" dy="0">callers: only the DESeq2 route continues to GSEA / gProfiler.</tspan>
 </text>
 <rect x="92" y="150" width="372" height="322" rx="14" fill="#ffffff" stroke="#dde2ea" stroke-width="2"/>
 <text x="114.0" y="184.0" font-size="18" font-weight="800" text-anchor="start" fill="#1f4e79" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
@@ -433,11 +434,11 @@ flowchart TD
 </text>
 <rect x="126" y="389" width="26" height="26" rx="13" fill="#ffffff" stroke="#212529" stroke-width="3.2"/>
 <text x="176.0" y="407.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
-<tspan x="176.0" dy="0">Interchange — step shared by routes</tspan>
+<tspan x="176.0" dy="0">Interchange: step shared by routes</tspan>
 </text>
 <circle cx="139" cy="435" r="9.5" fill="#ffffff" stroke="#868e96" stroke-width="4.2"/>
 <text x="176.0" y="440.0" font-size="14" font-weight="500" text-anchor="start" fill="#212529" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
-<tspan x="176.0" dy="0">Stop — single-route step</tspan>
+<tspan x="176.0" dy="0">Stop: single-route step</tspan>
 </text>
 <text x="114.0" y="454.0" font-size="12" font-weight="500" text-anchor="start" fill="#868e96" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
 <tspan x="114.0" dy="0">One aligner runs per execution. Reference download</tspan>
@@ -453,7 +454,7 @@ flowchart TD
 
   <div class="grid2">
     <div class="card">
-      <h2>Helper workflow &mdash; reference download</h2>
+      <h2>Helper workflow: reference download</h2>
       <div class="sub">Entry point: <code>--download_refs</code></div>
       <pre class="mermaid">
 flowchart TD
@@ -470,7 +471,7 @@ flowchart TD
     </div>
 
     <div class="card">
-      <h2>Helper workflow &mdash; index building</h2>
+      <h2>Helper workflow: index building</h2>
       <div class="sub">Entry point: <code>--build_indices</code> (one aligner or <code>all</code>)</div>
       <pre class="mermaid">
 flowchart TD
@@ -506,7 +507,7 @@ flowchart TD
        <code>--stop_at</code> staging parameter.</div>
     <table>
       <tr><th>Gate</th><th>Effect on the graph</th></tr>
-      <tr><td><code>--aligner</code></td><td>One of STAR / HISAT2 / Salmon / Kallisto runs. DESeq2 + edgeR + enrichment run for <b>every</b> aligner &mdash; STAR/HISAT2 feed them via featureCounts, Salmon/Kallisto via <b>tximport</b> (needs <code>--gtf</code>). rMATS and BigWig are STAR/HISAT2 only.</td></tr>
+      <tr><td><code>--aligner</code></td><td>One of STAR / HISAT2 / Salmon / Kallisto runs. DESeq2 + edgeR + enrichment run for <b>every</b> aligner: STAR/HISAT2 feed them via featureCounts, Salmon/Kallisto via <b>tximport</b> (needs <code>--gtf</code>). rMATS and BigWig are STAR/HISAT2 only.</td></tr>
       <tr><td><code>--counts</code></td><td>Enters at differential expression from a pre-computed gene count matrix (featureCounts wide or plain gene &times; sample), skipping FastQC, fastp, alignment and quantification. DESeq2, edgeR and enrichment run as normal. Requires <code>--input</code> (design) and <code>--gtf</code> (annotation).</td></tr>
       <tr><td><code>--stop_at preQC</code></td><td>Stops after FastQC + fastp.</td></tr>
       <tr><td><code>--stop_at postQC</code></td><td>Stops after alignment, SAMtools index, RSeQC and BigWig.</td></tr>
@@ -514,13 +515,13 @@ flowchart TD
       <tr><td><code>--ctat_lib</code></td><td>Enables STAR-Fusion (STAR only).</td></tr>
       <tr><td><code>--isoform_switch</code> + <code>--transcript_fasta</code></td><td>Enables IsoformSwitchAnalyzeR (Salmon only).</td></tr>
       <tr><td><code>--dtu</code></td><td>Enables the DEXSeq differential transcript usage test (Salmon or Kallisto; needs <code>--gtf</code>).</td></tr>
-      <tr><td><code>--diffsplice</code></td><td>Enables the edgeR diffSpliceDGE test &mdash; exon-level usage on STAR/HISAT2, transcript-level usage on Salmon/Kallisto (needs <code>--gtf</code>).</td></tr>
+      <tr><td><code>--diffsplice</code></td><td>Enables the edgeR diffSpliceDGE test: exon-level usage on STAR/HISAT2, transcript-level usage on Salmon/Kallisto (needs <code>--gtf</code>).</td></tr>
       <tr><td><code>--gmt</code></td><td>Enables GSEA. gProfiler runs whenever differential expression runs.</td></tr>
     </table>
     <div class="edgekey" style="margin-top:14px;">MultiQC and the Quarto report always run and aggregate whatever stages executed.</div>
   </div>
 
-  <footer>rnaseq-flow &mdash; pipeline DAG overview &bull; see README.md, USAGE.md and OUTPUTS.md for details</footer>
+  <footer>rnaseq-flow: pipeline DAG overview &bull; see README.md, USAGE.md and OUTPUTS.md for details</footer>
 
 </div>
 <script>

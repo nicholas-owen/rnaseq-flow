@@ -6,16 +6,16 @@ end to end on a laptop or a memory-limited WSL instance.
 ## Why yeast
 
 The genome is 12 Mb, so a STAR index builds in about 2 GB of RAM and a minute or
-two. Human and mouse need far more — mostly for index building, where a
+two. Human and mouse need far more, mostly for index building, where a
 splice-aware HISAT2 index alone needs ~204 GB for human. Every downstream stage
 supports yeast: `--organism scerevisiae` is valid for gProfiler, and MSigDB
 gene sets are available for *Saccharomyces cerevisiae* via `--download_gmt`
-(see the caveat under [GSEA](#gsea-optional) — they are human sets mapped by
+(see the caveat under [GSEA](#gsea-optional): they are human sets mapped by
 orthology, not yeast-native ones).
 
 ## The data
 
-**BioProject [PRJDB13901](https://www.ebi.ac.uk/ena/browser/view/PRJDB13901)** —
+**BioProject [PRJDB13901](https://www.ebi.ac.uk/ena/browser/view/PRJDB13901)**:
 BY4741 carrying the empty `pTOWug2836` vector, grown in YPD or in NaCl.
 
 | sample | run | condition |
@@ -23,7 +23,7 @@ BY4741 carrying the empty `pTOWug2836` vector, grown in YPD or in NaCl.
 | `ypd_rep1..3` | DRR392077, DRR392078, DRR392079 | `REF` (control) |
 | `nacl_rep1..3` | DRR392092, DRR392093, DRR392094 | `NaCl` |
 
-Two conditions × three replicates — comfortably above the pipeline's minimum of
+Two conditions × three replicates, comfortably above the pipeline's minimum of
 two conditions and two replicates each, so DESeq2/edgeR, GSEA and gProfiler all
 run. Naming the control `REF` orients every fold change, and every rMATS PSI
 difference, as NaCl-vs-control.
@@ -31,7 +31,7 @@ difference, as NaCl-vs-control.
 That is why none of the commands below pass `--reference_level`: it defaults to
 `REF`, which is what this dataset calls its control, so the flag would be a
 no-op. Adapting these commands to data whose control group has another name is
-the case that needs it — `--reference_level Untreated`, say. See
+the case that needs it: `--reference_level Untreated`, say. See
 [USAGE.md §4.5](../../USAGE.md#45-which-condition-results-are-measured-against---reference_level).
 
 Full runs are 3.5–9.8 M read pairs. The fetch script subsamples to 1 M pairs by
@@ -46,14 +46,14 @@ assets/test/fetch_yeast_test_data.sh test_data 250000   # smaller/faster
 ```
 
 Uses `seqtk` for a proper random subsample if it is installed; otherwise it takes
-the first N reads. That fallback is fine for a smoke test — every process still
-sees real data — but it is **not** a random sample, so don't draw biological
+the first N reads. That fallback is fine for a smoke test (every process still
+sees real data), but it is **not** a random sample, so don't draw biological
 conclusions from it.
 
 The seqtk path is seeded (`-s42`, the same seed for both mates so pairs stay in
 step), so the subsample is reproducible: the same accessions at the same read
 count give the same reads on any machine. Which of the two paths was taken is
-worth noting before you compare against anyone else's numbers — the script
+worth noting before you compare against anyone else's numbers: the script
 prints it, and the two produce different data from the same input. `seqtk` is in Ubuntu's universe repo if you want the real
 thing:
 
@@ -73,7 +73,7 @@ It writes `test_data/samplesheet_yeast.csv` with absolute paths.
 ## Run it
 
 **Pass `-profile test_yeast` on every command.** Without it the defaults in
-`conf/base.config` apply — those are sized for mammalian genomes (48 GB for
+`conf/base.config` apply: those are sized for mammalian genomes (48 GB for
 `process_high`, 38 GB for STAR indexing) and the local executor refuses to
 schedule a task larger than the machine:
 
@@ -90,7 +90,7 @@ quick way to tell whether it loaded: the STAR command should show
 > from `params.max_*` *at parse time*. Profiles are merged before it is
 > included, so they take effect; a file passed with `-c` is merged *afterwards*,
 > so it can change `params.max_memory` without changing the already-computed
-> limits — the caps silently do nothing. `conf/test_yeast.config` now restates
+> limits: the caps silently do nothing. `conf/test_yeast.config` now restates
 > `resourceLimits` itself so `-c` works too, but the profile is the reliable
 > route. Explicit CLI flags (`--max_memory 12.GB`) also work, because Nextflow
 > injects those before config parsing.
@@ -127,8 +127,8 @@ summarised to gene level by tximport:
 
 Only the BAM routes produce RSeQC, bigWig and rMATS output; the pseudo-aligner
 routes skip straight from quantification to differential expression. Everything
-downstream of the count matrix — DESeq2, edgeR, GSEA, gProfiler, MultiQC, the
-Quarto report and the `reproduce/` folders — is identical on all four.
+downstream of the count matrix (DESeq2, edgeR, GSEA, gProfiler, MultiQC, the
+Quarto report and the `reproduce/` folders) is identical on all four.
 
 **STAR**
 
@@ -169,7 +169,7 @@ nextflow run main.nf \
     -profile test_yeast,docker
 ```
 
-**Salmon** — the index needs the cDNA FASTA *and* the genome, the latter only to
+**Salmon**: the index needs the cDNA FASTA *and* the genome, the latter only to
 build the decoy set.
 
 ```bash
@@ -190,7 +190,7 @@ nextflow run main.nf \
     -profile test_yeast,docker
 ```
 
-**Kallisto** — transcripts only, no decoys.
+**Kallisto**: transcripts only, no decoys.
 
 ```bash
 nextflow run main.nf --build_indices --aligner kallisto \
@@ -210,7 +210,7 @@ nextflow run main.nf \
 ```
 
 > **Why `--strandedness unstranded` on three of the four.** The default is
-> `auto`, which infers strandedness per sample with RSeQC — and RSeQC needs a
+> `auto`, which infers strandedness per sample with RSeQC, and RSeQC needs a
 > BAM. Salmon and Kallisto produce none, so `auto` cannot work there; Kallisto
 > logs a warning and runs library-type-agnostic. This dataset is unstranded, so
 > stating it explicitly is both correct and quieter. For a stranded library pass
@@ -232,13 +232,13 @@ If you would rather not pass the config, the same caps as explicit flags:
 refs/yeast/gmt/c5_go_bp.gmt` on each of the four run commands. The download runs
 under `-profile test_yeast`, which sets `organism = 'scerevisiae'`, so the gene
 sets come back for yeast without any extra flag. `--download_gmt` on its own
-does nothing — it is handled inside the download workflow, which only runs when
+does nothing: it is handled inside the download workflow, which only runs when
 `--download_refs` is given.
 
 > **If you downloaded references before v1.5.0**, the gene sets were published
 > one level too deep, at `refs/yeast/gmt/gmt/c5_go_bp.gmt`. The path above is
 > the corrected one. A re-download writes the un-nested copy alongside the old
-> directory rather than replacing it, so check which one you are pointing at —
+> directory rather than replacing it, so check which one you are pointing at:
 > both will exist and both are readable, which makes the mistake quiet.
 
 `--download_gmt` needs outbound HTTPS: from msigdbr 24 the gene sets are
@@ -259,7 +259,7 @@ line: that number tells you whether the GMT is usable before you look at any
 result.
 
 > **These are not yeast-native gene sets.** msigdbr maps the human MSigDB
-> collections to other species by orthology (`db_species = "HS"`, the default —
+> collections to other species by orthology (`db_species = "HS"`, the default:
 > see `assets/download_gmt.R`). That is fine for exercising the GSEA step, which
 > is what this test dataset is for, but the resulting enrichments are a weak
 > basis for biology: many human sets have no meaningful yeast counterpart, and
@@ -281,7 +281,7 @@ at the *end* of a pipeline, or not at all.
 
 | Check | Why |
 |---|---|
-| Non-ASCII in emitted R code | The rendering container runs in the C locale, so R escapes any non-ASCII byte to `<U+XXXX>` on output. Not confined to raw HTML — it reached a `cat()` call, a DT table caption and a plotly facet label |
+| Non-ASCII in emitted R code | The rendering container runs in the C locale, so R escapes any non-ASCII byte to `<U+XXXX>` on output. Not confined to raw HTML: it reached a `cat()` call, a DT table caption and a plotly facet label |
 | R chunk syntax | At R's top level a statement ends at the newline after an `if` body, so an `else` starting the next line never parses. Broke report rendering twice |
 | Raw-HTML balance | An unbalanced brace or `<style>` tag mangles the page silently rather than erroring |
 | Chunk `eval=` gates | A gate naming an undefined variable makes its chunk silently never run |
@@ -292,29 +292,29 @@ in `modules/local/`. Exits non-zero on failure, so it works as a commit or CI
 gate. `Rscript` is needed for the chunk-parsing check; its absence is reported
 as a failure rather than skipped, so a green run means all five checks ran.
 
-Pair it with `nextflow lint .` — between them they cover the static failures
+Pair it with `nextflow lint .`: between them they cover the static failures
 that would otherwise cost a full run to discover.
 
 ## What to check
 
 Replace `results_*` below with whichever output directory you used.
 
-- `results_*/multiqc/multiqc_report.html` — every sample should appear, under
+- `results_*/multiqc/rnaseq-flow_multiqc_report.html`: every sample should appear, under
   FastQC, fastp and the modules for the route you ran: STAR/HISAT2, RSeQC and
   featureCounts for the genome aligners, Salmon for the Salmon run. Kallisto has
   no MultiQC module, so that run shows only FastQC and fastp. All four should
   also show the `sample_provenance` custom table mapping sample IDs back to run
   accessions.
-- `results_*/quarto_report/analysis_report.html` — PCA should separate YPD from
+- `results_*/quarto_report/analysis_report.html`: PCA should separate YPD from
   NaCl, and the DESeq2/edgeR volcano plots should be populated.
-- `results_*/deseq2_output/deseq2_results_NaCl_vs_REF.csv` — a salt-stress
+- `results_*/deseq2_output/deseq2_results_NaCl_vs_REF.csv`: a salt-stress
   response, so the usual osmotic-stress genes (`GRE2`, `HSP12`, `CTT1`, `STL1`)
   are a reasonable sanity check for the up-regulated set.
-- `results_*/deseq2_output/reproduce/` — each of the four routes should produce
+- `results_*/deseq2_output/reproduce/`: each of the four routes should produce
   the same set of standalone redraw scripts (5 for DESeq2, 3 for edgeR, 2 for
   GSEA, 1 for gProfiler).
 - STAR only: the `STAR_GENOME_GENERATE` log line reporting the genome length and
-  the `--genomeSAindexNbases` it derived — 10 for this genome, not STAR's
+  the `--genomeSAindexNbases` it derived: 10 for this genome, not STAR's
   mammalian default of 14.
 - HISAT2 only: the per-sample `results_hisat2/hisat2/*.summary.log` overall
   alignment rate, ~96–98% on this data.
@@ -341,7 +341,7 @@ bias.
 > targets to hit.** They were produced from the fetch script's default output:
 > 1 M read pairs per sample, drawn by `seqtk sample -s42` (seqtk 1.4) from raw
 > libraries of 3.5–9.8 M pairs. Because the seed is fixed, seqtk users at the
-> default depth should land very close to the table — but you will *not* match
+> default depth should land very close to the table, but you will *not* match
 > it if seqtk was missing when you fetched (the script falls back to the first
 > N reads, a different set of reads entirely, and says so in its output), if you
 > passed a different read count, or if container versions have moved. Any of
@@ -352,6 +352,6 @@ moving together is the expected result, whereas one route disagreeing sharply
 with the other three is worth investigating.
 
 Note that the overlaps do **not** split cleanly along the genome-aligner /
-pseudo-aligner line — STAR agreed more closely with Salmon than with HISAT2 on
+pseudo-aligner line: STAR agreed more closely with Salmon than with HISAT2 on
 this data. That is not in itself a fault; the routes differ in multimapper
 handling and length correction, and 83% is still high concordance.

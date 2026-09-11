@@ -1,4 +1,4 @@
-# rnaseq-flow — Example Analysis
+# rnaseq-flow Example Analysis
 
 A complete, end-to-end worked example that takes **GSE151251** (human hepatic
 stellate cells, ± TGF-β) from raw FASTQ files through HISAT2 alignment,
@@ -11,8 +11,8 @@ that your **rnaseq-flow** setup is working.
 > modern, publicly available human bulk RNA-seq study with a clean
 > treated-vs-control design (3 control + 3 TGF-β-treated hepatic stellate
 > cells). TGF-β activation of HSCs drives an unmistakable upregulation of
-> fibrosis / myofibroblast genes — COL1A1, COL3A1, ACTA2 (α-SMA), SERPINE1,
-> IGFBP3 — which gives you an unambiguous positive control to check against.
+> fibrosis / myofibroblast genes: COL1A1, COL3A1, ACTA2 (α-SMA), SERPINE1,
+> IGFBP3. That gives you an unambiguous positive control to check against.
 
 ---
 
@@ -22,7 +22,7 @@ that your **rnaseq-flow** setup is working.
 - A **container engine**: Docker, Singularity/Apptainer, or Conda.
 - Command-line tools: `curl` (or `wget`), `seqtk` (for read subsampling),
   `column` and `awk` (for reading the run table).
-- **Disk space**: ~30 GB total — about 15 GB for the GRCh38 reference and
+- **Disk space**: ~30 GB total, about 15 GB for the GRCh38 reference and
   HISAT2 index, ~2 GB for the subsampled FASTQs, the rest for results.
 - **Memory**: 16 GB RAM is comfortable. The HISAT2 index build is the heaviest
   step (~8 GB).
@@ -45,10 +45,10 @@ mkdir rnaseq-flow_example && cd rnaseq-flow_example
 
 ---
 
-## 2. Step 1 — Fetch the FASTQ files
+## 2. Step 1: Fetch the FASTQ files
 
 The dataset is BioProject **PRJNA635294** (GEO accession **GSE151251**). The
-easiest way to list and download its FASTQs is via ENA's `filereport` API —
+easiest way to list and download its FASTQs is via ENA's `filereport` API:
 no SRA Toolkit needed, FASTQs come straight from the ENA HTTP/FTP server.
 
 Fetch the run table:
@@ -63,7 +63,7 @@ column -t -s $'\t' data/runinfo.tsv | less -S    # browse the table
 
 The `sample_title` column identifies each sample. For this example you want
 the **six samples that are TGF-β-treated vs control without any other
-perturbation** — three controls and three TGF-β-treated. Note the
+perturbation**: three controls and three TGF-β-treated. Note the
 `run_accession` of each.
 
 Once you've picked the six runs, download their FASTQs from the URLs in the
@@ -90,7 +90,7 @@ done
 
 ---
 
-## 3. Step 2 — Subset the reads to a reusable size
+## 3. Step 2: Subset the reads to a reusable size
 
 Modern RNA-seq depths (20–40 M reads / sample) are more than enough for a
 worked example. Subsample each FASTQ to **2 million read pairs** with `seqtk`,
@@ -111,13 +111,13 @@ ls data/raw/*_1.fastq.gz | sed 's|.*/||; s|_1\.fastq\.gz$||' | while read run; d
 done
 ```
 
-`data/subset/` now contains the reusable example data — roughly ~250 MB per
+`data/subset/` now contains the reusable example data, roughly ~250 MB per
 file (so ~3 GB total for six paired-end samples). You can keep these and
 re-run the pipeline against them as many times as you like.
 
 ---
 
-## 4. Step 3 — Write the samplesheet
+## 4. Step 3: Write the samplesheet
 
 rnaseq-flow's samplesheet is a CSV with one row per sample. Naming the
 controls `REF` makes positive log2 fold changes mean "up on TGF-β" (the
@@ -136,7 +136,7 @@ hsc_tgfb_3,data/subset/<run6>_1.fastq.gz,data/subset/<run6>_2.fastq.gz,tgfb
 Substitute your actual run accessions for `<run1>…<run6>`. Use the
 `sample_title` column in `data/runinfo.tsv` to confirm which three are
 controls and which three are TGF-β-treated. If the runs are single-end (no
-`_2.fastq.gz`), leave the `R2` column empty — the pipeline auto-detects
+`_2.fastq.gz`), leave the `R2` column empty: the pipeline auto-detects
 single-end vs paired-end from whether `R2` is present.
 
 The pipeline's samplesheet validator will abort early if anything is wrong
@@ -145,7 +145,7 @@ two replicates per condition).
 
 ---
 
-## 5. Step 4 — Download references and build the HISAT2 index
+## 5. Step 4: Download references and build the HISAT2 index
 
 These steps run **once** and are reused for every subsequent pipeline
 invocation.
@@ -169,10 +169,10 @@ nextflow run main.nf \
 
 This writes:
 
-- `references/human/v110/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz` — the genome FASTA.
-- `references/human/v110/Homo_sapiens.GRCh38.110.gtf.gz` — the annotation.
-- `references/human/v110/download_log.txt` — provenance (which release, when).
-- `references/human/gmt/hallmark.gmt`, `c2_curated.gmt`, `c2_kegg.gmt`, `c2_reactome.gmt`, `c5_go.gmt`, `c5_go_bp.gmt` — MSigDB gene sets for GSEA.
+- `references/human/v110/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz`: the genome FASTA.
+- `references/human/v110/Homo_sapiens.GRCh38.110.gtf.gz`: the annotation.
+- `references/human/v110/download_log.txt`: provenance (which release, when).
+- `references/human/gmt/hallmark.gmt`, `c2_curated.gmt`, `c2_kegg.gmt`, `c2_reactome.gmt`, `c5_go.gmt`, `c5_go_bp.gmt`: MSigDB gene sets for GSEA.
 
 ### 5.2 Build the HISAT2 index
 
@@ -193,7 +193,7 @@ The index lands in `indices/human/hisat2_index/`. This is the slow step
 
 ---
 
-## 6. Step 5 — Run the analysis
+## 6. Step 5: Run the analysis
 
 With the samplesheet, references and index in place, run the full RNASEQ
 workflow with HISAT2:
@@ -222,7 +222,7 @@ What happens, in order:
 - **deepTools** writes CPM-normalised BigWig coverage tracks.
 - **featureCounts** produces the gene-level count matrix.
 - **DESeq2** and **edgeR** run in parallel on those counts and emit one
-  results CSV per contrast — here, `tgfb_vs_REF`. DESeq2 log2 fold changes
+  results CSV per contrast, here `tgfb_vs_REF`. DESeq2 log2 fold changes
   are apeglm-shrunken; each method also writes volcano, MA / smear and
   (DESeq2) PCA / (edgeR) MDS plots.
 - **fgsea** (because you supplied `--gmt`) runs GSEA on the ranked DESeq2
@@ -237,49 +237,53 @@ What happens, in order:
   written at the end with links to all of the above plus a per-process table
   of job time, peak memory and CPU.
 
-> **Resume after an interruption.** Re-run the same command with `-resume` —
+> **Resume after an interruption.** Re-run the same command with `-resume`:
 > Nextflow only re-executes the tasks affected by anything that changed.
 
 ---
 
-## 7. Step 6 — What was produced and how to read it
+## 7. Step 6: What was produced and how to read it
 
 Start with the two reports:
 
-- **`results/quarto_report/analysis_report.html`** — the headline interactive
-  report. The DESeq2 and edgeR sections each show: significant-gene counts
-  per contrast, an interactive plotly volcano (hover for gene name and
-  stats), the embedded PCA / MDS / heatmap, and a searchable results table.
-  A DESeq2-vs-edgeR agreement section lists how many genes were significant
-  in both methods.
-- **`results/multiqc/multiqc_report.html`** — per-sample QC across FastQC,
-  fastp, HISAT2 alignment, RSeQC and featureCounts. Use this to confirm
+- **`results/quarto_report/analysis_report.html`**: the headline interactive
+  report. It opens with a Run overview (aligner, reference set and release,
+  baseline) and the sample design. The DESeq2 and edgeR sections each show:
+  significant-gene counts per contrast, an interactive plotly volcano (hover
+  for gene name and stats), the embedded PCA / MDS / heatmap, and a searchable
+  results table. A DESeq2-vs-edgeR agreement section lists how many genes were
+  significant in both methods, and an Alternative splicing section summarises
+  the rMATS events. It ends with a Files and locations index.
+- **`results/multiqc/rnaseq-flow_multiqc_report.html`**: per-sample QC across
+  FastQC, fastp, HISAT2 alignment, RSeQC and featureCounts. Use this to confirm
   alignment rates are healthy and strandedness was inferred consistently.
 
 Then the result tables, all under `results/`:
 
 | Path | What's in it |
 |---|---|
-| `deseq2_output/deseq2_results_tgfb_vs_REF.csv` | DESeq2 table — apeglm-shrunken log2FoldChange + Wald stat / pvalue / padj, with `gene_name` and `gene_biotype` columns |
-| `edger_output/edger_results_tgfb_vs_REF.csv` | edgeR counterpart — logFC, logCPM, F-stat, PValue, FDR |
-| `gsea_output/gsea_stats_tgfb_vs_REF.csv` + `gsea_plot_tgfb_vs_REF.png` | Hallmark pathways enriched in TGF-β (positive NES = enriched in tgfb) |
-| `gprofiler_output/gprofiler_UP_tgfb_vs_REF.csv`, `gprofiler_DOWN_tgfb_vs_REF.csv` | GO terms / pathways over-represented in the up- and down-regulated gene lists, with their `gostplot_*.png` images |
+| `deseq2_output/deseq2_results_tgfb_vs_REF.csv` | DESeq2 table: apeglm-shrunken log2FoldChange (and the unshrunken `log2FoldChange_MLE` beside it) + Wald stat / pvalue / padj, with `gene_id`, `gene_name` and `gene_biotype` columns |
+| `edger_output/edger_results_tgfb_vs_REF.csv` | edgeR counterpart: logFC, logCPM, F-stat, PValue, FDR |
+| `gsea_output/gsea_stats_tgfb_vs_REF.csv` + `gsea_plot_tgfb_vs_REF.svg` | Hallmark pathways enriched in TGF-β (positive NES = enriched in tgfb); every figure is also written as `.png` |
+| `gprofiler_output/gprofiler_UP_tgfb_vs_REF.csv`, `gprofiler_DOWN_tgfb_vs_REF.csv` | GO terms / pathways over-represented in the up- and down-regulated gene lists, with their `gostplot_*` images |
+| `*_output/reproduce/` | A script, data and objects that redraw each figure from the results alone ([OUTPUTS.md §18](OUTPUTS.md#18-redrawing-and-adapting-figures-reproduce)) |
 | `featurecounts/`, `rseqc/`, `bam_to_bigwig/`, `hisat2/` | Upstream counts, QC and alignment outputs |
-| `rmats_output/` | Alternative-splicing events (SE / MXE / A3SS / A5SS / RI) |
+| `rmats_output/tgfb_vs_REF/` | Alternative-splicing events (SE / MXE / A3SS / A5SS / RI); `IncLevelDifference` is PSI(tgfb) minus PSI(REF), the same direction as the fold changes |
+| `pipeline_info/run_manifest.json` | How this run was configured: aligner, references, baseline, design |
 | `pipeline_info/run_summary.html` | Run status, duration, links to all outputs, per-process resource table |
 
 ---
 
-## 8. Expected result — a built-in positive control
+## 8. Expected result: a built-in positive control
 
 TGF-β activation of hepatic stellate cells drives an unmistakable, textbook
 fibrosis signature. In `deseq2_results_tgfb_vs_REF.csv` you should see strong
 upregulation (large positive `log2FoldChange`, very small `padj`) of:
 
-- **COL1A1, COL3A1** — type I/III collagens.
-- **ACTA2** (α-smooth-muscle actin) — myofibroblast marker.
-- **SERPINE1** (PAI-1) — TGF-β's classical immediate target.
-- **IGFBP3** — the dataset's own published top finding.
+- **COL1A1, COL3A1**: type I/III collagens.
+- **ACTA2** (α-smooth-muscle actin): myofibroblast marker.
+- **SERPINE1** (PAI-1): TGF-β's classical immediate target.
+- **IGFBP3**: the dataset's own published top finding.
 
 In the Hallmark GSEA output, the gene sets `HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION`
 and `HALLMARK_TGF_BETA_SIGNALING` should be highly NES-positive. gProfiler
@@ -303,7 +307,7 @@ reference / index mismatch.
 | HISAT2 index build runs out of memory | Raise `--max_memory` (default `128.GB`; you need ~8 GB free for the build). |
 | No `gsea_output/` | `--gmt` not supplied, or `--stop_at` was set before the enrichment stage. |
 | Container pull failures | On HPC prefer `-profile singularity`; locally check Docker is running. |
-| The DE table has very few significant genes | You subsampled too aggressively — try increasing `N` (e.g. to 5 M pairs) and re-running. |
+| The DE table has very few significant genes | You subsampled too aggressively. Try increasing `N` (e.g. to 5 M pairs) and re-running. |
 
 ---
 
@@ -312,19 +316,19 @@ reference / index mismatch.
 The subsampled FASTQs in `data/subset/`, the references in
 `references/human/v110/` and the HISAT2 index in
 `indices/human/hisat2_index/` are all one-time setup. Once they exist,
-re-running the pipeline against the same samplesheet takes only minutes —
+re-running the pipeline against the same samplesheet takes only minutes,
 which makes it easy to iterate on options, for example adding
 `--diffsplice` to enable differential splicing, swapping to STAR with
 `--aligner star --star_index ...`, or trying a different `--gmt` file
 (`c2_kegg.gmt`, `c5_go_bp.gmt`).
 
-If instead of raw reads you already have a **gene count matrix** — from another
-pipeline, or a public dataset such as a GEO supplementary file — you can skip the
+If instead of raw reads you already have a **gene count matrix** (from another
+pipeline, or a public dataset such as a GEO supplementary file), you can skip the
 FASTQ, alignment and quantification steps entirely and enter at differential
 expression with `--counts`. You still supply the samplesheet (for `condition`)
 and `--gtf` (for gene annotation); see
-[USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
+[USAGE.md §4.7](USAGE.md#47-starting-from-a-count-matrix---counts).
 
 The whole example is deliberately small, reproducible (subsample seed,
-pinned Ensembl release) and self-verifying through the TGF-β signature —
+pinned Ensembl release) and self-verifying through the TGF-β signature,
 so it serves as both a tutorial and an ongoing setup check.

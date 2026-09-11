@@ -1,4 +1,4 @@
-# rnaseq-flow — Usage Guide
+# rnaseq-flow Usage Guide
 
 This guide walks through installing the pipeline, preparing references, and
 running each of the three workflows. For output interpretation see
@@ -17,7 +17,7 @@ nextflow -version                     # confirm it runs
 ```
 
 You also need **Docker**, **Singularity/Apptainer** or **Conda**. You do not
-need to install any bioinformatics tools yourself — each process pulls its own
+need to install any bioinformatics tools yourself: each process pulls its own
 container.
 
 Get the pipeline:
@@ -57,8 +57,8 @@ Samplesheet OK: 6 sample(s), 2 condition(s) [REF:3, NaCl:3]
 --validate_only: inputs are valid. No processes were run.
 ```
 
-It runs exactly the validation a real run performs — there is no second set of
-rules to drift out of step — and reports **every** problem at once rather than
+It runs exactly the validation a real run performs (there is no second set of
+rules to drift out of step) and reports **every** problem at once rather than
 stopping at the first:
 
 - required columns (`sample`, `R1`, `condition`; `R2` when paired-end)
@@ -82,7 +82,7 @@ nextflow run main.nf --input samplesheet.csv ... --validate_only && sbatch run_r
 Two things it does not do. A **file glob** input has no sample or condition
 column, so there is nothing to validate beyond matching read pairs, and the flag
 says so rather than implying otherwise. And it has **no effect with
-`--download_refs` or `--build_indices`**, which take no samplesheet — it warns
+`--download_refs` or `--build_indices`**, which take no samplesheet: it warns
 instead of passing silently, so nobody believes a reference download was checked
 over when it was not.
 
@@ -96,17 +96,17 @@ over when it was not.
 nextflow run main.nf --help
 ```
 
-prints every parameter — grouped, with defaults — from `nextflow_schema.json`.
+prints every parameter, grouped, with defaults, from `nextflow_schema.json`.
 Parameters are also validated on every run: an unrecognised `--option` (a typo)
 aborts immediately with a clear message, instead of being silently ignored.
 
 ---
 
-## 2. Mode 1 — Download references
+## 2. Mode 1: Download references
 
 Fetches the genome FASTA, the GTF annotation and the cDNA transcriptome for any
 Ensembl species, and (optionally) MSigDB gene sets for GSEA. All three reference
-files are guaranteed to describe the same assembly — the download fails rather
+files are guaranteed to describe the same assembly: the download fails rather
 than mixing them.
 
 ```bash
@@ -134,7 +134,7 @@ nextflow run main.nf \
 > outbound route. Run the download workflow somewhere with internet access, then
 > pass the resulting file with `--gmt` on later runs.
 
-**Reproducibility — the versioned subfolder.** When `--download_release` is
+**Reproducibility: the versioned subfolder.** When `--download_release` is
 set, the reference files are written to a `v<release>` subfolder *under*
 `--outdir`, so each Ensembl build is kept separate. With
 `--outdir references/human --download_release 102` you get:
@@ -156,13 +156,13 @@ references/human/
 Without `--download_release`, the latest release is resolved and downloaded
 straight into `--outdir` (no `v<release>` subfolder). `download_log.txt` always
 records the resolved release, the assembly name, all three filenames and the
-exact `--download_release` value that reproduces the set — so a `current`
+exact `--download_release` value that reproduces the set, so a `current`
 download stays interpretable after Ensembl moves on.
 
 `reference_metadata.json` carries the same provenance in machine-readable form:
 source, requested and resolved release, assembly, annotation version, and each
 file's URL, size and SHA-256. It travels with the reference files, which is the
-point — **the download is the only moment some of this can be known.** An
+point: **the download is the only moment some of this can be known.** An
 Ensembl GTF's own header gives the assembly, the assembly accession and the
 genebuild date, but never the release it was published in, and the trailing
 number in its filename is an annotation version rather than the release
@@ -184,7 +184,7 @@ from; delete it and that is unrecoverable.
 
 ---
 
-## 3. Mode 2 — Build indices
+## 3. Mode 2: Build indices
 
 Builds the index for one aligner, or all four at once with `--aligner all`.
 
@@ -223,7 +223,7 @@ nextflow run main.nf --build_indices --aligner kallisto \
 
 Indices are written under `--outdir`. FASTA/GTF inputs may be gzipped.
 
-### HISAT2 index memory — and when it silently degrades
+### HISAT2 index memory, and when it silently degrades
 
 A **splice-aware** HISAT2 index (`hisat2-build --ss --exon`) is built from the
 splice sites and exons extracted from the GTF, and peak memory is driven by that
@@ -244,7 +244,7 @@ memory = 8 GB + 45 GB per GB of uncompressed GTF
 | Yeast R64 | 0.6 MB | ~9 GB |
 
 The estimate is then capped by `--max_memory`. **If the cap is below the
-estimate, `HISAT2_BUILD` does not fail — it drops `--ss`/`--exon` and builds a
+estimate, `HISAT2_BUILD` does not fail: it drops `--ss`/`--exon` and builds a
 non-splice-aware index instead**, logging:
 
 ```
@@ -254,8 +254,8 @@ WARN  [HISAT2_BUILD] Only 128 GB available but ~204 GB is needed to build a
   own model, but sensitivity to novel junctions is reduced.
 ```
 
-This is deliberate — an under-provisioned run produces a usable index rather
-than being killed by the OOM reaper — but it is easy to miss in a long log, and
+This is deliberate: an under-provisioned run produces a usable index rather
+than being killed by the OOM reaper. But it is easy to miss in a long log, and
 the resulting index is **not** equivalent. Check for that warning whenever you
 build a HISAT2 index for a mammalian genome.
 
@@ -276,7 +276,7 @@ problem entirely.
 
 ---
 
-## 4. Mode 3 — Run the analysis
+## 4. Mode 3: Run the analysis
 
 ### 4.1 Prepare the samplesheet
 
@@ -294,10 +294,10 @@ treat_2,/data/treat_2_R1.fastq.gz,/data/treat_2_R2.fastq.gz,treatment
   and diffSplice alike, and a level you name must exist in the samplesheet or
   the run stops at launch (see README → Samplesheet format).
 - Leave `R2` empty for single-end reads.
-- Provide **at least 2 conditions and at least 2 replicates per condition** —
+- Provide **at least 2 conditions and at least 2 replicates per condition**:
   this is enforced (DESeq2/edgeR cannot estimate dispersion otherwise).
 - Optionally add a **`batch`** column (or other covariate columns) to model
-  confounders in the differential-expression design — see §4.6.
+  confounders in the differential-expression design. See §4.6.
 
 The samplesheet is validated before the run starts: if a required column is
 missing, a sample id is duplicated, a FASTQ path does not exist, or the
@@ -307,7 +307,7 @@ differential expression, the condition/replicate rules become warnings.)
 
 ### 4.2 Worked scenarios
 
-**Scenario A — comprehensive STAR run** (fusions + splicing + DE + enrichment):
+**Scenario A: comprehensive STAR run** (fusions + splicing + DE + enrichment):
 
 ```bash
 nextflow run main.nf \
@@ -325,7 +325,7 @@ nextflow run main.nf \
     -profile docker
 ```
 
-**Scenario B — Salmon transcript-level analysis (isoform switching + DTU + diffSplice):**
+**Scenario B: Salmon transcript-level analysis (isoform switching + DTU + diffSplice):**
 
 ```bash
 nextflow run main.nf \
@@ -343,10 +343,10 @@ nextflow run main.nf \
 
 > When `--gtf` is supplied, Salmon/Kallisto transcript quantification is
 > summarised to gene level by **tximport** and run through DESeq2/edgeR and the
-> enrichment stages — the same downstream analysis as the genome aligners.
+> enrichment stages: the same downstream analysis as the genome aligners.
 > Salmon additionally supports isoform-switch analysis. `--dtu` adds a DEXSeq
 > **differential transcript usage** test (Salmon or Kallisto) that flags genes
-> whose isoform proportions shift between conditions — it is opt-in because
+> whose isoform proportions shift between conditions. It is opt-in because
 > DEXSeq is compute-heavy. `--diffsplice` adds edgeR's `diffSpliceDGE` test:
 > transcript-level usage on the Salmon/Kallisto route, exon-level usage on the
 > STAR/HISAT2 route (it also needs `--gtf`). Without `--gtf`, DE, DTU and
@@ -354,7 +354,7 @@ nextflow run main.nf \
 > DE / DTU / diffSplice result table carries `gene_name` and `gene_biotype`
 > columns parsed from the GTF, so the outputs are readable at a glance.
 
-**Scenario C — standard HISAT2 run:**
+**Scenario C: standard HISAT2 run:**
 
 ```bash
 nextflow run main.nf \
@@ -376,8 +376,8 @@ aligners) and for kallisto.
 |---|---|
 | `auto` *(default)* | STAR/HISAT2: RSeQC `infer_experiment` measures the strandedness of every sample and feeds the verdict straight into featureCounts. Kallisto: no BAM exists to inspect, so kallisto runs library-type-agnostic (see below). |
 | `unstranded` | Force unstranded (`featureCounts -s 0`; no kallisto strand flag). |
-| `reverse` | Force reverse-stranded (`featureCounts -s 2`; `kallisto --rf-stranded`) — Illumina TruSeq Stranded mRNA and most dUTP kits. |
-| `forward` | Force forward-stranded (`featureCounts -s 1`; `kallisto --fr-stranded`) — ligation-based / some older kits. |
+| `reverse` | Force reverse-stranded (`featureCounts -s 2`; `kallisto --rf-stranded`): Illumina TruSeq Stranded mRNA and most dUTP kits. |
+| `forward` | Force forward-stranded (`featureCounts -s 1`; `kallisto --fr-stranded`): ligation-based / some older kits. |
 
 With the default `auto`, the pipeline detects strandedness per sample for the
 genome aligners (STAR/HISAT2): each sample's verdict is written to
@@ -436,7 +436,7 @@ report, so a reader of the report alone can tell what the numbers are relative
 to.
 
 **A level you name must exist in the samplesheet.** The run stops at launch if it
-does not, listing the conditions that were found — a mistyped baseline would
+does not, listing the conditions that were found: a mistyped baseline would
 otherwise produce a complete, plausible set of results oriented against the wrong
 condition.
 
@@ -448,12 +448,12 @@ condition.
 The gene-level differential-expression model (DESeq2 and edgeR) defaults to
 `~ condition`. To adjust for a confounder there are two ways:
 
-- **Quick way — a `batch` column.** Add a `batch` column to the samplesheet;
+- **Quick way: a `batch` column.** Add a `batch` column to the samplesheet;
   the pipeline detects it and the model automatically becomes
   `~ batch + condition` for both DESeq2 and edgeR.
-- **Full control — `--design`.** Pass an explicit model formula, e.g.
+- **Full control: `--design`.** Pass an explicit model formula, e.g.
   `--design "~ sex + batch + condition"`. Every variable in the formula must be
-  a samplesheet column, and `condition` must be included — it stays the
+  a samplesheet column, and `condition` must be included: it stays the
   variable contrasted, so the result tables and the downstream GSEA / gProfiler
   steps are unchanged. An explicit `--design` overrides the automatic `batch`
   behaviour.
@@ -474,8 +474,8 @@ and diffSplice keep their own designs.
 
 ### 4.7 Starting from a count matrix (`--counts`)
 
-If you already have a gene count matrix — from a previous run, a collaborator,
-or a public dataset (e.g. a GEO supplementary file) — you can skip QC and
+If you already have a gene count matrix, from a previous run, a collaborator,
+or a public dataset (e.g. a GEO supplementary file), you can skip QC and
 alignment and enter the pipeline directly at differential expression. DESeq2,
 edgeR, GSEA, gProfiler and the analysis report all run as normal.
 
@@ -487,7 +487,7 @@ nextflow run main.nf \
     -profile docker
 ```
 
-- **`--input` is still required** — the samplesheet supplies `condition` (and any
+- **`--input` is still required**: the samplesheet supplies `condition` (and any
   `batch` / `--design` covariates). With `--counts` the `R1`/`R2` columns are
   optional and ignored, so a minimal samplesheet is just:
 
@@ -499,7 +499,7 @@ nextflow run main.nf \
   treat_2,treatment
   ```
 
-- **`--gtf` is required** — results are annotated with gene symbols and biotypes,
+- **`--gtf` is required**: results are annotated with gene symbols and biotypes,
   never bare gene IDs. The GTF should match the annotation the counts were
   generated against; the run reports the fraction of matrix genes it could
   annotate and aborts if that fraction is implausibly low (a sign the matrix and
@@ -507,12 +507,12 @@ nextflow run main.nf \
 
 **Two matrix layouts are accepted, auto-detected:**
 
-1. **featureCounts wide output** — the pipeline's own `featurecounts/*.txt`, or
+1. **featureCounts wide output**: the pipeline's own `featurecounts/*.txt`, or
    any multi-sample featureCounts table. The `Geneid, Chr, Start, End, Strand,
    Length` annotation columns are dropped; the remaining columns are samples.
    Count columns named after BAM paths are matched back to the samplesheet by
    file/path name.
-2. **Plain matrix** — first column gene IDs, every other column a sample; tab- or
+2. **Plain matrix**: first column gene IDs, every other column a sample; tab- or
    comma-delimited.
 
    ```
@@ -521,30 +521,30 @@ nextflow run main.nf \
    ```
 
 Every samplesheet sample must map to exactly one count column (matched by exact
-name or path token — a numeric id like `100` will not accidentally match
+name or path token, so a numeric id like `100` will not accidentally match
 `1100`); the run aborts and lists any sample it cannot place. Column order in the
-matrix does not matter — columns are reordered to the samplesheet.
+matrix does not matter: columns are reordered to the samplesheet.
 
 **Reading is tolerant of common GEO quirks.** The matrix may be gzipped
-(`.tsv.gz` / `.csv.gz` — the usual form of GEO supplementary files) and is read
+(`.tsv.gz` / `.csv.gz`, the usual form of GEO supplementary files) and is read
 directly. The delimiter (tab or comma) is auto-detected, and a gene-ID column
-with no header — a leading tab/comma before the sample names, as many GEO
-matrices have — is handled correctly. Extra annotation columns (a gene-symbol or
+with no header (a leading tab/comma before the sample names, as many GEO
+matrices have) is handled correctly. Extra annotation columns (a gene-symbol or
 length column) are ignored as long as every samplesheet sample still maps to a
 column.
 
 **Not accepted** (each rejected up front with a clear message):
 
-- **Normalised values** — TPM, FPKM/RPKM, or DESeq2-/CPM-normalised matrices.
+- **Normalised values**: TPM, FPKM/RPKM, or DESeq2-/CPM-normalised matrices.
   DESeq2 and edgeR require raw integer counts, so any non-integer matrix is
   rejected; obtain the raw counts instead.
-- **Salmon/Kallisto *estimated* gene counts as a flat matrix** — non-integer, and
+- **Salmon/Kallisto *estimated* gene counts as a flat matrix**: non-integer, and
   they lose the transcript-length offsets that length-aware DE needs. Re-run
   those datasets through the pseudo-aligner (`--aligner salmon|kallisto`), which
   imports them correctly via tximport.
 - **Matrices keyed by Entrez or RefSeq IDs** (e.g. `7157`, `NM_000546`). A GTF is
   keyed by Ensembl/GENCODE gene IDs and symbols, so these cannot be annotated and
-  fail the annotation-match check — map the IDs to Ensembl gene IDs or symbols
+  fail the annotation-match check. Map the IDs to Ensembl gene IDs or symbols
   first.
 
 Splicing, DTU, isoform-switch and fusion analyses also need reads/BAMs and
@@ -571,7 +571,7 @@ nextflow run main.nf --input samplesheet.csv ... -profile docker -resume
 
 ### Running on an SGE cluster (`-profile sge`)
 
-`conf/sge.config` targets the UCL Research Computing clusters. Use it alone — it
+`conf/sge.config` targets the UCL Research Computing clusters. Use it alone: it
 already enables Singularity, so do **not** combine it with `-profile singularity`:
 
 ```bash
@@ -582,7 +582,7 @@ nextflow run main.nf -profile sge \
 ```
 
 Run it from a login node inside `screen`/`tmux` (or as a small submitted job) so
-the Nextflow head process survives your session — it stays alive orchestrating
+the Nextflow head process survives your session: it stays alive orchestrating
 jobs while the work runs on compute nodes.
 
 What the profile does: requests memory **per core** in the form SGE expects
@@ -594,7 +594,7 @@ points the Apptainer cache and temp directory at `$HOME/Scratch`.
 **Check these before a large run:**
 
 - **`max_time`** is set to `48.h`, and `max_memory`/`max_cpus` to a Myriad
-  standard (D) node — 160 GB usable, 36 cores. Verify against the
+  standard (D) node: 160 GB usable, 36 cores. Verify against the
   [Myriad docs](https://www.rc.ucl.ac.uk/docs/Clusters/Myriad/) and your
   entitlement; a request above the queue limit or a node's usable RAM is
   *rejected at submission*, not queued.
@@ -629,7 +629,7 @@ The one exception is mammalian HISAT2 index building:
 | **HISAT2 mouse** | 158 GB | 12 | 13.2 GB | **I/B only** |
 | **HISAT2 human** | 204 GB | 12 | 17.0 GB | **I/B only** |
 
-So a mammalian splice-aware index cannot run on a standard node *at any total* —
+So a mammalian splice-aware index cannot run on a standard node *at any total*:
 it needs a high-memory (I/B) node.
 
 **The profile handles this for you; there is nothing to configure.** Two rules
@@ -646,7 +646,7 @@ do the work:
 -l mem=17408M -l tmpfs=50G -ac allow=IB
 ```
 
-The result — verified for all four genomes, with no extra flags:
+The result, verified for all four genomes, with no extra flags:
 
 | Genome | Estimate | Per core | Node | Index built |
 |---|---|---|---|---|
@@ -665,7 +665,7 @@ reuse it with `--hisat2_index` on every later run, or to use `--aligner star`
 
 > **Other sites:** the exemption assumes you can land on high-memory nodes. If
 > your account cannot, lower the `withName:HISAT2_BUILD` `resourceLimits` in
-> `conf/sge.config` to your largest node's usable RAM — the build will then
+> `conf/sge.config` to your largest node's usable RAM: the build will then
 > degrade to a non-splice-aware index (with a `WARN`) rather than queueing
 > against nothing.
 
@@ -682,7 +682,7 @@ process.queue    = 'normal'
 Trusted Research Environments, secure enclaves and air-gapped HPC block outbound
 network access, and the pipeline will not run there as configured: **Wave
 provisions several containers on the fly by contacting an external service at run
-time.** Nothing about that can be tuned — it has to be switched off, and every
+time.** Nothing about that can be tuned: it has to be switched off, and every
 image supplied locally.
 
 A prepared bundle of every container the pipeline uses is published on Zenodo:
@@ -710,7 +710,7 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
 The `tre` profile disables Wave and pins the seven Conda-declared processes
 (DESeq2, edgeR/tximport, DEXSeq, GSEA, gProfiler, `--download_gmt`, and the
 Quarto report) to the images in the bundle. Combine it with whichever executor
-profile you need — `tre,sge` above, or `tre` alone for a local run.
+profile you need: `tre,sge` above, or `tre` alone for a local run.
 
 Verify the download before transferring it, since a truncated 7 GB file fails in
 confusing ways much later:
@@ -731,7 +731,7 @@ sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
   usable on its own.
 - **References and gene sets are separate.** The bundle carries software, not
   data. Run `--download_refs` and `--download_gmt` outside the TRE and transfer
-  the reference directory in alongside it — and keep
+  the reference directory in alongside it, and keep
   `reference_metadata.json` with those files, since it is what lets a run
   report which reference set it used.
 - **Do not use `-profile conda` in a TRE.** It resolves and installs
@@ -754,7 +754,7 @@ labels (`process_low/medium/high`). They are automatically capped by:
 ```
 
 A failed task is retried **once** with doubled memory/time. STAR genome
-indexing of a mammalian genome needs ~38 GB RAM — make sure `--max_memory`
+indexing of a mammalian genome needs ~38 GB RAM. Make sure `--max_memory`
 allows it.
 
 ---
@@ -769,17 +769,17 @@ allows it.
 | STAR-Fusion produced nothing | `--ctat_lib` not set, or not pointing at the extracted `ctat_genome_lib_build_dir` |
 | No `deseq2_output/` | Needs a CSV samplesheet; for Salmon/Kallisto also needs `--gtf` (the tximport transcript-to-gene map) |
 | `--counts requires --gtf` | A count-matrix run must supply `--gtf` so results are annotated with gene symbols |
-| `could not map samplesheet samples to count columns` | A `sample` in the samplesheet has no (or an ambiguous) column in the `--counts` matrix — check the sample names against the column headers |
-| `count matrix has non-integer values` | The matrix holds normalised values (TPM, FPKM/RPKM, DESeq2-/CPM-normalised) or Salmon/Kallisto estimates — `--counts` needs raw integer counts. Get the raw counts, or for pseudo-aligner data re-run via `--aligner salmon\|kallisto` |
-| `only N% of matrix gene IDs match the --gtf` | The `--counts` matrix and the `--gtf` are different annotation builds, or the matrix is keyed by Entrez/RefSeq IDs — map the IDs to Ensembl gene IDs or symbols first |
+| `could not map samplesheet samples to count columns` | A `sample` in the samplesheet has no (or an ambiguous) column in the `--counts` matrix. Check the sample names against the column headers |
+| `count matrix has non-integer values` | The matrix holds normalised values (TPM, FPKM/RPKM, DESeq2-/CPM-normalised) or Salmon/Kallisto estimates: `--counts` needs raw integer counts. Get the raw counts, or for pseudo-aligner data re-run via `--aligner salmon\|kallisto` |
+| `only N% of matrix gene IDs match the --gtf` | The `--counts` matrix and the `--gtf` are different annotation builds, or the matrix is keyed by Entrez/RefSeq IDs. Map the IDs to Ensembl gene IDs or symbols first |
 | No `diffsplice_output/` | `--diffsplice` not set, or `--gtf` missing (needed for exon counting and the transcript-to-gene map) |
-| Splicing/fusion missing | These run only at full depth — don't combine with `--stop_at DE` |
+| Splicing/fusion missing | These run only at full depth. Don't combine with `--stop_at DE` |
 | Out-of-memory kills | Raise `--max_memory`, or lower concurrency |
 | Container pull failures | Check internet access / Docker daemon; on HPC prefer `-profile singularity` |
 
 Execution reports are written to `<outdir>/pipeline_info/` (timeline, trace,
-resource report) — inspect these to find which process failed and why.
+resource report). Inspect these to find which process failed and why.
 
 To validate pipeline structure after editing it, re-run with `-stub-run`
 (see §1). To check a samplesheet without running anything, add
-`--validate_only` — it reports every problem at once and schedules no work.
+`--validate_only`: it reports every problem at once and schedules no work.
