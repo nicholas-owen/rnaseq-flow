@@ -4,7 +4,16 @@ How to find and interpret every file the pipeline produces. All paths are
 relative to `--outdir` (default `results/`).
 
 See [README.md](README.md) for an overview and [USAGE.md](USAGE.md) for run
-instructions.
+instructions. [rnaseq-flow_Example_Analysis.md](rnaseq-flow_Example_Analysis.md)
+takes a real public dataset through to these outputs, if you would rather read
+them with a worked result in front of you, and
+[rnaseq-flow_User_Guide.docx](rnaseq-flow_User_Guide.docx) carries this guide
+and the run instructions together as one formatted Word document.
+
+When you come to write the results up,
+[CITATIONS.md](CITATIONS.md) has the publication to cite for every tool and a
+methods paragraph to adapt; the exact versions your run used are in
+`pipeline_info/software_versions_mqc.yml` (§17).
 
 ---
 

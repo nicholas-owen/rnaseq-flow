@@ -8,6 +8,11 @@ Cite only the tools that actually ran for your analysis. Which tools run
 depends on `--aligner` and the optional flags you set. The exact version of
 every tool used in a run is recorded in `pipeline_info/software_versions_mqc.yml`.
 
+[OUTPUTS.md](OUTPUTS.md) explains what each tool produced and how to read it;
+[USAGE.md](USAGE.md) covers how the run was configured; [README.md](README.md)
+is the overview. A styled HTML version of this page is at
+[CITATIONS.html](CITATIONS.html).
+
 ---
 
 ## Workflow engine

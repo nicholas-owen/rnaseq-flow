@@ -94,7 +94,7 @@ already be on your `PATH`, and they will not be.
 | `singularity` | Running on shared or HPC infrastructure, where Docker is normally unavailable. |
 | `conda` | No container engine at all. Slower, and environments are solved at run time, which needs network access. |
 | `sge` | Submitting to an SGE cluster (UCL Myriad / Kathleen / Young). Enables Singularity itself, so use it **alone**. |
-| `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. |
+| `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. Build and run instructions for all four aligners are in [assets/test/README.md](assets/test/README.md). |
 | `tre` | No internet access: a Trusted Research Environment or air-gapped HPC. Ships with the offline container bundle, not the repository (see below). |
 
 Combine them with a comma. The engine and the environment are separate choices:
@@ -387,7 +387,10 @@ silently ignored.
 |---|---|
 | [USAGE.md](USAGE.md) | Detailed run instructions, worked scenarios, troubleshooting |
 | [OUTPUTS.md](OUTPUTS.md) | Every output directory and how to interpret each file |
+| [rnaseq-flow_Example_Analysis.md](rnaseq-flow_Example_Analysis.md) | End-to-end worked example on a public dataset (GSE151251), from FASTQ download to results, with an expected TGF-beta signature to check your setup against |
+| [rnaseq-flow_User_Guide.docx](rnaseq-flow_User_Guide.docx) | The whole guide as a formatted Word document, for printing or circulating offline |
 | [overview.html](overview.html) | Interactive workflow diagram: DAG and metro-map views (open in a browser) |
+| [rnaseq-flow.html](rnaseq-flow.html) | Slide-deck introduction to the pipeline and its release history, with speaker notes (open in a browser) |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CITATIONS.md](CITATIONS.md) | Every tool with its publication, plus a methods-paragraph template |
 | [CITATIONS.html](CITATIONS.html) | The citations page as a styled HTML report (open in a browser) |

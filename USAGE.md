@@ -4,6 +4,15 @@ This guide walks through installing the pipeline, preparing references, and
 running each of the three workflows. For output interpretation see
 [OUTPUTS.md](OUTPUTS.md); for an overview see [README.md](README.md).
 
+**New to the pipeline?**
+[rnaseq-flow_Example_Analysis.md](rnaseq-flow_Example_Analysis.md) runs a real
+public dataset end to end, from FASTQ download to results, and finishes with an
+expected biological signature you can check your setup against. It is the
+quickest way to confirm an install works before pointing the pipeline at your
+own data. The same material is available as a formatted Word document,
+[rnaseq-flow_User_Guide.docx](rnaseq-flow_User_Guide.docx), for printing or for
+circulating where the repository is not to hand.
+
 ---
 
 ## 1. Installation

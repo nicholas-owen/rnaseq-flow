@@ -11,4 +11,6 @@ future_improvements.md
 *.rar
 validate*.py
 to-fix.md
+working_docs/
+.claude/
 

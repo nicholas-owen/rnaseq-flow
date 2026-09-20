@@ -7,6 +7,10 @@ reports. It runs in well under an hour on a modern workstation and produces a
 textbook fibrosis-signature response to TGF-β, so it doubles as a verification
 that your **rnaseq-flow** setup is working.
 
+For the pipeline itself see [README.md](README.md); every parameter used below
+is documented in [USAGE.md](USAGE.md), and every file it produces in
+[OUTPUTS.md](OUTPUTS.md).
+
 > **Why this dataset?** GSE151251 (BioProject **PRJNA635294**) is a small,
 > modern, publicly available human bulk RNA-seq study with a clean
 > treated-vs-control design (3 control + 3 TGF-β-treated hepatic stellate
