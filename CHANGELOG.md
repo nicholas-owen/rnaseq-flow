@@ -5,6 +5,19 @@ All notable changes to **rnaseq-flow** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The yeast example moved from `assets/test/` to `example/`.** It is the
+  first thing to run, and `assets/` holds files the pipeline stages into
+  tasks, so nobody looked there. `example/README.md` and
+  `example/fetch_yeast_test_data.sh` are the same files at the new path, and
+  the README quick start now points at them. `check_report.py`, a developer
+  guard rather than part of the example, moved to `tests/` with its own
+  README. Anything scripted against `assets/test/fetch_yeast_test_data.sh` or
+  `assets/test/check_report.py` breaks; the `test_yeast` profile is unchanged.
+
 ## [1.6.0] - 2026-09-02
 
 Three new capabilities and the first breaking change in the project's history.

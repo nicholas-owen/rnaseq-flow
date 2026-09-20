@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static checks for the analysis report, the R scripts and the Nextflow modules.
 
-    python3 assets/test/check_report.py
+    python3 tests/check_report.py
 
 Exits non-zero if anything fails, so it can gate a commit or a CI job.
 
@@ -42,7 +42,7 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # tests/ sits at the repo root
 QMD = os.path.join(ROOT, "assets", "analysis_report.qmd")
 R_SCRIPTS = os.path.join(ROOT, "assets")
 MODULES = os.path.join(ROOT, "modules", "local")

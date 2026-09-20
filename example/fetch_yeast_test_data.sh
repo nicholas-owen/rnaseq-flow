@@ -2,7 +2,7 @@
 #
 # Fetch a small S. cerevisiae RNA-seq test set and write a samplesheet.
 #
-#   assets/test/fetch_yeast_test_data.sh [OUTDIR] [READS_PER_SAMPLE]
+#   example/fetch_yeast_test_data.sh [OUTDIR] [READS_PER_SAMPLE]
 #
 # Defaults: OUTDIR=test_data, READS_PER_SAMPLE=1000000
 #

@@ -94,7 +94,7 @@ already be on your `PATH`, and they will not be.
 | `singularity` | Running on shared or HPC infrastructure, where Docker is normally unavailable. |
 | `conda` | No container engine at all. Slower, and environments are solved at run time, which needs network access. |
 | `sge` | Submitting to an SGE cluster (UCL Myriad / Kathleen / Young). Enables Singularity itself, so use it **alone**. |
-| `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. Build and run instructions for all four aligners are in [assets/test/README.md](assets/test/README.md). |
+| `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. Build and run instructions for all four aligners are in [example/README.md](example/README.md). |
 | `tre` | No internet access: a Trusted Research Environment or air-gapped HPC. Ships with the offline container bundle, not the repository (see below). |
 
 Combine them with a comma. The engine and the environment are separate choices:
@@ -155,6 +155,12 @@ nextflow run main.nf \
 
 Reference FASTA/GTF files may be supplied **gzipped or uncompressed**: the
 pipeline decompresses them internally where a tool requires it.
+
+To try the pipeline before pointing it at your own data, [example/](example/README.md)
+fetches a six-sample *S. cerevisiae* dataset (1 M read pairs per sample) and
+walks through all three steps above for each of the four aligners. A 12 Mb
+genome indexes in about 2 GB of RAM, so the whole thing runs on a laptop with
+`-profile test_yeast,docker`.
 
 ---
 
@@ -387,6 +393,7 @@ silently ignored.
 |---|---|
 | [USAGE.md](USAGE.md) | Detailed run instructions, worked scenarios, troubleshooting |
 | [OUTPUTS.md](OUTPUTS.md) | Every output directory and how to interpret each file |
+| [example/README.md](example/README.md) | The runnable yeast example: fetch six samples, build each aligner's index, run every route on a laptop, and what to check in the results |
 | [rnaseq-flow_Example_Analysis.md](rnaseq-flow_Example_Analysis.md) | End-to-end worked example on a public dataset (GSE151251), from FASTQ download to results, with an expected TGF-beta signature to check your setup against |
 | [rnaseq-flow_User_Guide.docx](rnaseq-flow_User_Guide.docx) | The whole guide as a formatted Word document, for printing or circulating offline |
 | [overview.html](overview.html) | Interactive workflow diagram: DAG and metro-map views (open in a browser) |
@@ -422,7 +429,7 @@ silently ignored.
 | `nextflow_schema.json` | Parameter schema: powers `--help`, typo detection, and nf-core tooling |
 | `assets/multiqc_config.yml` | MultiQC report config: title, module order, sample-name cleaning, and a custom CSS/logo theme |
 | `assets/analysis_report.qmd` | Quarto template for the interactive analysis report (run overview, sample design, QC, DE, splicing, enrichment, files index) |
-| `assets/test/check_report.py` | Static guard for the report and modules: non-ASCII in emitted R, chunk syntax, `eval=` gates, and module heredocs. Run it after editing the `.qmd` |
+| `tests/check_report.py` | Static guard for the report and modules: non-ASCII in emitted R, chunk syntax, `eval=` gates, and module heredocs. Run it after editing the `.qmd` |
 
 ---
 
