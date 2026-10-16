@@ -926,12 +926,23 @@ time.** Nothing about that can be tuned: it has to be switched off, and every
 image supplied locally.
 
 > **The nf-prov plugin is a second thing to stage.** The RO-Crate is written on
-> every run (§4.8), which means Nextflow resolves `nf-prov@1.7.0` on every run,
-> downloading it on first use. `--ro_crate false` does not avoid this: the
-> plugin is declared whether or not the crate is enabled. Until the offline
-> bundle carries it, copy `$NXF_HOME/plugins/nf-prov-1.7.0` (by default
-> `~/.nextflow/plugins/nf-prov-1.7.0`) from a machine that has run the pipeline
-> once, into the same path inside the enclave.
+> every run (§4.8), so Nextflow resolves `nf-prov@1.7.0` on every run and
+> downloads it on first use. `--ro_crate false` does not avoid this: the plugin
+> is declared whether or not the crate is enabled.
+>
+> Put the plugin directory in place and set `NXF_OFFLINE`:
+>
+> ```bash
+> cp -r singularity-1.6.0/plugins/nf-prov-1.7.0 ~/.nextflow/plugins/
+> export NXF_OFFLINE=true
+> ```
+>
+> It has to go in `$NXF_HOME/plugins`, which defaults to `~/.nextflow/plugins`.
+> Pointing `NXF_PLUGINS_DIR` at the bundle instead does not work: Nextflow
+> reports "No plugins" and carries on without it, so the crate is silently
+> missing rather than the run failing. `NXF_OFFLINE=true` stops Nextflow
+> checking the registry, which it needs for the pinned version to resolve
+> locally.
 
 A prepared bundle of every container the pipeline uses is published on Zenodo:
 
