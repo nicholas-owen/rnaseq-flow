@@ -46,7 +46,7 @@ class CrateEnricher {
     static final String CREDIT = 'https://credit.niso.org/contributor-roles/'
     static final String CRATE = 'ro-crate-metadata.json'
     /** Where the workflow files nf-prov drops at the crate root are moved to. */
-    static final String WORKFLOW_DIR = 'workflow'
+    static final String WORKFLOW_DIR = '.crate'
 
     /**
      * @return a one-line summary for the console, or null when there was no
@@ -257,6 +257,11 @@ class CrateEnricher {
      * Move the workflow files nf-prov drops at the crate root into a subfolder,
      * so the results directory is results rather than results plus a copy of
      * the pipeline.
+     *
+     * The folder is dot-prefixed, so it stays out of the way of anyone reading
+     * the results. It is still ordinary crate content: cp -r, rsync and tar all
+     * carry it, and ro-crate-metadata.json at the root is the entry point, so
+     * nothing has to find the folder by listing.
      *
      * ro-crate-metadata.json cannot come with them: RO-Crate 1.1 requires it to
      * carry that exact name at the root of the crate, and the crate root has to

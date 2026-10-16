@@ -46,24 +46,27 @@ results/
 ├── multiqc/            Aggregated MultiQC report (rnaseq-flow_multiqc_report.html)
 ├── quarto_report/      Interactive Quarto analysis report
 ├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
-├── workflow/           The pipeline as it ran: main.nf, nextflow.config,
-│                       README.md, nextflow_schema.json
+├── .crate/             The pipeline as it ran: main.nf, nextflow.config,
+│                       README.md, nextflow_schema.json. Hidden, and part
+│                       of the RO-Crate rather than a result
 └── ro-crate-metadata.json   The RO-Crate (§17), unless --ro_crate false
 ```
 
 Which directories appear depends on the aligner and options you chose.
 
-`workflow/` and `ro-crate-metadata.json` exist because a Workflow Run RO-Crate
+`.crate/` and `ro-crate-metadata.json` exist because a Workflow Run RO-Crate
 is meant to be self-contained.
 [Workflow RO-Crate 1.0](https://about.workflowhub.eu/Workflow-RO-Crate/1.0/)
 says "The _Crate_ MUST contain a data entity of type `["File",
 "SoftwareSourceCode", "ComputationalWorkflow"]` as the _Main Workflow_", which
-is `workflow/main.nf`, the crate's `mainEntity`. Deleting it leaves the crate
+is `.crate/main.nf`, the crate's `mainEntity`. Deleting it leaves the crate
 pointing at a file that is not there.
 
 nf-prov drops those four at the top of `--outdir`; the pipeline moves them into
-`workflow/` afterwards, which the profile allows because a subfolder is still
-inside the crate. `ro-crate-metadata.json` cannot join them: RO-Crate 1.1
+`.crate/` afterwards, which the profile allows because a subfolder is still
+inside the crate. The folder is hidden because it is crate machinery rather
+than a result, and being hidden costs nothing: `cp -r`, `rsync` and `tar` all
+carry it, and `ro-crate-metadata.json` at the root is the entry point. `ro-crate-metadata.json` cannot join them: RO-Crate 1.1
 requires that exact name at the crate root, and the root has to stay `--outdir`
 or every result file would fall outside the crate.
 
