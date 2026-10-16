@@ -45,10 +45,31 @@ results/
 ├── diffsplice_output/  Differential splicing (edgeR diffSpliceDGE)
 ├── multiqc/            Aggregated MultiQC report (rnaseq-flow_multiqc_report.html)
 ├── quarto_report/      Interactive Quarto analysis report
-└── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
+├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
+│
+│   The rest are the RO-Crate and its contents (see below), written unless
+│   --ro_crate false. They are part of the crate, not strays:
+├── ro-crate-metadata.json   The crate itself
+├── main.nf                  The workflow, copied in: the profile requires it
+├── nextflow.config          The resolved configuration for this run
+├── README.md                The workflow's README
+├── nextflow_schema.json     The parameter schema
+└── <inputs>                 A copy of each file-valued parameter: the
+                             samplesheet, the GTF, the GMT
 ```
 
 Which directories appear depends on the aligner and options you chose.
+
+The loose files at the top are there because a Workflow Run RO-Crate is meant to
+be self-contained: `main.nf` is the crate's `mainEntity`, and the Workflow
+RO-Crate profile requires the workflow to be inside the crate rather than
+referenced outside it. The inputs are copied for the same reason, so the run can
+be understood from the crate alone after the results have been moved or
+archived. Deleting them leaves the crate pointing at files that are not there.
+
+They are small for a small reference set, around 1.7 MB on the yeast example,
+but a human GTF is tens of megabytes and gets copied into every results
+directory. Use `--ro_crate false` if that matters more than the crate does.
 
 > **Count-matrix runs (`--counts`).** Starting from a pre-computed count matrix
 > skips read QC, alignment and quantification, so those directories
