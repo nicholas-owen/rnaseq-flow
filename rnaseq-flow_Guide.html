@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rnaseq-flow: the complete guide</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #ffffff; --ink: #1e293b; --muted: #64748b;
+    --line: #e2e8f0; --accent: #2e75b6; --accent-dark: #1f4e79;
+    --code-bg: #f1f5f9; --code-ink: #0f172a;
+    --star: #c2255c; --hisat2: #1c7ed6; --kallisto: #7048e8; --salmon: #f08c00;
+    --warn-bg: #fff8e6; --warn-line: #f59e0b;
+    --stop-bg: #fef2f2; --stop-line: #dc2626;
+    --note-bg: #f0f7ff; --note-line: #2e75b6;
+    --ok-bg: #f0fdf4; --ok-line: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 20px; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6; font-size: 15px;
+  }
+
+  /* ---- layout ---------------------------------------------------------- */
+  .shell { max-width: 1440px; margin: 0 auto; padding: 28px 24px 80px;
+           display: grid; grid-template-columns: 268px minmax(0, 1fr); gap: 32px; align-items: start; }
+  .main { min-width: 0; }
+
+  /* ---- brand + header -------------------------------------------------- */
+  .brand { margin: 0 0 18px; }
+  .brand svg { height: 54px; width: auto; display: block; }
+  header.hero {
+    background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+    color: #fff; border-radius: 16px; padding: 30px 34px; margin-bottom: 22px;
+    box-shadow: 0 6px 22px rgba(31,78,121,.22);
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.5px; }
+  header.hero p { margin: 0 0 4px; opacity: .93; font-size: 15px; max-width: 860px; }
+  .hero-meta { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .hero-meta span {
+    background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.28);
+    border-radius: 999px; padding: 3px 12px; font-size: 12.5px; font-weight: 600;
+  }
+
+  /* ---- sidebar nav ----------------------------------------------------- */
+  nav.toc {
+    position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 16px; box-shadow: 0 1px 3px rgba(15,23,42,.05); font-size: 13.5px;
+  }
+  nav.toc .toc-title {
+    font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 12px;
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; }
+  nav.toc > ol > li { margin-bottom: 4px; }
+  nav.toc > ol > li > a {
+    display: block; padding: 6px 10px; border-radius: 7px; font-weight: 650;
+    color: var(--ink); text-decoration: none; counter-increment: sec;
+  }
+  nav.toc > ol > li > a::before { content: counter(sec) ". "; color: var(--muted); font-weight: 600; }
+  nav.toc > ol { counter-reset: sec; }
+  nav.toc > ol > li > a:hover { background: var(--code-bg); }
+  nav.toc ol ol { margin: 2px 0 8px 10px; border-left: 2px solid var(--line); padding-left: 2px; }
+  nav.toc ol ol a {
+    display: block; padding: 4px 10px; color: var(--muted); text-decoration: none;
+    border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.4;
+  }
+  nav.toc ol ol a:hover { color: var(--accent); background: var(--code-bg); }
+  nav.toc a.active { color: #fff !important; background: var(--accent) !important; }
+  nav.toc a.active::before { color: rgba(255,255,255,.75); }
+  nav.toc ol ol a.active { background: var(--accent) !important; }
+  .nav-toggle { display: none; }
+
+  /* ---- cards and headings ---------------------------------------------- */
+  section.card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 24px 28px 26px; margin-bottom: 22px; box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    scroll-margin-top: 20px;
+  }
+  section.card > h2 {
+    margin: 0 0 6px; font-size: 21px; color: var(--accent-dark);
+    border-bottom: 2px solid var(--accent); padding-bottom: 9px;
+  }
+  .lede { color: var(--muted); font-size: 14px; margin: 10px 0 18px; max-width: 78ch; }
+  h3 {
+    margin: 30px 0 10px; font-size: 16.5px; color: var(--accent-dark); font-weight: 700;
+    scroll-margin-top: 20px;
+  }
+  h3:first-of-type { margin-top: 18px; }
+  h4 { margin: 20px 0 8px; font-size: 14px; font-weight: 700; color: var(--ink); }
+  p { margin: 0 0 12px; max-width: 82ch; }
+  ul, ol.body { margin: 0 0 14px; padding-left: 22px; max-width: 82ch; }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); }
+  a:hover { text-decoration: underline; }
+
+  /* ---- code ------------------------------------------------------------ */
+  code { background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+         font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+         font-size: 12.8px; color: var(--code-ink); }
+  .codeblock { position: relative; margin: 0 0 16px; }
+  .codeblock pre {
+    margin: 0; background: #0f172a; color: #e2e8f0; border-radius: 10px;
+    padding: 15px 17px; overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 12.8px; line-height: 1.6;
+  }
+  .codeblock pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .codeblock .cmt { color: #94a3b8; }
+  .codeblock .flag { color: #7dd3fc; }
+  .codeblock .str { color: #86efac; }
+  .copy {
+    position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.2); color: #cbd5e1; border-radius: 6px;
+    padding: 3px 9px; font-size: 11.5px; cursor: pointer; font-family: inherit;
+    opacity: 0; transition: opacity .15s;
+  }
+  .codeblock:hover .copy, .copy:focus { opacity: 1; }
+  .copy:hover { background: rgba(255,255,255,.2); color: #fff; }
+  .copy.done { background: #16a34a; border-color: #16a34a; color: #fff; opacity: 1; }
+  pre.plain {
+    margin: 0 0 16px; background: var(--code-bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 13px 15px; overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px; line-height: 1.55; color: #334155;
+  }
+
+  /* ---- tables ---------------------------------------------------------- */
+  .tablewrap { overflow-x: auto; margin: 0 0 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.4px; }
+  th, td { text-align: left; padding: 8px 11px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f8fafc; font-weight: 700; color: var(--accent-dark); font-size: 12.5px;
+       text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
+  tbody tr:hover { background: #fafcff; }
+  td code { font-size: 12.3px; white-space: nowrap; }
+  table.params td:first-child { white-space: nowrap; }
+  td.req { text-align: center; font-weight: 700; color: var(--accent-dark); }
+
+  /* ---- callouts -------------------------------------------------------- */
+  .box { border-radius: 10px; padding: 13px 16px; margin: 0 0 18px; font-size: 13.8px;
+         border-left: 4px solid; max-width: 84ch; }
+  .box p:last-child { margin-bottom: 0; }
+  .box .t { font-weight: 700; display: block; margin-bottom: 3px; font-size: 13.5px; }
+  .box.note { background: var(--note-bg); border-color: var(--note-line); }
+  .box.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .box.stop { background: var(--stop-bg); border-color: var(--stop-line); }
+  .box.ok   { background: var(--ok-bg);   border-color: var(--ok-line); }
+  .box.note .t { color: var(--accent-dark); }
+  .box.warn .t { color: #92400e; }
+  .box.stop .t { color: #991b1b; }
+  .box.ok   .t { color: #166534; }
+
+  /* ---- misc components -------------------------------------------------- */
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .tile { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: #fbfcfe; }
+  .tile h4 { margin: 0 0 6px; font-size: 13.5px; color: var(--accent-dark); }
+  .tile p { font-size: 13.3px; margin: 0; color: #475569; }
+  .route { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
+  .r-star { background: var(--star); } .r-hisat2 { background: var(--hisat2); }
+  .r-salmon { background: var(--salmon); } .r-kallisto { background: var(--kallisto); }
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 0 0 18px; }
+  .steps > li { counter-increment: step; position: relative; padding-left: 38px; margin-bottom: 16px; max-width: 82ch; }
+  .steps > li::before {
+    content: counter(step); position: absolute; left: 0; top: 0;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .steps > li > strong { display: block; margin-bottom: 3px; }
+  .checklist { list-style: none; padding: 0; margin: 0 0 10px; }
+  .checklist li { padding-left: 28px; position: relative; margin-bottom: 9px; max-width: 82ch; }
+  .checklist li::before {
+    content: ""; position: absolute; left: 0; top: 4px; width: 15px; height: 15px;
+    border: 2px solid var(--accent); border-radius: 4px;
+  }
+  .anchor { color: var(--line); text-decoration: none; font-weight: 400; margin-left: 8px; opacity: 0; font-size: .85em; }
+  h3:hover .anchor { opacity: 1; }
+  .anchor:hover { color: var(--accent); text-decoration: none; }
+  footer.page {
+    color: var(--muted); font-size: 12.8px; text-align: center; padding: 10px 0 0;
+    border-top: 1px solid var(--line); margin-top: 6px;
+  }
+  .totop {
+    position: fixed; bottom: 22px; right: 22px; background: var(--accent-dark); color: #fff;
+    border: none; border-radius: 50%; width: 42px; height: 42px; cursor: pointer; font-size: 17px;
+    box-shadow: 0 3px 12px rgba(15,23,42,.28); opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .totop.show { opacity: .92; pointer-events: auto; }
+  .totop:hover { opacity: 1; }
+
+  /* ---- responsive ------------------------------------------------------ */
+  @media (max-width: 1040px) {
+    .shell { grid-template-columns: 1fr; gap: 16px; padding: 20px 16px 60px; }
+    nav.toc { position: static; max-height: none; }
+    .nav-toggle {
+      display: block; width: 100%; background: none; border: none; cursor: pointer;
+      font: inherit; font-weight: 700; color: var(--accent-dark); text-align: left;
+      padding: 0 0 4px; font-size: 14px;
+    }
+    nav.toc.collapsed > ol { display: none; }
+    section.card { padding: 20px 18px 22px; }
+    header.hero { padding: 24px 22px; }
+    header.hero h1 { font-size: 24px; }
+  }
+
+  @media print {
+    body { background: #fff; font-size: 10.5pt; }
+    .shell { display: block; max-width: none; padding: 0; }
+    nav.toc, .copy, .totop { display: none !important; }
+    section.card { box-shadow: none; border: none; padding: 0; margin-bottom: 18pt; break-inside: avoid; }
+    header.hero { background: none; color: var(--ink); box-shadow: none; padding: 0; }
+    .hero-meta span { border: 1px solid var(--line); color: var(--ink); background: none; }
+    .codeblock pre { background: #f8fafc; color: #0f172a; border: 1px solid var(--line); }
+    h2, h3 { break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- =================== SIDEBAR =================== -->
+  <nav class="toc" id="toc">
+    <button class="nav-toggle" id="navToggle" aria-expanded="true">Contents</button>
+    <p class="toc-title">rnaseq-flow guide</p>
+    <ol>
+      <li><a href="#introduction">Introduction</a>
+        <ol>
+          <li><a href="#biology">The biology</a></li>
+          <li><a href="#design">Designing the experiment</a></li>
+          <li><a href="#pipeline">What the pipeline does</a></li>
+          <li><a href="#nextflow">Nextflow, briefly</a></li>
+        </ol>
+      </li>
+      <li><a href="#installation">Installation</a>
+        <ol>
+          <li><a href="#requirements">Requirements</a></li>
+          <li><a href="#install-nextflow">Install Nextflow</a></li>
+          <li><a href="#get-pipeline">Get the pipeline</a></li>
+          <li><a href="#verify">Check it works</a></li>
+        </ol>
+      </li>
+      <li><a href="#configuration">Configuration</a>
+        <ol>
+          <li><a href="#profiles">Profiles</a></li>
+          <li><a href="#samplesheet">The samplesheet</a></li>
+          <li><a href="#baseline">The baseline condition</a></li>
+          <li><a href="#covariates">Batch effects and covariates</a></li>
+          <li><a href="#strandedness">Strandedness</a></li>
+          <li><a href="#parameters">Parameter reference</a></li>
+          <li><a href="#resources">Resources and clusters</a></li>
+          <li><a href="#offline">Running offline</a></li>
+          <li><a href="#provenance">Credit and provenance</a></li>
+        </ol>
+      </li>
+      <li><a href="#usage">Usage</a>
+        <ol>
+          <li><a href="#mode-download">Mode 1: download references</a></li>
+          <li><a href="#mode-indices">Mode 2: build indices</a></li>
+          <li><a href="#mode-analysis">Mode 3: run the analysis</a></li>
+          <li><a href="#aligner-choice">Choosing an aligner</a></li>
+          <li><a href="#stop-at">Stopping early</a></li>
+          <li><a href="#counts-entry">Starting from counts</a></li>
+          <li><a href="#resume">Resuming a run</a></li>
+          <li><a href="#troubleshooting">When something goes wrong</a></li>
+        </ol>
+      </li>
+      <li><a href="#examples">Examples</a>
+        <ol>
+          <li><a href="#yeast">Yeast in an afternoon</a></li>
+          <li><a href="#four-routes">All four aligner routes</a></li>
+          <li><a href="#concordance">Do the routes agree?</a></li>
+          <li><a href="#human-example">A human worked example</a></li>
+        </ol>
+      </li>
+      <li><a href="#outputs">Outputs and interpretation</a>
+        <ol>
+          <li><a href="#layout">Where everything lands</a></li>
+          <li><a href="#reading-order">Reading order</a></li>
+          <li><a href="#out-qc">Read and alignment QC</a></li>
+          <li><a href="#out-counts">Gene counts</a></li>
+          <li><a href="#out-de">Differential expression</a></li>
+          <li><a href="#out-enrich">Functional enrichment</a></li>
+          <li><a href="#out-splicing">Splicing and isoforms</a></li>
+          <li><a href="#out-fusion">Gene fusions</a></li>
+          <li><a href="#out-reports">The two reports</a></li>
+          <li><a href="#out-meta">Execution metadata</a></li>
+          <li><a href="#out-reproduce">Redrawing figures</a></li>
+          <li><a href="#checklist">Interpretation checklist</a></li>
+        </ol>
+      </li>
+      <li><a href="#further">Further reading</a></li>
+    </ol>
+  </nav>
+
+  <!-- =================== MAIN =================== -->
+  <div class="main">
+
+    <div class="brand">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 128" role="img" aria-label="rnaseq-flow">
+        <line x1="32" y1="36" x2="120" y2="36" stroke="#c2255c" stroke-width="9.5" stroke-linecap="round"/>
+        <line x1="32" y1="55" x2="150" y2="55" stroke="#1c7ed6" stroke-width="9.5" stroke-linecap="round"/>
+        <line x1="32" y1="74" x2="104" y2="74" stroke="#7048e8" stroke-width="9.5" stroke-linecap="round"/>
+        <line x1="32" y1="93" x2="134" y2="93" stroke="#f08c00" stroke-width="9.5" stroke-linecap="round"/>
+        <circle cx="150" cy="55" r="7.6" fill="#ffffff" stroke="#1c7ed6" stroke-width="3.6"/>
+        <circle cx="134" cy="93" r="7.6" fill="#ffffff" stroke="#f08c00" stroke-width="3.6"/>
+        <text x="184" y="74" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="56" font-weight="800">
+          <tspan fill="#1f4e79">rnaseq</tspan><tspan fill="#2e75b6">-flow</tspan>
+        </text>
+        <text x="187" y="103" font-family="'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" letter-spacing="3" fill="#64748b">BULK RNA-SEQ PIPELINE</text>
+      </svg>
+    </div>
+
+    <header class="hero">
+      <h1>The complete guide</h1>
+      <p>From what bulk RNA-seq measures, through installing Nextflow and
+         configuring a run, to reading every file the pipeline writes. One page,
+         no external dependencies, works offline.</p>
+      <div class="hero-meta">
+        <span>Pipeline 1.6.0</span>
+        <span>Nextflow &ge; 25.10.0</span>
+        <span>DSL2</span>
+        <span>GPL-3.0</span>
+      </div>
+    </header>
+
+<!-- ============================================================ 1 -->
+<section class="card" id="introduction">
+  <h2>1. Introduction</h2>
+  <p class="lede">What the data is, what the pipeline does with it, and what
+     Nextflow contributes. Read this if RNA-seq or workflow managers are new to
+     you. Skip to <a href="#installation">installation</a> if neither is.</p>
+
+  <h3 id="biology">The biology <a class="anchor" href="#biology">#</a></h3>
+
+  <p>A cell's genome is fixed, but which genes it transcribes is not. Bulk
+     RNA-seq measures that transcription. RNA is extracted from a sample, converted
+     to cDNA, fragmented, and sequenced. The number of reads falling on a gene is
+     a proxy for how much of that gene's RNA was present.</p>
+
+  <p>The word "bulk" matters. Every cell in the sample contributes to one pooled
+     measurement, so what comes out is an average across however many cells went
+     in. A gene that doubles in a rare subpopulation and stays flat elsewhere
+     looks almost unchanged. Single-cell RNA-seq exists to answer that question;
+     this pipeline does not, and no amount of depth will make bulk data
+     resolve it.</p>
+
+  <p>Two properties of the raw counts shape everything downstream. They are
+     <em>compositional</em>: a fixed number of reads is divided among all
+     transcripts, so a gene can appear to fall simply because another gene rose
+     and took up more of the pool. And their variance grows with their mean,
+     which rules out methods that assume constant variance. DESeq2 and edgeR
+     exist to handle both, modelling counts as negative binomial and
+     normalising for library size and composition. This is why raw integer
+     counts must reach them: handing them TPM or FPKM destroys the information
+     the model depends on.</p>
+
+  <h4>Library preparation decides what you can ask</h4>
+  <p>Poly-A selection captures polyadenylated transcripts, which is most mRNA and
+     little else. Ribosomal depletion keeps non-polyadenylated species, including
+     many lncRNAs and histone mRNAs, at the cost of a noisier library. If your
+     library is rRNA-depleted and you quantify against Ensembl's cDNA file alone,
+     lncRNAs go uncounted because they were never in the index. Add the
+     <code>ncrna.fa.gz</code> file for that species.</p>
+
+  <p>Stranded kits record which strand the original RNA came from, which
+     resolves reads falling in overlapping genes on opposite strands. Most
+     current kits (TruSeq Stranded mRNA and other dUTP protocols) are
+     reverse-stranded. Getting this setting wrong roughly halves the counts,
+     which is why the pipeline measures it rather than assuming
+     (<a href="#strandedness">strandedness</a>).</p>
+
+  <h3 id="design">Designing the experiment <a class="anchor" href="#design">#</a></h3>
+
+  <p>The analysis cannot rescue a design. Four decisions are worth making
+     deliberately before any sequencing happens.</p>
+
+  <div class="grid2">
+    <div class="tile">
+      <h4>Replicates</h4>
+      <p>Biological replicates, meaning independent samples, not the same library
+         sequenced twice. The pipeline enforces a minimum of two conditions and
+         two replicates each because DESeq2 and edgeR cannot estimate dispersion
+         below that. Three or more is where the estimates become trustworthy, and
+         rMATS flags designs below three.</p>
+    </div>
+    <div class="tile">
+      <h4>Depth</h4>
+      <p>For differential expression of moderately expressed genes, 20 to 30
+         million reads per sample is a common working figure. More replicates beat
+         more depth for detecting differential expression. Splicing and
+         transcript-level work need more, since the evidence is junction reads
+         rather than whole genes.</p>
+    </div>
+    <div class="tile">
+      <h4>Confounds</h4>
+      <p>If every control was processed on Monday and every treated sample on
+         Friday, batch and condition are confounded and no model can separate
+         them. Randomise sample processing across batches. If a batch exists
+         anyway, record it and model it (<a href="#covariates">covariates</a>).</p>
+    </div>
+    <div class="tile">
+      <h4>The baseline</h4>
+      <p>One condition is the denominator of every contrast, so it decides which
+         way every fold change points. Name the control group <code>REF</code>, or
+         pass <code>--reference_level</code>. Getting this wrong produces a complete,
+         plausible set of results pointing the wrong way
+         (<a href="#baseline">more</a>).</p>
+    </div>
+  </div>
+
+  <h3 id="pipeline">What the pipeline does <a class="anchor" href="#pipeline">#</a></h3>
+
+  <p>rnaseq-flow takes FASTQ files to interpreted results. You choose the
+     aligner, choose which stages run, and supply references directly or let the
+     helper workflows fetch and index them.</p>
+
+  <ol class="steps">
+    <li><strong>Read QC and trimming</strong>
+        FastQC on the raw reads, then fastp for adapter and quality trimming.</li>
+    <li><strong>Alignment or quantification</strong>
+        STAR or HISAT2 align to the genome and produce sorted, indexed BAMs.
+        Salmon or Kallisto quantify against the transcriptome without producing
+        alignments.</li>
+    <li><strong>Post-alignment QC</strong>
+        Genome aligners only. RSeQC measures strandedness, read distribution and
+        gene-body coverage; deepTools writes CPM-normalised BigWig tracks.</li>
+    <li><strong>Gene-level counts</strong>
+        featureCounts for the genome routes, or tximport summarising
+        transcript quantification to gene level for the pseudo-aligners.</li>
+    <li><strong>Differential expression</strong>
+        DESeq2 and edgeR both run, in parallel, on the same counts. They are two
+        independent callers, not a chain: neither feeds the other.</li>
+    <li><strong>Splicing, isoforms and fusions</strong>
+        rMATS event-level splicing, DEXSeq transcript usage, edgeR
+        <code>diffSpliceDGE</code> feature usage, IsoformSwitchAnalyzeR, and
+        STAR-Fusion. Each is gated on the aligner and on an opt-in flag.</li>
+    <li><strong>Functional enrichment</strong>
+        fgsea on the ranked DESeq2 list, gprofiler2 on the thresholded one.</li>
+    <li><strong>Reporting</strong>
+        MultiQC for run-wide QC, and an interactive Quarto report that pulls the
+        whole run into one document.</li>
+  </ol>
+
+  <div class="box note">
+    <span class="t">Enrichment reads DESeq2 only</span>
+    <p>GSEA and gProfiler consume the DESeq2 results. The edgeR tables are an
+       independent cross-check and are not used downstream. Genes called
+       significant by both callers are the high-confidence set.</p>
+  </div>
+
+  <p>Every differential-expression table carries <code>gene_id</code>,
+     <code>gene_name</code> and <code>gene_biotype</code> parsed from the GTF, so
+     results are readable without a separate identifier lookup. Every figure is
+     written as SVG and as 300 dpi PNG, and each analysis directory carries a
+     <code>reproduce/</code> folder that redraws its figures from the results
+     alone (<a href="#out-reproduce">section 6.11</a>).</p>
+
+  <h3 id="nextflow">Nextflow, briefly <a class="anchor" href="#nextflow">#</a></h3>
+
+  <p>Nextflow is the workflow manager underneath. You do not need to write any
+     to use the pipeline, but four of its ideas explain most of what you will
+     see on screen.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Idea</th><th>What it means in practice</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Processes</strong></td>
+          <td>One step, such as <code>STAR_ALIGN</code>. Each declares its own
+              container, so you never install STAR, Salmon or R yourself.</td></tr>
+      <tr><td><strong>Channels</strong></td>
+          <td>The queues connecting processes. A per-sample channel carries one
+              item per sample, so a process declared once runs six times for six
+              samples, in parallel, without a loop anywhere.</td></tr>
+      <tr><td><strong>The work directory</strong></td>
+          <td>Every task runs in its own hashed folder under <code>work/</code>,
+              with its inputs symlinked in. Results you asked for are published
+              to <code>--outdir</code>; <code>work/</code> holds everything else
+              and can be deleted once a run is finished with.</td></tr>
+      <tr><td><strong>Resume</strong></td>
+          <td><code>-resume</code> reuses any task whose inputs and code are
+              unchanged. Fix a parameter that affects the last stage and only that
+              stage reruns.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Two conventions catch people out. Nextflow's own options take a single dash
+     (<code>-profile</code>, <code>-resume</code>, <code>-c</code>); the
+     pipeline's own parameters take two (<code>--input</code>,
+     <code>--aligner</code>). And a run is orchestrated by a head process that
+     must stay alive for the duration, which is why cluster runs belong inside
+     <code>screen</code> or <code>tmux</code>.</p>
+</section>
+
+<!-- ============================================================ 2 -->
+<section class="card" id="installation">
+  <h2>2. Installation</h2>
+  <p class="lede">Nextflow, a container engine, and the pipeline itself. No
+     bioinformatics tools are installed by hand: every process pulls its own
+     container.</p>
+
+  <h3 id="requirements">Requirements <a class="anchor" href="#requirements">#</a></h3>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Component</th><th>Version</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Nextflow</strong></td><td><code>&gt;=25.10.0</code></td>
+          <td>The pipeline uses the strict language, which is the default parser
+              from 25.10. Verified on 26.04.</td></tr>
+      <tr><td><strong>Java</strong></td><td>17 to 26</td>
+          <td>Required by Nextflow. Java 11 has not been supported since Nextflow 24.</td></tr>
+      <tr><td><strong>Container engine</strong></td><td>any one</td>
+          <td>Docker, Singularity/Apptainer, or Conda. Docker on a laptop,
+              Singularity on HPC.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="install-nextflow">Install Nextflow <a class="anchor" href="#install-nextflow">#</a></h3>
+
+  <div class="codeblock"><pre><code><span class="cmt"># Install Nextflow (needs Java 17-26)</span>
+curl -s https://get.nextflow.io | bash
+sudo mv nextflow /usr/local/bin/      <span class="cmt"># or add it to your PATH</span>
+
+nextflow -version                     <span class="cmt"># confirm it runs</span></code></pre></div>
+
+  <h3 id="get-pipeline">Get the pipeline <a class="anchor" href="#get-pipeline">#</a></h3>
+
+  <div class="codeblock"><pre><code>git clone https://github.com/nicholas-owen/rnaseq-flow.git
+cd rnaseq-flow</code></pre></div>
+
+  <h3 id="verify">Check it works <a class="anchor" href="#verify">#</a></h3>
+
+  <p>Three checks, in increasing cost. None of them needs real data.</p>
+
+  <h4>Print every parameter</h4>
+  <div class="codeblock"><pre><code>nextflow run main.nf --help</code></pre></div>
+  <p>Prints every parameter, grouped, with its default, read from
+     <code>nextflow_schema.json</code>. The same schema validates parameters on
+     every run, so a typo such as <code>--alinger star</code> aborts immediately
+     rather than being silently ignored.</p>
+
+  <h4>Dry-run the whole graph</h4>
+  <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet_test.csv --aligner star \
+    --star_index fake --gtf fake.gtf -stub-run</code></pre></div>
+  <p>Every process ships a <code>stub</code> block that creates placeholder
+     outputs. <code>-stub-run</code> executes those instead of the real tools, so
+     the whole channel topology is exercised in seconds with no containers and no
+     data. This is the check to run after editing the pipeline.</p>
+
+  <h4>Validate a real samplesheet</h4>
+  <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --validate_only</code></pre></div>
+
+  <pre class="plain">Samplesheet OK: 6 sample(s), 2 condition(s) [REF:3, NaCl:3]
+--validate_only: inputs are valid. No processes were run.</pre>
+
+  <p>It runs exactly the validation a real run performs, so there is no second
+     set of rules to drift out of step, and it reports every problem at once
+     rather than stopping at the first:</p>
+
+  <pre class="plain">Samplesheet validation failed (2 problem(s)):
+  - row 3: duplicate sample id 'ctrl_1'
+  - row 4 (sample 't1'): R1 file not found: reads/MISSING_1.fq.gz</pre>
+
+  <p>It exits non-zero on failure, so it gates a script:</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet.csv ... --validate_only &amp;&amp; sbatch run_real.sh</code></pre></div>
+
+  <div class="box note">
+    <span class="t">Worth the few seconds before a cluster submission</span>
+    <p>A mistyped path discovered by <code>--validate_only</code> costs seconds.
+       The same typo discovered by a scheduler costs a queue wait. Two things the
+       flag does not do: a file-glob input has no sample or condition column so
+       there is nothing to validate beyond read pairing, and it has no effect with
+       <code>--download_refs</code> or <code>--build_indices</code>, where it warns
+       rather than passing silently.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section class="card" id="configuration">
+  <h2>3. Configuration</h2>
+  <p class="lede">The profile, the samplesheet and the parameters. Most runs need
+     a profile, an aligner, an index, a GTF and a samplesheet; everything else has
+     a working default.</p>
+
+  <h3 id="profiles">Profiles <a class="anchor" href="#profiles">#</a></h3>
+
+  <div class="box stop">
+    <span class="t">Every command needs a -profile</span>
+    <p>It tells Nextflow how to obtain and run the software for each process.
+       Without one, the pipeline expects the tools to already be on your
+       <code>PATH</code>, and they will not be.</p>
+  </div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Profile</th><th>Use it when</th></tr></thead>
+    <tbody>
+      <tr><td><code>docker</code></td><td>Running locally with Docker. The usual choice on a laptop or workstation.</td></tr>
+      <tr><td><code>singularity</code></td><td>Shared or HPC infrastructure, where Docker is normally unavailable.</td></tr>
+      <tr><td><code>conda</code></td><td>No container engine at all. Slower, and environments are solved at run time, which needs network access.</td></tr>
+      <tr><td><code>sge</code></td><td>Submitting to an SGE cluster (UCL Myriad, Kathleen, Young). Enables Singularity itself, so use it <strong>alone</strong>.</td></tr>
+      <tr><td><code>test_yeast</code></td><td>The small <em>S. cerevisiae</em> test dataset. Caps CPU and memory to laptop scale. Combine with an engine.</td></tr>
+      <tr><td><code>tre</code></td><td>No internet access: a Trusted Research Environment or air-gapped HPC. Needs the offline bundle (<a href="#offline">section 3.8</a>).</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Combine with a comma. The engine and the environment are separate choices:</p>
+
+  <div class="codeblock"><pre><code>-profile docker                 <span class="cmt"># local run</span>
+-profile test_yeast,docker      <span class="cmt"># the test dataset, locally</span>
+-profile sge                    <span class="cmt"># UCL cluster (Singularity already enabled)</span>
+-profile tre,sge                <span class="cmt"># air-gapped cluster</span></code></pre></div>
+
+  <h3 id="samplesheet">The samplesheet <a class="anchor" href="#samplesheet">#</a></h3>
+
+  <p><code>--input</code> takes a CSV with at least four columns.</p>
+
+  <div class="codeblock"><pre><code>sample,R1,R2,condition
+ctrl_rep1,data/ctrl_rep1_R1.fastq.gz,data/ctrl_rep1_R2.fastq.gz,REF
+ctrl_rep2,data/ctrl_rep2_R1.fastq.gz,data/ctrl_rep2_R2.fastq.gz,REF
+treat_rep1,data/treat_rep1_R1.fastq.gz,data/treat_rep1_R2.fastq.gz,treatment
+treat_rep2,data/treat_rep2_R1.fastq.gz,data/treat_rep2_R2.fastq.gz,treatment</code></pre></div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Column</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>sample</code></td><td>Unique identifier. Names every output file for that sample.</td></tr>
+      <tr><td><code>R1</code></td><td>Path to the R1 (or single-end) FASTQ. Absolute, or relative to the launch directory.</td></tr>
+      <tr><td><code>R2</code></td><td>Path to the R2 FASTQ. <strong>Leave empty for single-end data</strong>; layout is detected from whether this is present.</td></tr>
+      <tr><td><code>condition</code></td><td>Experimental group. Drives the differential-expression design.</td></tr>
+      <tr><td><code>batch</code> <span style="color:var(--muted)">(optional)</span></td>
+          <td>Batch or covariate label. If present, the DE model becomes <code>~ batch + condition</code> automatically.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The samplesheet is validated before any work starts, and the run aborts
+     immediately if there is a problem. The checks are: required columns present,
+     sample ids unique and non-empty, every R1 and R2 path resolving on disk, at
+     least two conditions, at least two replicates per condition, and every
+     <code>--design</code> variable being a real column. With
+     <code>--stop_at preQC</code> or <code>postQC</code>, where no differential
+     expression runs, the condition and replicate rules are downgraded to
+     warnings.</p>
+
+  <h3 id="baseline">The baseline condition <a class="anchor" href="#baseline">#</a></h3>
+
+  <div class="box warn">
+    <span class="t">This decides which way every result points</span>
+    <p>One condition is the denominator of every contrast. A positive
+       <code>log2FoldChange</code> means "up relative to the baseline", and the
+       same holds for the PSI differences rMATS reports. It defaults to a
+       condition literally named <code>REF</code>.</p>
+  </div>
+
+  <p>Name your control group <code>REF</code>, or point
+     <code>--reference_level</code> at whatever you called it:</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --reference_level Untreated \
+    --outdir results -profile docker</code></pre></div>
+
+  <p>With <code>--reference_level Untreated</code> and a <code>Treated</code>
+     group you get <code>Treated_vs_Untreated</code>, and:</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Result</th><th>A positive value means</th></tr></thead>
+    <tbody>
+      <tr><td><code>log2FoldChange</code> (DESeq2), <code>logFC</code> (edgeR)</td><td>Higher expression in <code>Treated</code></td></tr>
+      <tr><td><code>IncLevelDifference</code> (rMATS)</td><td>Higher inclusion in <code>Treated</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The setting reaches DESeq2, edgeR, rMATS, DEXSeq and edgeR diffSplice, so
+     every contrast in the run is oriented the same way. It is recorded in
+     <code>pipeline_info/run_manifest.json</code> and shown as Baseline in the
+     analysis report, so a reader of the report alone can tell what the numbers
+     are relative to.</p>
+
+  <div class="box stop">
+    <span class="t">A level you name must exist in the samplesheet</span>
+    <p>The run stops at launch if it does not, listing the conditions it found. A
+       mistyped baseline would otherwise produce a complete, plausible set of
+       results oriented against the wrong condition. If you name nothing and no
+       group is called <code>REF</code>, conditions are ordered alphabetically,
+       the direction is arbitrary, and each tool says so in the log.</p>
+  </div>
+
+  <h3 id="covariates">Batch effects and covariates <a class="anchor" href="#covariates">#</a></h3>
+
+  <p>The gene-level model defaults to <code>~ condition</code>. There are two
+     ways to adjust for a confounder.</p>
+
+  <p>The quick way is a <code>batch</code> column. The pipeline detects it and
+     the model becomes <code>~ batch + condition</code> for both DESeq2 and
+     edgeR:</p>
+
+  <div class="codeblock"><pre><code>sample,R1,R2,condition,batch
+ctrl_1,/data/ctrl_1_R1.fastq.gz,/data/ctrl_1_R2.fastq.gz,REF,b1
+ctrl_2,/data/ctrl_2_R1.fastq.gz,/data/ctrl_2_R2.fastq.gz,REF,b2
+treat_1,/data/treat_1_R1.fastq.gz,/data/treat_1_R2.fastq.gz,treatment,b1
+treat_2,/data/treat_2_R1.fastq.gz,/data/treat_2_R2.fastq.gz,treatment,b2</code></pre></div>
+
+  <p>For full control, pass a formula with <code>--design</code>, for example
+     <code>--design "~ sex + batch + condition"</code>. Every variable must be a
+     samplesheet column, and <code>condition</code> must be included since it
+     stays the term being contrasted. An explicit <code>--design</code> overrides
+     the automatic batch behaviour.</p>
+
+  <div class="box warn">
+    <span class="t">Avoid full confounding</span>
+    <p>A covariate perfectly aligned with condition, such as every
+       <code>REF</code> sample in one batch and every treated sample in another,
+       makes the model rank-deficient and DESeq2 and edgeR abort.
+       <code>--design</code> covers the gene-level tests only: rMATS, DTU and
+       diffSplice keep their own designs.</p>
+  </div>
+
+  <h3 id="strandedness">Strandedness <a class="anchor" href="#strandedness">#</a></h3>
+
+  <p><code>--strandedness</code> sets the library strand setting for
+     featureCounts (the genome aligners) and for kallisto.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Setting</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td><code>auto</code> <em>(default)</em></td>
+          <td>STAR and HISAT2: RSeQC <code>infer_experiment</code> measures every
+              sample and the verdict is fed straight into that sample's
+              featureCounts run. Kallisto: no BAM exists to inspect, so it runs
+              library-type-agnostic.</td></tr>
+      <tr><td><code>unstranded</code></td><td><code>featureCounts -s 0</code>, no kallisto strand flag.</td></tr>
+      <tr><td><code>reverse</code></td><td><code>featureCounts -s 2</code>, <code>kallisto --rf-stranded</code>. TruSeq Stranded mRNA and most dUTP kits.</td></tr>
+      <tr><td><code>forward</code></td><td><code>featureCounts -s 1</code>, <code>kallisto --fr-stranded</code>. Ligation-based and some older kits.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Each sample's verdict is written to
+     <code>results/rseqc/&lt;sample&gt;.strandedness.txt</code>. Set
+     <code>--strandedness</code> explicitly only to override the inference, and
+     check it against that file if you do, since a wrong strand setting roughly
+     halves your gene counts.</p>
+
+  <p>Salmon auto-detects library type internally with <code>--libType A</code>,
+     so it needs no setting. Kallisto has no equivalent and produces no BAM, so it
+     cannot auto-detect: pass <code>forward</code> or <code>reverse</code>
+     explicitly for a stranded library. The pipeline logs a warning when kallisto
+     runs with <code>auto</code>.</p>
+
+  <h3 id="parameters">Parameter reference <a class="anchor" href="#parameters">#</a></h3>
+
+  <p>Every parameter is declared in <code>nextflow_schema.json</code>.
+     "Yes*" means required only when the relevant tool or mode is used.</p>
+
+  <h4>Input and output</h4>
+  <div class="tablewrap">
+  <table class="params">
+    <thead><tr><th>Parameter</th><th>Req</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--input</code></td><td class="req">Yes</td><td>&ndash;</td><td>Path to the CSV samplesheet (RNASEQ mode)</td></tr>
+      <tr><td><code>--counts</code></td><td class="req">No</td><td>&ndash;</td><td>Pre-computed gene count matrix. Enters at differential expression, skipping QC and alignment. Needs <code>--input</code> and <code>--gtf</code></td></tr>
+      <tr><td><code>--outdir</code></td><td class="req">No</td><td><code>results</code></td><td>Output directory</td></tr>
+      <tr><td><code>--publish_dir_mode</code></td><td class="req">No</td><td><code>copy</code></td><td>How results are published: <code>copy</code>, <code>symlink</code>, <code>link</code></td></tr>
+      <tr><td><code>--stop_at</code></td><td class="req">No</td><td>&ndash;</td><td>Stop after a stage: <code>preQC</code>, <code>postQC</code>, <code>DE</code>, <code>GSEA</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>Alignment and references</h4>
+  <div class="tablewrap">
+  <table class="params">
+    <thead><tr><th>Parameter</th><th>Req</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--aligner</code></td><td class="req">No</td><td><code>star</code></td><td><code>star</code>, <code>hisat2</code>, <code>salmon</code> or <code>kallisto</code></td></tr>
+      <tr><td><code>--strandedness</code></td><td class="req">No</td><td><code>auto</code></td><td><code>auto</code>, <code>unstranded</code>, <code>forward</code>, <code>reverse</code></td></tr>
+      <tr><td><code>--gtf</code></td><td class="req">Yes*</td><td>&ndash;</td><td>Gene annotation (GTF, may be gzipped)</td></tr>
+      <tr><td><code>--star_index</code></td><td class="req">Yes*</td><td>&ndash;</td><td>STAR index directory</td></tr>
+      <tr><td><code>--hisat2_index</code></td><td class="req">Yes*</td><td>&ndash;</td><td>HISAT2 index directory</td></tr>
+      <tr><td><code>--salmon_index</code></td><td class="req">Yes*</td><td>&ndash;</td><td>Salmon index directory</td></tr>
+      <tr><td><code>--kallisto_index</code></td><td class="req">Yes*</td><td>&ndash;</td><td>Kallisto index file</td></tr>
+      <tr><td><code>--transcript_fasta</code></td><td class="req">Yes*</td><td>&ndash;</td><td>Transcript FASTA, for Salmon/Kallisto index building and isoform switching</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>Analysis options</h4>
+  <div class="tablewrap">
+  <table class="params">
+    <thead><tr><th>Parameter</th><th>Req</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--reference_level</code></td><td class="req">No</td><td><code>REF</code></td><td>Baseline condition, the denominator of every contrast</td></tr>
+      <tr><td><code>--design</code></td><td class="req">No</td><td>auto</td><td>Model formula, e.g. <code>~ batch + condition</code>. Defaults from the samplesheet</td></tr>
+      <tr><td><code>--read_length</code></td><td class="req">No</td><td><code>100</code></td><td>Read length passed to rMATS</td></tr>
+      <tr><td><code>--ctat_lib</code></td><td class="req">No</td><td>&ndash;</td><td>CTAT genome library directory. Enables STAR-Fusion</td></tr>
+      <tr><td><code>--isoform_switch</code></td><td class="req">No</td><td><code>false</code></td><td>IsoformSwitchAnalyzeR. Needs <code>--aligner salmon</code></td></tr>
+      <tr><td><code>--dtu</code></td><td class="req">No</td><td><code>false</code></td><td>DEXSeq differential transcript usage. Needs Salmon or Kallisto, and <code>--gtf</code></td></tr>
+      <tr><td><code>--diffsplice</code></td><td class="req">No</td><td><code>false</code></td><td>edgeR <code>diffSpliceDGE</code>. Exon level on STAR/HISAT2, transcript level on Salmon/Kallisto. Needs <code>--gtf</code></td></tr>
+      <tr><td><code>--gmt</code></td><td class="req">No</td><td>&ndash;</td><td>GMT gene-set file. Enables GSEA</td></tr>
+      <tr><td><code>--organism</code></td><td class="req">No</td><td><code>hsapiens</code></td><td>Organism ID for gProfiler and GMT download</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>Helper workflows</h4>
+  <div class="tablewrap">
+  <table class="params">
+    <thead><tr><th>Parameter</th><th>Req</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--download_refs</code></td><td class="req">No</td><td><code>false</code></td><td>Run the reference-download workflow</td></tr>
+      <tr><td><code>--download_species</code></td><td class="req">Yes*</td><td><code>homo_sapiens</code></td><td>Ensembl species name, lower case with underscores</td></tr>
+      <tr><td><code>--download_source</code></td><td class="req">No</td><td><code>ensembl</code></td><td>Reference source</td></tr>
+      <tr><td><code>--download_release</code></td><td class="req">No</td><td><code>current</code></td><td>Pin an Ensembl release, e.g. <code>102</code>. Output goes to <code>&lt;outdir&gt;/v&lt;release&gt;</code></td></tr>
+      <tr><td><code>--download_gmt</code></td><td class="req">No</td><td><code>false</code></td><td>Also download MSigDB GMT gene sets</td></tr>
+      <tr><td><code>--build_indices</code></td><td class="req">No</td><td><code>false</code></td><td>Run the index-building workflow</td></tr>
+      <tr><td><code>--genome_fasta</code></td><td class="req">Yes*</td><td>&ndash;</td><td>Genome FASTA for index building</td></tr>
+      <tr><td><code>--hisat2_build_memory</code></td><td class="req">No</td><td>estimated</td><td>Override the GTF-derived memory estimate for a splice-aware HISAT2 index</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>Resources and generic</h4>
+  <div class="tablewrap">
+  <table class="params">
+    <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>--max_cpus</code></td><td><code>16</code></td><td>Per-process CPU ceiling</td></tr>
+      <tr><td><code>--max_memory</code></td><td><code>128.GB</code></td><td>Per-process memory ceiling</td></tr>
+      <tr><td><code>--max_time</code></td><td><code>240.h</code></td><td>Per-process wall-time ceiling</td></tr>
+      <tr><td><code>--help</code></td><td><code>false</code></td><td>Print every parameter, grouped with defaults, and exit</td></tr>
+      <tr><td><code>--validate_only</code></td><td><code>false</code></td><td>Validate the samplesheet and inputs, then exit without running anything</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="resources">Resources and clusters <a class="anchor" href="#resources">#</a></h3>
+
+  <p>Per-process CPU, memory and time come from <code>conf/base.config</code>,
+     keyed off process labels (<code>process_low</code>,
+     <code>process_medium</code>, <code>process_high</code>), and are capped by
+     the three <code>--max_*</code> parameters. A failed task is retried once with
+     doubled memory and time. STAR genome indexing of a mammalian genome needs
+     about 38 GB, so make sure <code>--max_memory</code> allows it.</p>
+
+  <h4>Running on SGE</h4>
+  <p><code>conf/sge.config</code> targets the UCL Research Computing clusters.
+     Use it alone, since it already enables Singularity:</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf -profile sge \
+    --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --outdir results</code></pre></div>
+
+  <p>Run it from a login node inside <code>screen</code> or <code>tmux</code>, or
+     as a small submitted job, so the Nextflow head process survives your session
+     while the work runs on compute nodes. The profile requests memory per core in
+     the form SGE expects, requests node-local scratch, routes any job needing
+     more than a standard node's 4.4 GB per core to the high-memory nodes, and
+     points the Apptainer cache at <code>$HOME/Scratch</code>.</p>
+
+  <p>For a different scheduler, copy <code>conf/sge.config</code> as a starting
+     point, or pass a minimal executor block with <code>-c</code>:</p>
+
+  <div class="codeblock"><pre><code>process.executor = <span class="str">'slurm'</span>
+process.queue    = <span class="str">'normal'</span></code></pre></div>
+
+  <h4>HISAT2 index memory, and when it silently degrades</h4>
+
+  <p>A splice-aware HISAT2 index (<code>hisat2-build --ss --exon</code>) is built
+     from the splice sites and exons in the GTF, and peak memory is driven by that
+     graph rather than by the genome. The pipeline estimates it from the GTF:</p>
+
+  <pre class="plain">memory = 8 GB + 45 GB per GB of uncompressed GTF</pre>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Species (Ensembl 116)</th><th>GTF (gz)</th><th>Estimated requirement</th></tr></thead>
+    <tbody>
+      <tr><td>Human GRCh38</td><td>135 MB</td><td><strong>~204 GB</strong></td></tr>
+      <tr><td>Mouse GRCm39</td><td>103 MB</td><td>~158 GB</td></tr>
+      <tr><td>Zebrafish GRCz11</td><td>17 MB</td><td>~34 GB</td></tr>
+      <tr><td><em>C. elegans</em> / fly</td><td>7&ndash;8 MB</td><td>~15&ndash;16 GB</td></tr>
+      <tr><td>Yeast R64</td><td>0.6 MB</td><td>~9 GB</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box warn">
+    <span class="t">Check for this warning on any mammalian HISAT2 build</span>
+    <p>If <code>--max_memory</code> is below the estimate, <code>HISAT2_BUILD</code>
+       does not fail. It drops <code>--ss</code> and <code>--exon</code> and builds
+       a non-splice-aware index instead, which is deliberate (an under-provisioned
+       run produces a usable index rather than being killed) but easy to miss in a
+       long log. The resulting index is not equivalent.</p>
+  </div>
+
+  <pre class="plain">WARN  [HISAT2_BUILD] Only 128 GB available but ~204 GB is needed to build a
+  splice-aware index from Homo_sapiens.GRCh38.116.gtf.gz.
+  Building WITHOUT --ss/--exon. HISAT2 still aligns across junctions using its
+  own model, but sensitivity to novel junctions is reduced.</pre>
+
+  <p>To force the splice-aware build, raise the ceiling and make sure a node that
+     large exists. <code>--hisat2_build_memory</code> overrides the estimate
+     directly. This affects index building only: alignment is unaffected, and
+     building once on a high-memory machine then reusing the index with
+     <code>--hisat2_index</code> avoids the problem entirely. Under
+     <code>-profile sge</code> it is handled for you, since
+     <code>HISAT2_BUILD</code> is exempted from the standard-node ceiling and any
+     job above 4.4 GB per core gets the high-memory node selector appended.</p>
+
+  <h3 id="offline">Running offline (TRE and air-gapped) <a class="anchor" href="#offline">#</a></h3>
+
+  <div class="box stop">
+    <span class="t">The pipeline does not run as-is without internet access</span>
+    <p>Nextflow Wave provisions several containers on the fly by contacting an
+       external service at run time. Nothing about that can be tuned: it has to be
+       switched off, and every image supplied locally.</p>
+  </div>
+
+  <p>A prepared bundle of every container is published on Zenodo at
+     <a href="https://doi.org/10.5281/zenodo.21880328" target="_blank" rel="noopener">doi.org/10.5281/zenodo.21880328</a>,
+     a concept DOI resolving to the most recent bundle.
+     It holds 27 Singularity images (about 7 GB), a <code>tre.config</code>
+     profile and a README. Download it outside the TRE, verify it, transfer it in,
+     then:</p>
+
+  <div class="codeblock"><pre><code>sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
+tar -xf rnaseq-flow-1.5.1-singularity.tar
+export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.5.1
+
+nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
+    -profile tre,sge \
+    --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --outdir results</code></pre></div>
+
+  <p>The <code>tre</code> profile disables Wave and pins the seven Conda-declared
+     processes (DESeq2, edgeR/tximport, DEXSeq, GSEA, gProfiler,
+     <code>--download_gmt</code> and the Quarto report) to the bundled images.
+     Combine it with whichever executor profile you need.</p>
+
+  <ul>
+    <li>The bundle is pinned to a release. The 1.5.1 bundle also covers 1.6.0,
+        since no container reference changed between them. A genuine mismatch
+        surfaces as a process failing to find its image, not as a clear version
+        error.</li>
+    <li>References and gene sets are separate. The bundle carries software, not
+        data. Run <code>--download_refs</code> and <code>--download_gmt</code>
+        outside the TRE and transfer the reference directory in, keeping
+        <code>reference_metadata.json</code> with those files.</li>
+    <li>Do not use <code>-profile conda</code> in a TRE. It resolves and installs
+        environments at run time, which needs reachable channels. The containers
+        exist precisely to avoid that.</li>
+  </ul>
+
+  <h3 id="provenance">Credit and provenance: edit this before your first run <a class="anchor" href="#provenance">#</a></h3>
+
+  <p>Every run writes <code>pipeline_info/run_manifest.json</code>, recording how
+     it was configured, what it ran against, and who did it. That last part is
+     the one thing the pipeline cannot work out for itself, and it is where your
+     contribution to the analysis is captured. Left unset it records whichever
+     account launched the job, credits nobody, and says so.</p>
+
+  <div class="box note">
+    <span class="t">Nothing in the cloned repository needs editing</span>
+    <p>Your identity belongs in your own Nextflow config, not in the pipeline.
+       Create or open <code>$HOME/.nextflow/config</code>, which Nextflow reads
+       on every run from any directory.</p>
+  </div>
+
+  <div class="codeblock"><pre><code>params.run_contributors = [[
+    name        : 'Jane Doe',
+    orcid       : '0000-0002-1825-0097',
+    roles       : ['formal-analysis', 'data-curation'],
+    affiliation : 'https://ror.org/02jx3x895',
+    facility    : 'UCL Genomics',
+    facility_id : 'RRID:SCR_000000'
+]]</code></pre></div>
+
+  <p>Only <code>name</code> is required. The rest are persistent identifiers
+     wherever one exists, so the record resolves rather than merely asserting:</p>
+
+  <table>
+    <tr><th>Field</th><th>What it takes</th></tr>
+    <tr><td><code>orcid</code></td><td>Your <a href="https://orcid.org" target="_blank" rel="noopener">ORCID</a>, bare or as a full URL. Stored as the URL</td></tr>
+    <tr><td><code>roles</code></td><td>CRediT contributor roles (ANSI/NISO Z39.104-2022) as lowercase hyphenated tokens. Checked against the standard's fourteen values at launch, then stored as resolvable <code>credit.niso.org/contributor-roles/</code> URIs</td></tr>
+    <tr><td><code>affiliation</code></td><td>A <a href="https://ror.org" target="_blank" rel="noopener">ROR</a> identifier for your institution</td></tr>
+    <tr><td><code>facility</code>, <code>facility_id</code></td><td>A core facility's name, and its <a href="https://scicrunch.org/resources" target="_blank" rel="noopener">RRID</a> where it has one. Most facilities have no ROR of their own</td></tr>
+  </table>
+
+  <p>The fourteen valid role tokens. For a pipeline run the realistic ones are
+     <code>formal-analysis</code>, <code>data-curation</code>,
+     <code>software</code>, <code>validation</code> and
+     <code>visualization</code>:</p>
+
+  <div class="codeblock"><pre><code>conceptualization        funding-acquisition      resources
+data-curation            investigation            software
+formal-analysis          methodology              supervision
+project-administration   validation               visualization
+writing-original-draft   writing-review-editing</code></pre></div>
+
+  <p>A token outside that set stops the run before any process is scheduled,
+     listing every problem at once. That is deliberate: a misspelled role would
+     otherwise produce metadata claiming conformance to a standard for a role
+     that does not exist, and nothing downstream would catch it.</p>
+
+  <p>For several people with different roles, or for a shared service account
+     where the attribution should belong to the project rather than to the login,
+     put the same block in a <code>nextflow.config</code> in the directory you
+     launch from. A launch-directory config outranks your home one.</p>
+
+  <div class="codeblock"><pre><code>params.run_contributors = [
+    [ name: 'Jane Doe',     orcid: '0000-0002-1825-0097',
+      roles: ['formal-analysis', 'software'] ],
+    [ name: 'A Supervisor', orcid: '0000-0001-5598-6274',
+      roles: ['supervision', 'funding-acquisition'] ]
+]</code></pre></div>
+
+  <p>For a single run, or to override either file,
+     <code>--run_by "Jane Doe" --run_by_orcid 0000-0002-1825-0097</code> works on
+     the command line. Identify yourself that way without stating roles and you
+     are credited with <code>formal-analysis</code>, since that is what running
+     the pipeline is, recorded as inferred rather than claimed.</p>
+
+  <div class="box stop">
+    <span class="t">Credit is recorded, never guessed</span>
+    <p>The pipeline will not decide you deserve a role because a process ran
+       under your login. With nothing set it records the launching account's user
+       name, assigns no roles, and marks <code>source</code> as
+       <code>system_user</code>. A record naming the wrong analyst is worse than
+       no record: it is a false attribution that outlives the run and cannot
+       afterwards be told apart from a true one. Two fields exist for a reader to
+       check before trusting an attribution, <code>source</code> and
+       <code>roles_declared</code>.</p>
+  </div>
+
+  <p>The run's contributors answer who did the work. A separate block answers
+     what the work was part of, and it is the level at which a funder, a data
+     owner and a project identifier belong. It changes rarely, so put it in a
+     <code>nextflow.config</code> beside the data rather than in your home
+     config:</p>
+
+  <div class="codeblock"><pre><code>params.project = [
+    name              : 'Yeast osmotic stress response',
+    raid              : '10.12345/abc123',
+    rights_holder     : '0000-0001-5598-6274',
+    rights_holder_name: 'Nicholas Owen',
+    funder            : 'https://ror.org/03x94j517',
+    funder_name       : 'Medical Research Council',
+    grant             : 'MR/X000000/1'
+]</code></pre></div>
+
+  <table>
+    <tr><th>Field</th><th>What it takes</th></tr>
+    <tr><td><code>raid</code></td><td>A <a href="https://raid.org" target="_blank" rel="noopener">RAiD</a> (ISO 23527:2022), the persistent identifier for a research activity. RAiDs are DataCite DOIs, so <code>10.12345/abc123</code> and <code>https://raid.org/10.12345/abc123</code> name the same project and either resolves through doi.org too</td></tr>
+    <tr><td><code>funder</code></td><td>A ROR identifier. RAiD is explicitly not for organisations or grants, so the funder and the grant reference are recorded separately</td></tr>
+    <tr><td><code>rights_holder</code></td><td>Who owns the data: an ORCID for a person, a ROR for an organisation, or a plain name</td></tr>
+    <tr><td><code>grant</code></td><td>The grant reference as the funder writes it</td></tr>
+    <tr><td><code>funder_name</code>, <code>rights_holder_name</code></td><td>Display names. An identifier resolves but reads as nine characters of hex, so the report shows the name and links the identifier behind it. Either works without its identifier</td></tr>
+  </table>
+
+  <h4>The RO-Crate</h4>
+
+  <p>Everything above goes into <code>pipeline_info/run_manifest.json</code>,
+     which only this pipeline's readers understand. Every run also writes
+     <code>ro-crate-metadata.json</code> at the top of the output directory, a
+     <a href="https://www.researchobject.org/workflow-run-crate/" target="_blank" rel="noopener">Workflow
+     Run RO-Crate</a>: standard JSON-LD that WorkflowHub, repositories and other
+     tools read. It is on by default, because provenance that has to be
+     remembered is not provenance. <code>--ro_crate false</code> turns it
+     off.</p>
+
+  <div class="box note">
+    <span class="t">Nothing to run afterwards</span>
+    <p>The crate is finished before the pipeline exits, and the console says
+       what went into it:</p>
+    <div class="codeblock"><pre><code>RO-Crate: 871 entities, 140 files hashed, 6 result folders expanded
+          (175 files), 1 contributor(s), project, 3 input copies removed
+          (1.0 MB), 4 workflow files moved to .crate/</code></pre></div>
+  </div>
+
+  <p>Two pieces produce it. The
+     <a href="https://github.com/nextflow-io/nf-prov" target="_blank" rel="noopener">nf-prov</a>
+     plugin writes the execution graph, one <code>CreateAction</code> per task
+     with its inputs, outputs and timings. <code>lib/CrateEnricher.groovy</code>
+     then adds what the plugin has no slot for, reading it from the run
+     manifest: <code>sha256</code>, <code>contentSize</code> and
+     <code>dateModified</code> on every published file; <code>hasPart</code> on
+     the result folders the plugin leaves as bare names; every contributor as a
+     <code>Person</code> behind <code>Role</code> entities carrying CRediT URIs;
+     and the project with its RAiD, funder and rights holder.</p>
+
+  <p>It also removes the copies nf-prov makes of your input files. No
+     specification asks for those, and a human GTF is tens of megabytes
+     duplicated into every results directory; the entities become absolute
+     <code>file:</code> references instead, exactly as the plugin already does
+     for the aligner index.</p>
+
+  <div class="box note">
+    <span class="t">Launch by name for a crate that travels</span>
+    <p>Running <code>nextflow run main.nf</code> leaves the crate without a
+       repository URL and warns about it. <code>nextflow run
+       nicholas-owen/rnaseq-flow</code> records it, which matters once the crate
+       leaves the machine that made it.</p>
+  </div>
+
+  <p>Every identifier is checked at launch and the run stops on a malformed one,
+     for the same reason a bad CRediT token does. An identifier that does not
+     resolve is worse than an absent one: it reads as provenance while pointing
+     nowhere, and a reader cannot tell it from a good one without trying it.</p>
+
+  <div class="box note">
+    <span class="t">RAiD is not yet uniformly available</span>
+    <p>The ARDC is the registration authority for Australia and New Zealand,
+       SURF covers Europe, and elsewhere is arranged with the ARDC directly, so
+       check whether your institution can mint one before planning around it.
+       Every other field in the block works without it.</p>
+  </div>
+
+  <p>Note that <code>rights_holder</code> is deliberately not a CRediT role.
+     CRediT describes contributions to a piece of work; owning the data is a
+     rights relation over it. Someone who owns the data and also did some of the
+     work gets both: ownership here, roles in
+     <code>run_contributors</code>.</p>
+
+  <p>Three claims end up in that one record and they are not interchangeable.
+     Who wrote the pipeline comes from the <code>manifest</code> scope in
+     <code>nextflow.config</code> and does not change between runs. So does the
+     licence the results carry. Who did this analysis is
+     <code>run_contributors</code>. Edit the <code>manifest</code> scope only if
+     you have forked the pipeline and are changing it: running it does not make
+     you its author.</p>
+
+  <p>What else the manifest records without any setup: the pipeline version and
+     commit, the full command line, the aligner and quantification route, the
+     baseline condition that fixes the direction of every fold change, the
+     design, the samples per condition, any requested analysis that was skipped,
+     and the reference set with its Ensembl release and SHA-256 where
+     <code>--download_refs</code> fetched it. Keep
+     <code>reference_metadata.json</code> beside your reference files, or that
+     last part reads as not recorded.</p>
+</section>
+
+<!-- ============================================================ 4 -->
+<section class="card" id="usage">
+  <h2>4. Usage</h2>
+  <p class="lede"><code>main.nf</code> has a single entry point that dispatches to
+     one of three workflows based on the flags you pass. Only one mode runs per
+     invocation.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Flag</th><th>Workflow</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>--download_refs</code></td><td><code>DOWNLOAD</code></td><td>Fetch genome FASTA, GTF and cDNA transcriptome from Ensembl, optionally with MSigDB gene sets</td></tr>
+      <tr><td><code>--build_indices</code></td><td><code>BUILD_INDICES</code></td><td>Build STAR, HISAT2, Salmon or Kallisto indices</td></tr>
+      <tr><td><em>neither, with <code>--input</code></em></td><td><code>RNASEQ</code></td><td>The full analysis pipeline</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="mode-download">Mode 1: download references <a class="anchor" href="#mode-download">#</a></h3>
+
+  <p>Fetches the genome FASTA, the GTF and the cDNA transcriptome for any Ensembl
+     species. All three are guaranteed to describe the same assembly: the download
+     fails rather than mixing them.</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf \
+    <span class="flag">--download_refs</span> \
+    <span class="flag">--download_species</span> homo_sapiens \
+    <span class="flag">--download_source</span> ensembl \
+    <span class="flag">--download_release</span> 102 \
+    <span class="flag">--download_gmt</span> \
+    <span class="flag">--organism</span> hsapiens \
+    <span class="flag">--outdir</span> references/human \
+    -profile docker</code></pre></div>
+
+  <p>With <code>--download_release</code> set, files land in a
+     <code>v&lt;release&gt;</code> subfolder so each Ensembl build stays
+     separate:</p>
+
+  <pre class="plain">references/human/
+├── v102/                                             # pinned Ensembl release 102
+│   ├── Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz   # genome FASTA
+│   ├── Homo_sapiens.GRCh38.102.gtf.gz                   # annotation (note the .102.)
+│   ├── Homo_sapiens.GRCh38.cdna.all.fa.gz               # transcriptome (--transcript_fasta)
+│   ├── download_log.txt                                 # provenance log (human-readable)
+│   └── reference_metadata.json                          # provenance record (machine-readable)
+└── gmt/                                              # if --download_gmt
+    ├── hallmark.gmt
+    ├── c2_curated.gmt   c2_kegg.gmt   c2_reactome.gmt
+    └── c5_go.gmt        c5_go_bp.gmt</pre>
+
+  <div class="box note">
+    <span class="t">Keep reference_metadata.json with the references</span>
+    <p>It records source, requested and resolved release, assembly, annotation
+       version, and each file's URL, size and SHA-256. The download is the only
+       moment some of this can be known: an Ensembl GTF's header gives the
+       assembly and genebuild date but never the release it was published in, and
+       the trailing number in its filename is an annotation version rather than
+       the release (release 116 ships
+       <code>Saccharomyces_cerevisiae.R64-1-1.63.gtf.gz</code>). Delete the file
+       and that is unrecoverable.</p>
+  </div>
+
+  <div class="box warn">
+    <span class="t">--download_gmt needs outbound HTTPS</span>
+    <p>From msigdbr 24 the gene sets are fetched over HTTPS on first use rather
+       than bundled in the package, so this step fails on a compute node with no
+       outbound route. Run the download workflow somewhere with internet access,
+       then pass the resulting file with <code>--gmt</code> on later runs.</p>
+  </div>
+
+  <p>Ensembl publishes several annotations per species
+     (<code>abinitio</code>, <code>chr</code>,
+     <code>chr_patch_hapl_scaff</code>, and the canonical one). Only the canonical
+     GTF describes the <code>dna.primary_assembly</code> genome. The pipeline
+     selects the GTF and transcriptome by the assembly named in the genome FASTA
+     and fails loudly rather than guessing. Reference sets downloaded before
+     v1.2.0 used the patch/haplotype GTF and should be re-downloaded.</p>
+
+  <h3 id="mode-indices">Mode 2: build indices <a class="anchor" href="#mode-indices">#</a></h3>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Aligner</th><th>Requires</th><th>Produces</th></tr></thead>
+    <tbody>
+      <tr><td><span class="route r-star"></span><code>star</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>star_index/</code></td></tr>
+      <tr><td><span class="route r-hisat2"></span><code>hisat2</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>hisat2_index/</code></td></tr>
+      <tr><td><span class="route r-salmon"></span><code>salmon</code></td><td><code>--transcript_fasta</code>, <code>--genome_fasta</code></td><td><code>salmon_index/</code></td></tr>
+      <tr><td><span class="route r-kallisto"></span><code>kallisto</code></td><td><code>--transcript_fasta</code></td><td><code>kallisto_index</code></td></tr>
+      <tr><td><code>all</code></td><td>all of the above</td><td>all four</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="codeblock"><pre><code><span class="cmt"># STAR (genome FASTA + GTF)</span>
+nextflow run main.nf --build_indices --aligner star \
+    --genome_fasta references/human/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz \
+    --gtf         references/human/Homo_sapiens.GRCh38.110.gtf.gz \
+    --outdir indices/human -profile docker
+
+<span class="cmt"># Salmon is decoy-aware: it needs the transcripts AND the genome</span>
+nextflow run main.nf --build_indices --aligner salmon \
+    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
+    --genome_fasta     references/human/genome.fa.gz \
+    --outdir indices/human -profile docker
+
+<span class="cmt"># Kallisto needs transcripts only</span>
+nextflow run main.nf --build_indices --aligner kallisto \
+    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
+    --outdir indices/human -profile docker</code></pre></div>
+
+  <p>Indices are written under <code>--outdir</code>. FASTA and GTF inputs may be
+     gzipped. For HISAT2 memory, see <a href="#resources">section 3.7</a>.</p>
+
+  <h3 id="mode-analysis">Mode 3: run the analysis <a class="anchor" href="#mode-analysis">#</a></h3>
+
+  <h4>A comprehensive STAR run</h4>
+  <p>Fusions, splicing, differential expression and enrichment:</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf \
+    <span class="flag">--input</span> samplesheet.csv \
+    <span class="flag">--aligner</span> star \
+    <span class="flag">--star_index</span> indices/human/star_index \
+    <span class="flag">--gtf</span> references/human/Homo_sapiens.GRCh38.110.gtf.gz \
+    <span class="flag">--strandedness</span> reverse \
+    <span class="flag">--ctat_lib</span> /refs/GRCh38_gencode_v37_CTAT_lib/ctat_genome_lib_build_dir \
+    <span class="flag">--read_length</span> 150 \
+    <span class="flag">--diffsplice</span> \
+    <span class="flag">--gmt</span> references/human/gmt/c2_kegg.gmt \
+    <span class="flag">--organism</span> hsapiens \
+    <span class="flag">--outdir</span> results \
+    -profile docker</code></pre></div>
+
+  <h4>A Salmon transcript-level run</h4>
+  <p>Isoform switching, differential transcript usage and differential
+     splicing:</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf \
+    <span class="flag">--input</span> samplesheet.csv \
+    <span class="flag">--aligner</span> salmon \
+    <span class="flag">--salmon_index</span> indices/human/salmon_index \
+    <span class="flag">--gtf</span> references/human/Homo_sapiens.GRCh38.110.gtf.gz \
+    <span class="flag">--transcript_fasta</span> references/human/transcripts.cdna.all.fa.gz \
+    <span class="flag">--isoform_switch</span> \
+    <span class="flag">--dtu</span> \
+    <span class="flag">--diffsplice</span> \
+    <span class="flag">--outdir</span> results \
+    -profile docker</code></pre></div>
+
+  <h4>A standard HISAT2 run</h4>
+  <div class="codeblock"><pre><code>nextflow run main.nf \
+    <span class="flag">--input</span> samplesheet.csv \
+    <span class="flag">--aligner</span> hisat2 \
+    <span class="flag">--hisat2_index</span> indices/human/hisat2_index \
+    <span class="flag">--gtf</span> references/human/Homo_sapiens.GRCh38.110.gtf.gz \
+    <span class="flag">--strandedness</span> reverse \
+    <span class="flag">--outdir</span> results \
+    -profile docker</code></pre></div>
+
+  <h3 id="aligner-choice">Choosing an aligner <a class="anchor" href="#aligner-choice">#</a></h3>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Aligner</th><th>Type</th><th>Best for</th><th>Downstream stages available</th></tr></thead>
+    <tbody>
+      <tr><td><span class="route r-star"></span><strong>STAR</strong></td><td>Genome</td>
+          <td>The default. Full analysis including fusions and splicing</td>
+          <td>QC, BigWig, featureCounts, DESeq2/edgeR, rMATS, STAR-Fusion, GSEA, gProfiler, diffSplice (exon)</td></tr>
+      <tr><td><span class="route r-hisat2"></span><strong>HISAT2</strong></td><td>Genome</td>
+          <td>Lighter-weight genome alignment</td>
+          <td>QC, BigWig, featureCounts, DESeq2/edgeR, rMATS, GSEA, gProfiler, diffSplice (exon)</td></tr>
+      <tr><td><span class="route r-salmon"></span><strong>Salmon</strong></td><td>Pseudo</td>
+          <td>Fast transcript quantification, isoform switching</td>
+          <td>Transcript quant, DESeq2/edgeR via tximport, GSEA, gProfiler, IsoformSwitchAnalyzeR, DEXSeq DTU, diffSplice (transcript)</td></tr>
+      <tr><td><span class="route r-kallisto"></span><strong>Kallisto</strong></td><td>Pseudo</td>
+          <td>Fastest transcript quantification</td>
+          <td>Transcript quant, DESeq2/edgeR via tximport, GSEA, gProfiler, DEXSeq DTU, diffSplice (transcript)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="box note">
+    <span class="t">Differential expression runs with every aligner</span>
+    <p>STAR and HISAT2 feed DESeq2 and edgeR from the featureCounts matrix.
+       Salmon and Kallisto feed them through tximport, which summarises
+       transcript-level quantification to gene level and gives DESeq2 the
+       transcript-length offset for accurate normalisation. The tximport path
+       needs <code>--gtf</code> for the transcript-to-gene map; without it,
+       differential expression is skipped on those two routes.</p>
+  </div>
+
+  <h3 id="stop-at">Stopping early <a class="anchor" href="#stop-at">#</a></h3>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Value</th><th>The pipeline stops after</th></tr></thead>
+    <tbody>
+      <tr><td><code>preQC</code></td><td>FastQC and fastp trimming</td></tr>
+      <tr><td><code>postQC</code></td><td>Alignment, BAM indexing, RSeQC, BigWig</td></tr>
+      <tr><td><code>DE</code></td><td>featureCounts, DESeq2 and edgeR</td></tr>
+      <tr><td><code>GSEA</code> <em>(or unset)</em></td><td>Everything, including enrichment, fusions and splicing</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index indices/human/star_index \
+    --gtf references/human/annotation.gtf --stop_at postQC -profile docker</code></pre></div>
+
+  <h3 id="counts-entry">Starting from a count matrix <a class="anchor" href="#counts-entry">#</a></h3>
+
+  <p>If you already have a gene count matrix, from a previous run, a collaborator
+     or a public dataset, you can skip QC and alignment and enter directly at
+     differential expression. DESeq2, edgeR, GSEA, gProfiler and the analysis
+     report all run as normal.</p>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf \
+    <span class="flag">--input</span> samplesheet.csv \
+    <span class="flag">--counts</span> counts.tsv \
+    <span class="flag">--gtf</span> references/human/annotation.gtf \
+    -profile docker</code></pre></div>
+
+  <p><code>--input</code> is still required: the samplesheet supplies
+     <code>condition</code> and any covariates. The <code>R1</code> and
+     <code>R2</code> columns are optional and ignored, so a minimal samplesheet
+     is just:</p>
+
+  <div class="codeblock"><pre><code>sample,condition
+ctrl_1,REF
+ctrl_2,REF
+treat_1,treatment
+treat_2,treatment</code></pre></div>
+
+  <p><code>--gtf</code> is also required, so results carry gene symbols and
+     biotypes rather than bare identifiers. The run reports the fraction of
+     matrix genes it could annotate and aborts if that fraction is implausibly
+     low, which is the signature of a matrix and GTF from different genome
+     builds.</p>
+
+  <p>Two layouts are accepted and auto-detected. A featureCounts wide table, where
+     the <code>Geneid, Chr, Start, End, Strand, Length</code> annotation columns
+     are dropped and the rest are samples. Or a plain matrix with gene IDs in the
+     first column and one column per sample, tab- or comma-delimited. The matrix
+     may be gzipped, the delimiter is auto-detected, and a gene-ID column with no
+     header is handled. Column order does not matter, since columns are reordered
+     to the samplesheet.</p>
+
+  <div class="box stop">
+    <span class="t">Raw integer counts only</span>
+    <p>Normalised values (TPM, FPKM/RPKM, DESeq2- or CPM-normalised) are rejected,
+       because DESeq2 and edgeR require raw counts. Salmon and Kallisto estimated
+       gene counts as a flat matrix are rejected too: they are non-integer and
+       they lose the transcript-length offsets that length-aware DE needs. Re-run
+       those through the pseudo-aligner instead. Matrices keyed by Entrez or
+       RefSeq identifiers cannot be annotated from a GTF and fail the
+       annotation-match check: map them to Ensembl gene IDs or symbols first.</p>
+  </div>
+
+  <p>Splicing, DTU, isoform-switch and fusion analyses need reads or BAMs and
+     cannot run from a count matrix.</p>
+
+  <h3 id="resume">Resuming a run <a class="anchor" href="#resume">#</a></h3>
+
+  <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet.csv ... -profile docker -resume</code></pre></div>
+
+  <p>Any task whose inputs, parameters and code are unchanged is reused from the
+     cache in <code>work/</code>. Change a parameter that only affects enrichment
+     and alignment is not repeated. The cache lives in <code>work/</code>, so do
+     not delete it until you are finished with the run.</p>
+
+  <h3 id="troubleshooting">When something goes wrong <a class="anchor" href="#troubleshooting">#</a></h3>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Symptom</th><th>Likely cause and fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>Please specify an input samplesheet ... with --input</code></td>
+          <td>No <code>--input</code>, <code>--download_refs</code> or <code>--build_indices</code> given</td></tr>
+      <tr><td><code>STAR index not provided via --star_index</code></td>
+          <td>Pass the <code>--&lt;aligner&gt;_index</code> matching your <code>--aligner</code></td></tr>
+      <tr><td><code>Cannot find any reads matching</code></td>
+          <td>FASTQ paths in the samplesheet are wrong, or relative to the wrong directory</td></tr>
+      <tr><td>STAR-Fusion produced nothing</td>
+          <td><code>--ctat_lib</code> not set, or not pointing at the extracted <code>ctat_genome_lib_build_dir</code></td></tr>
+      <tr><td>No <code>deseq2_output/</code></td>
+          <td>Needs a CSV samplesheet. For Salmon and Kallisto it also needs <code>--gtf</code> for the tximport map</td></tr>
+      <tr><td><code>--counts requires --gtf</code></td>
+          <td>A count-matrix run must supply <code>--gtf</code> so results are annotated</td></tr>
+      <tr><td><code>could not map samplesheet samples to count columns</code></td>
+          <td>A sample has no, or an ambiguous, column in the <code>--counts</code> matrix. Check names against the column headers</td></tr>
+      <tr><td><code>count matrix has non-integer values</code></td>
+          <td>The matrix holds normalised values or pseudo-aligner estimates. Get the raw counts, or re-run via <code>--aligner salmon|kallisto</code></td></tr>
+      <tr><td><code>only N% of matrix gene IDs match the --gtf</code></td>
+          <td>Matrix and GTF are different annotation builds, or the matrix is keyed by Entrez/RefSeq IDs</td></tr>
+      <tr><td>No <code>diffsplice_output/</code></td>
+          <td><code>--diffsplice</code> not set, or <code>--gtf</code> missing</td></tr>
+      <tr><td>Splicing or fusions missing</td>
+          <td>These run only at full depth. Do not combine with <code>--stop_at DE</code></td></tr>
+      <tr><td>Out-of-memory kills</td>
+          <td>Raise <code>--max_memory</code>, or lower concurrency</td></tr>
+      <tr><td>Container pull failures</td>
+          <td>Check internet access and the Docker daemon. On HPC prefer <code>-profile singularity</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Execution reports are written to <code>&lt;outdir&gt;/pipeline_info/</code>:
+     a timeline, a trace and a resource report, timestamped per launch. These are
+     where to look to find which process failed and why.</p>
+</section>
+
+<!-- ============================================================ 5 -->
+<section class="card" id="examples">
+  <h2>5. Examples</h2>
+  <p class="lede">Two worked examples ship with the pipeline. The yeast one runs
+     on a laptop in an afternoon and exercises every route. The human one takes a
+     real public dataset through to a known biological signature.</p>
+
+  <h3 id="yeast">Yeast in an afternoon <a class="anchor" href="#yeast">#</a></h3>
+
+  <p>The example in <code>example/</code> uses BioProject
+     <a href="https://www.ebi.ac.uk/ena/browser/view/PRJDB13901" target="_blank" rel="noopener">PRJDB13901</a>:
+     BY4741 yeast carrying an empty vector, grown in YPD or in NaCl. Two
+     conditions, three replicates each.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Sample</th><th>Run</th><th>Condition</th></tr></thead>
+    <tbody>
+      <tr><td><code>ypd_rep1..3</code></td><td>DRR392077, DRR392078, DRR392079</td><td><code>REF</code> (control)</td></tr>
+      <tr><td><code>nacl_rep1..3</code></td><td>DRR392092, DRR392093, DRR392094</td><td><code>NaCl</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Yeast is used deliberately: a 12 Mb genome indexes in about 2 GB of RAM, so
+     the whole pipeline runs on a laptop or a memory-limited WSL instance. A
+     splice-aware HISAT2 index for human needs roughly 204 GB.</p>
+
+  <div class="codeblock"><pre><code>example/fetch_yeast_test_data.sh                    <span class="cmt"># test_data/, 1M read pairs</span>
+example/fetch_yeast_test_data.sh test_data 250000   <span class="cmt"># smaller and faster</span></code></pre></div>
+
+  <p>The script resolves FASTQ URLs from the ENA API rather than hard-coding
+     them, uses <code>seqtk</code> for a seeded random subsample where it is
+     installed, and writes <code>test_data/samplesheet_yeast.csv</code> with
+     absolute paths. It is idempotent: a file is only given its final name once
+     complete, so an interrupted run cannot be mistaken for a finished one.</p>
+
+  <div class="box warn">
+    <span class="t">Pass -profile test_yeast on every command</span>
+    <p>Without it the defaults in <code>conf/base.config</code> apply, and those
+       are sized for mammalian genomes (48 GB for <code>process_high</code>, 38 GB
+       for STAR indexing). The local executor then refuses to schedule a task
+       larger than the machine. A quick way to tell whether the profile loaded:
+       the STAR command should show <code>--runThreadN 4</code>, not
+       <code>--runThreadN 12</code>.</p>
+  </div>
+
+  <h3 id="four-routes">All four aligner routes <a class="anchor" href="#four-routes">#</a></h3>
+
+  <p>Every route is three steps. The reference download is shared by all four.</p>
+
+  <div class="codeblock"><pre><code><span class="cmt"># 1. references, once. Yeast has no dna.primary_assembly, so the</span>
+<span class="cmt">#    downloader correctly falls back to dna.toplevel.</span>
+nextflow run main.nf --download_refs \
+    --download_species saccharomyces_cerevisiae --download_release 116 \
+    --download_gmt \
+    --outdir refs/yeast \
+    -profile test_yeast,docker</code></pre></div>
+
+  <h4><span class="route r-star"></span>STAR</h4>
+  <div class="codeblock"><pre><code>nextflow run main.nf --build_indices --aligner star \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --outdir idx/yeast_star \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input      test_data/samplesheet_yeast.csv \
+    --aligner    star \
+    --star_index idx/yeast_star/star_index \
+    --gtf        refs/yeast/v116/*.gtf.gz \
+    --gmt        refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir     results_star \
+    -profile test_yeast,docker</code></pre></div>
+
+  <h4><span class="route r-hisat2"></span>HISAT2</h4>
+  <div class="codeblock"><pre><code>nextflow run main.nf --build_indices --aligner hisat2 \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --outdir idx/yeast_hisat2 \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input        test_data/samplesheet_yeast.csv \
+    --aligner      hisat2 \
+    --hisat2_index idx/yeast_hisat2/hisat2_index \
+    --strandedness unstranded \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --gmt          refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir       results_hisat2 \
+    -profile test_yeast,docker</code></pre></div>
+
+  <h4><span class="route r-salmon"></span>Salmon</h4>
+  <p>The index needs the cDNA FASTA and the genome, the latter only to build the
+     decoy set.</p>
+  <div class="codeblock"><pre><code>nextflow run main.nf --build_indices --aligner salmon \
+    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
+    --genome_fasta     refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --outdir idx/yeast_salmon \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input        test_data/samplesheet_yeast.csv \
+    --aligner      salmon \
+    --salmon_index idx/yeast_salmon/salmon_index \
+    --strandedness unstranded \
+    --gtf          refs/yeast/v116/*.gtf.gz \
+    --gmt          refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir       results_salmon \
+    -profile test_yeast,docker</code></pre></div>
+
+  <h4><span class="route r-kallisto"></span>Kallisto</h4>
+  <p>Transcripts only, no decoys.</p>
+  <div class="codeblock"><pre><code>nextflow run main.nf --build_indices --aligner kallisto \
+    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
+    --outdir idx/yeast_kallisto \
+    -profile test_yeast,docker
+
+nextflow run main.nf \
+    --input          test_data/samplesheet_yeast.csv \
+    --aligner        kallisto \
+    --kallisto_index idx/yeast_kallisto/kallisto_index \
+    --strandedness   unstranded \
+    --gtf            refs/yeast/v116/*.gtf.gz \
+    --gmt            refs/yeast/gmt/c5_go_bp.gmt \
+    --outdir         results_kallisto \
+    -profile test_yeast,docker</code></pre></div>
+
+  <div class="box note">
+    <span class="t">Why --strandedness unstranded on three of the four</span>
+    <p>The default <code>auto</code> infers strandedness with RSeQC, which needs a
+       BAM. Salmon and Kallisto produce none. This dataset is unstranded, so
+       stating it explicitly is both correct and quieter. STAR is left on
+       <code>auto</code> so the inference path itself gets exercised at least
+       once.</p>
+  </div>
+
+  <h4>What to check</h4>
+  <ul>
+    <li><code>results_*/multiqc/rnaseq-flow_multiqc_report.html</code>: every
+        sample should appear under FastQC, fastp and the modules for the route you
+        ran. Kallisto has no MultiQC module, so that run shows only FastQC and
+        fastp.</li>
+    <li><code>results_*/quarto_report/analysis_report.html</code>: PCA should
+        separate YPD from NaCl, and the volcano plots should be populated.</li>
+    <li><code>results_*/deseq2_output/deseq2_results_NaCl_vs_REF.csv</code>: this
+        is a salt-stress response, so the usual osmotic-stress genes
+        (<code>GRE2</code>, <code>HSP12</code>, <code>CTT1</code>,
+        <code>STL1</code>) are a reasonable sanity check for the up-regulated
+        set.</li>
+    <li>HISAT2 only: the per-sample overall alignment rate in
+        <code>results_hisat2/hisat2/*.summary.log</code> should be around 96 to 98
+        percent on this data.</li>
+  </ul>
+
+  <div class="box warn">
+    <span class="t">Use c5_go_bp.gmt, not hallmark.gmt, for yeast</span>
+    <p>Hallmark is 50 human-defined sets; projected onto yeast orthologs, few
+       retain enough genes to test, so hallmark can produce an empty GSEA step
+       that looks like a failure. These are not yeast-native gene sets either:
+       msigdbr maps the human MSigDB collections by orthology. That is fine for
+       exercising the step, which is what the test dataset is for, but a weak
+       basis for biology. For yeast GSEA meant to be interpreted, build a GMT from
+       SGD's own GO annotations.</p>
+  </div>
+
+  <h3 id="concordance">Do the routes agree? <a class="anchor" href="#concordance">#</a></h3>
+
+  <p>Running more than one route is the cheapest real test of the pipeline,
+     because the four are independent implementations that should reach the same
+     biology. Observed on this dataset at 1 M read pairs, DESeq2,
+     <code>padj &lt; 0.05</code> and <code>|log2FC| &gt; 1</code>:</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Route</th><th>Genes tested</th><th>Significant</th><th>Up</th><th>Down</th></tr></thead>
+    <tbody>
+      <tr><td><span class="route r-star"></span>STAR</td><td>5579</td><td>852</td><td>152</td><td>700</td></tr>
+      <tr><td><span class="route r-hisat2"></span>HISAT2</td><td>5773</td><td>833</td><td>132</td><td>701</td></tr>
+      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5509</td><td>778</td><td>130</td><td>648</td></tr>
+      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5961</td><td>865</td><td>146</td><td>719</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>667 genes were called significant by all four, every pairwise overlap was at
+     least 83 percent of the smaller set, and all four reproduced the same strong
+     down-regulation bias. The overlaps do not split cleanly along the
+     genome-aligner and pseudo-aligner line: STAR agreed more closely with Salmon
+     than with HISAT2 here. That is not in itself a fault, since the routes differ
+     in multimapper handling and length correction.</p>
+
+  <div class="box note">
+    <span class="t">A shape to match, not targets to hit</span>
+    <p>These numbers come from a subsample drawn by <code>seqtk sample -s42</code>.
+       The seed is fixed, so seqtk users at the default depth should land close to
+       the table, but you will not match it if seqtk was missing when you fetched
+       (the script falls back to the first N reads and says so), if you passed a
+       different read count, or if container versions have moved. What matters is
+       the agreement between routes, not the absolute counts.</p>
+  </div>
+
+  <h3 id="human-example">A human worked example <a class="anchor" href="#human-example">#</a></h3>
+
+  <p><code>rnaseq-flow_Example_Analysis.md</code> takes GSE151251 from FASTQ
+     download through reference preparation, index building and a full HISAT2 run,
+     and finishes with an expected TGF-beta signature you can check your setup
+     against. It is the quickest way to confirm an install works on real human
+     data before pointing the pipeline at your own.</p>
+
+  <p>The same material is available as
+     <code>rnaseq-flow_User_Guide.docx</code>, a formatted Word document, for
+     printing or for circulating where the repository is not to hand.</p>
+</section>
+
+<!-- ============================================================ 6 -->
+<section class="card" id="outputs">
+  <h2>6. Outputs and interpretation</h2>
+  <p class="lede">Every path below is relative to <code>--outdir</code>, which
+     defaults to <code>results/</code>. Which directories appear depends on the
+     aligner and the options you chose.</p>
+
+  <h3 id="layout">Where everything lands <a class="anchor" href="#layout">#</a></h3>
+
+  <pre class="plain">results/
+├── fastqc/             Raw-read QC (FastQC)
+├── fastp/              Trimmed reads + trimming reports
+├── star/   | hisat2/   Aligned BAMs, indices, alignment logs
+├── salmon/ | kallisto/ Transcript-level quantification
+├── rseqc/              Strandedness, read distribution, gene-body coverage
+├── bam_to_bigwig/      CPM-normalised coverage tracks (.bw)
+├── featurecounts/      Per-sample gene count tables (STAR/HISAT2)
+├── featurecounts_exon/ Per-exon count tables for diffSplice (STAR/HISAT2)
+├── tximport/           Salmon/Kallisto counts summarised to gene level
+├── deseq2_output/      Differential expression (DESeq2)
+│   └── reproduce/      Scripts, data and objects that redraw every figure
+├── edger_output/       Differential expression (edgeR)
+│   └── reproduce/
+├── gsea_output/        Gene-set enrichment (fgsea)
+│   └── reproduce/
+├── gprofiler_output/   GO / pathway over-representation (gprofiler2)
+│   └── reproduce/
+├── rmats_output/       Alternative splicing events, one subdirectory per contrast
+├── star_fusion/        Gene-fusion predictions
+├── isoform_switch/     Isoform-switching analysis
+├── dtu_output/         Differential transcript usage (DEXSeq)
+├── diffsplice_output/  Differential splicing (edgeR diffSpliceDGE)
+├── multiqc/            Aggregated MultiQC report
+├── quarto_report/      Interactive Quarto analysis report
+├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
+├── .crate/             The pipeline as it ran: main.nf, nextflow.config and
+│                       friends. Hidden, and part of the RO-Crate below
+└── ro-crate-metadata.json   The Workflow Run RO-Crate, unless --ro_crate false</pre>
+
+  <div class="box note">
+    <span class="t">Count-matrix runs produce fewer directories</span>
+    <p>Starting from <code>--counts</code> skips read QC, alignment and
+       quantification, so those directories and the MultiQC report are not
+       produced. You get the differential-expression outputs onward, plus a Quarto
+       report whose QC section is omitted.</p>
+  </div>
+
+  <h3 id="reading-order">Reading order <a class="anchor" href="#reading-order">#</a></h3>
+
+  <ol class="body">
+    <li><code>quarto_report/analysis_report.html</code>, the Run overview: what
+        was run, on what, against which reference and baseline. Read this first if
+        the results directory is not your own.</li>
+    <li><code>multiqc/rnaseq-flow_multiqc_report.html</code>: one page for
+        whole-run QC.</li>
+    <li>Alignment logs: confirm mapping rates are acceptable.</li>
+    <li><code>rseqc/</code>: confirm strandedness and library quality.</li>
+    <li><code>deseq2_output/pca_plot.svg</code>: do samples group by condition?</li>
+    <li>The DE tables, then enrichment, splicing and fusions.</li>
+  </ol>
+
+  <h3 id="out-qc">Read and alignment QC <a class="anchor" href="#out-qc">#</a></h3>
+
+  <h4><code>fastqc/</code> and <code>fastp/</code></h4>
+  <p>Check per-base quality (it should stay in the green), adapter content and
+     duplication. Raw RNA-seq normally shows some duplication and a biased first
+     12 bases or so. That is expected. The fastp report shows reads before and
+     after filtering; a large drop in read count means aggressive filtering, so
+     inspect the input quality.</p>
+
+  <h4><code>star/</code> or <code>hisat2/</code></h4>
+  <p>The key line in the STAR <code>Log.final.out</code> is <em>Uniquely mapped
+     reads %</em>:</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Uniquely mapped</th><th>Interpretation</th></tr></thead>
+    <tbody>
+      <tr><td>&gt; 85%</td><td>Excellent</td></tr>
+      <tr><td>70 to 85%</td><td>Acceptable</td></tr>
+      <tr><td>&lt; 70%</td><td>Investigate: contamination, wrong genome, or poor quality</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>Also watch <em>% of reads mapped to multiple loci</em>, where high values
+     suggest rRNA or repetitive contamination, and <em>% of reads unmapped: too
+     short</em>, which is often an adapter or quality problem.</p>
+
+  <h4><code>rseqc/</code></h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th>What it tells you</th></tr></thead>
+    <tbody>
+      <tr><td><code>*.infer_experiment.txt</code></td><td>Library strandedness, measured empirically</td></tr>
+      <tr><td><code>*.strandedness.txt</code></td><td>The one-word verdict derived from it</td></tr>
+      <tr><td><code>*.read_distribution.txt</code></td><td>Fraction of reads in CDS, UTR, intron, intergenic</td></tr>
+      <tr><td><code>*.geneBodyCoverage.txt</code> and <code>.curves.pdf</code></td><td>5' to 3' coverage evenness</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>In <code>infer_experiment.txt</code>, both fractions near 0.5 means
+     unstranded, a <code>"++,--"</code> fraction near 1.0 means forward, and a
+     <code>"+-,-+"</code> fraction near 1.0 means reverse. Most tags in
+     <code>read_distribution.txt</code> should fall in exonic regions; a high
+     intronic or intergenic fraction suggests DNA contamination or incomplete
+     annotation. Gene-body coverage should be a flat plateau, where a strong 3'
+     skew indicates RNA degradation.</p>
+
+  <h3 id="out-counts">Gene counts <a class="anchor" href="#out-counts">#</a></h3>
+
+  <p>For STAR and HISAT2, <code>featurecounts/&lt;sample&gt;.featureCounts.txt</code>
+     holds gene-level counts, and the <code>.summary</code> file beside it breaks
+     down assigned against unassigned reads and why.</p>
+
+  <p>For Salmon and Kallisto, <code>tximport/tximport_gene_counts.csv</code> is
+     the gene-by-sample matrix obtained by summarising transcript quantification
+     to gene level. <code>txi.rds</code> is the full tximport object, which DESeq2
+     imports with <code>DESeqDataSetFromTximport</code> and edgeR imports as a
+     length offset, giving more accurate normalisation than counts alone.</p>
+
+  <div class="box warn">
+    <span class="t">These counts are not normalised for library size</span>
+    <p>Do not compare them directly between samples. That is what DESeq2 and edgeR
+       are for.</p>
+  </div>
+
+  <h3 id="out-de">Differential expression <a class="anchor" href="#out-de">#</a></h3>
+
+  <p>DESeq2 and edgeR both run, in parallel, on the same gene counts as two
+     independent callers. One results CSV per pairwise contrast, named
+     <code>deseq2_results_&lt;A&gt;_vs_&lt;B&gt;.csv</code> where B is the
+     baseline and the fold change is A relative to B.</p>
+
+  <h4><code>deseq2_output/</code></h4>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>gene_id</code></td><td>The stable identifier from the GTF. Symbols are neither unique nor stable across releases, so join on this</td></tr>
+      <tr><td><code>gene_name</code>, <code>gene_biotype</code></td><td>Symbol and biotype, parsed from the GTF</td></tr>
+      <tr><td><code>baseMean</code></td><td>Mean normalised count across all samples</td></tr>
+      <tr><td><code>log2FoldChange</code></td><td>Effect size, log2(A / B), apeglm-shrunken</td></tr>
+      <tr><td><code>log2FoldChange_MLE</code></td><td>The unshrunken estimate, kept beside the shrunken one so the size of the shrinkage can be seen rather than inferred</td></tr>
+      <tr><td><code>lfcSE</code></td><td>Posterior SD of the shrunken fold change</td></tr>
+      <tr><td><code>stat</code></td><td>Wald test statistic, from the unshrunken fit</td></tr>
+      <tr><td><code>pvalue</code></td><td>Raw p-value</td></tr>
+      <tr><td><code>padj</code></td><td><strong>Benjamini-Hochberg adjusted p-value (FDR). Use this one</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>The fold change is shrunk with the apeglm estimator, which pulls low-count,
+     high-variance genes toward zero and gives cleaner MA and volcano plots.
+     Shrinkage changes only the effect size: <code>stat</code>,
+     <code>pvalue</code> and <code>padj</code> come from the unshrunken Wald test,
+     so significance calling is unaffected.</p>
+
+  <p>A common threshold is <code>padj &lt; 0.05</code> with
+     <code>|log2FoldChange| &gt; 1</code>, a two-fold change.
+     <code>padj</code> may be <code>NA</code> when DESeq2 filters a gene for low
+     counts or flags it as an outlier, which is normal.</p>
+
+  <h4><code>edger_output/</code></h4>
+  <p>Columns are <code>logFC</code>, <code>logCPM</code>, <code>F</code>,
+     <code>PValue</code> and <code>FDR</code>, with the same three annotation
+     columns. Use <code>FDR</code>. <code>mds_plot</code> is edgeR's
+     sample-similarity plot, analogous to the PCA.</p>
+
+  <div class="box ok">
+    <span class="t">Genes called by both callers are the robust set</span>
+    <p>Modest disagreement near the significance threshold is expected. The edgeR
+       results are an independent cross-check and are not consumed by any later
+       step.</p>
+  </div>
+
+  <h4>Figures</h4>
+  <p>Every figure is written twice, as <code>.svg</code> for publication and
+     figure assembly and as a 300 dpi <code>.png</code> for slides and email.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th>Use</th></tr></thead>
+    <tbody>
+      <tr><td><code>pca_plot</code></td><td>Sample clustering. Replicates of a condition should group together; if not, suspect batch effects or mislabelling</td></tr>
+      <tr><td><code>maplot_&lt;A&gt;_vs_&lt;B&gt;</code></td><td>Fold change against mean expression, significant genes highlighted</td></tr>
+      <tr><td><code>volcano_&lt;A&gt;_vs_&lt;B&gt;</code></td><td>Fold change against &minus;log10 p-value, up in red and down in blue</td></tr>
+      <tr><td><code>shrinkage_ma_&lt;A&gt;_vs_&lt;B&gt;</code></td><td>The same contrast before and after apeglm, so the effect of shrinkage is visible rather than taken on faith</td></tr>
+      <tr><td><code>heatmap_top_var</code></td><td>The 20 most variable genes across samples, variance-stabilised</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="out-enrich">Functional enrichment <a class="anchor" href="#out-enrich">#</a></h3>
+
+  <h4><code>gsea_output/</code></h4>
+  <p>fgsea runs on the ranked DESeq2 gene list for each contrast, genes ranked by
+     the <code>stat</code> column, so it captures coordinated, subtle shifts that
+     a hard cutoff would miss. In <code>gsea_stats_&lt;contrast&gt;.csv</code>,
+     <code>padj &lt; 0.05</code> is significant, and the sign of
+     <code>NES</code> gives the direction: positive means the pathway is up in
+     condition A.</p>
+
+  <h4><code>gprofiler_output/</code></h4>
+  <p>gprofiler2 tests the significant gene lists from the DESeq2 results,
+     separately for up- and down-regulated genes, writing
+     <code>gprofiler_UP_&lt;contrast&gt;.csv</code> and the matching
+     <code>DOWN</code> file. Key columns are <code>term_name</code>,
+     <code>source</code> (GO:BP/MF/CC, KEGG, REACTOME), <code>p_value</code>
+     (already corrected by g:SCS) and <code>intersection_size</code>.</p>
+
+  <div class="box note">
+    <span class="t">The two answer different questions</span>
+    <p>GSEA uses the whole ranked list; gProfiler uses a thresholded list.
+       Agreement between them strengthens a conclusion. A direction file is
+       written only when something was enriched, so an absent
+       <code>_UP</code> file means nothing passed, not that the step failed.</p>
+  </div>
+
+  <h3 id="out-splicing">Splicing and isoforms <a class="anchor" href="#out-splicing">#</a></h3>
+
+  <h4><code>rmats_output/</code></h4>
+  <p>One subdirectory per condition pair, named
+     <code>&lt;condition&gt;_vs_REF</code> to match the differential-expression
+     tables, with <code>REF</code> as the denominator. rMATS reports five event
+     types: <code>SE</code> (skipped exon), <code>MXE</code> (mutually exclusive
+     exons), <code>A3SS</code> and <code>A5SS</code> (alternative 3' and 5' splice
+     sites), and <code>RI</code> (retained intron). For each there is a
+     <code>*.MATS.JC.txt</code> using junction counts only and a
+     <code>*.MATS.JCEC.txt</code> adding reads on the exon body.</p>
+
+  <p><code>IncLevelDifference</code> is the PSI difference and the effect size. In
+     <code>NaCl_vs_REF</code> it is PSI(NaCl) minus PSI(REF), so a positive value
+     means higher inclusion in NaCl: the same direction a positive
+     <code>log2FoldChange</code> means in the DE table beside it. PSI is a
+     proportion, so the difference is bounded at plus or minus 1. A value of 0.2
+     means twenty percentage points of the transcript pool shifted. It is not a
+     fold change and should not be compared to one. A common cutoff is
+     <code>FDR &lt; 0.05</code> with
+     <code>|IncLevelDifference| &gt; 0.1</code>.</p>
+
+  <div class="box stop">
+    <span class="t">The sign convention changed after v1.5.1</span>
+    <p>Directories were previously named <code>REF_vs_&lt;condition&gt;</code> and
+       <code>IncLevelDifference</code> carried the opposite sign, the reverse of
+       what a positive <code>log2FoldChange</code> meant in the DE tables beside
+       it. Splicing results produced before this change point the other way, and
+       the files give no indication of which convention they follow beyond the
+       directory name. Do not compare results across that boundary without
+       checking.</p>
+  </div>
+
+  <div class="box warn">
+    <span class="t">summary.txt uses different criteria</span>
+    <p>rMATS builds it with an <code>|IncLevelDifference|</code> cutoff of zero,
+       so its <code>SignificantEvents</code> columns count every FDR-significant
+       event regardless of effect size. Those numbers will be larger, often much
+       larger, than the cutoff above produces. Recompute from the
+       <code>*.MATS.JC.txt</code> files rather than quoting
+       <code>summary.txt</code>.</p>
+  </div>
+
+  <h4><code>dtu_output/</code> and <code>diffsplice_output/</code></h4>
+  <p>DEXSeq tests whether the proportions of a gene's transcript isoforms shift
+     between conditions. Use <code>dtu_gene_qvalues.csv</code> with
+     <code>gene_qvalue &lt; 0.05</code> to call genes, then
+     <code>dtu_transcript_results.csv</code> to see which transcripts drive the
+     switch. edgeR's <code>diffSpliceDGE</code> tests whether each feature's fold
+     change departs from its gene's overall fold change, the feature being an exon
+     for STAR and HISAT2 and a transcript for Salmon and Kallisto. Use
+     <code>diffsplice_gene_results.csv</code> with <code>FDR &lt; 0.05</code>,
+     then the per-feature table.</p>
+
+  <h4><code>isoform_switch/</code></h4>
+  <p>A switch is a gene where the dominant transcript isoform changes between
+     conditions even if total gene expression does not: biologically important and
+     invisible to gene-level DE. Sort <code>isoform_switches.csv</code> by
+     q-value.</p>
+
+  <div class="box note">
+    <span class="t">Three independent views of splicing</span>
+    <p>rMATS classifies splicing events, DEXSeq DTU tests transcript proportions,
+       and edgeR diffSplice tests each feature's fold change against its gene.
+       IsoformSwitchAnalyzeR adds which switch happened and its functional
+       consequence. They answer related but distinct questions, and agreement
+       between them is informative.</p>
+  </div>
+
+  <h3 id="out-fusion">Gene fusions <a class="anchor" href="#out-fusion">#</a></h3>
+
+  <p><code>star_fusion/&lt;sample&gt;.star-fusion.fusion_predictions.tsv</code>
+     and its <code>.abridged.tsv</code> summary. Higher
+     <code>JunctionReadCount</code> plus <code>SpanningFragCount</code> support,
+     and <code>YES</code> in <code>LargeAnchorSupport</code>, indicate more
+     confident calls. <code>FFPM</code> is fusion fragments per million,
+     normalised for depth. Always validate fusion candidates against known biology
+     and, ideally, orthogonal evidence.</p>
+
+  <h3 id="out-reports">The two reports <a class="anchor" href="#out-reports">#</a></h3>
+
+  <p><code>multiqc/rnaseq-flow_multiqc_report.html</code> is a single interactive
+     page combining FastQC, fastp, alignment, RSeQC and featureCounts metrics for
+     every sample. It is the best starting point for a run-wide quality overview
+     and for spotting outlier samples. Samples appear by samplesheet id, with a
+     Source FASTQ column mapping each back to the file it came from.</p>
+
+  <p><code>quarto_report/analysis_report.html</code> brings the run together in
+     one document. It opens with a Run overview read from
+     <code>run_manifest.json</code> (what ran it, what went in, the library
+     layout, the aligner, the baseline, and the reference set with its source and
+     release), a Sample design table, and a "Requested but not performed" notice
+     that renders only when an analysis was asked for and skipped. Then the
+     results: a MultiQC summary, per-contrast significant-gene counts, a shrinkage
+     before-and-after view, interactive plotly volcano and MA plots for both
+     callers, PCA, MDS and the top-variable-gene heatmap, a DESeq2-against-edgeR
+     agreement table, searchable result tables, a GSEA dot plot and a gProfiler
+     Manhattan plot. Sections for stages that did not run are omitted.</p>
+
+  <p>Its Alternative splicing section reads <code>rmats_output/</code> directly:
+     an events-per-type count recomputed from the <code>MATS.JC.txt</code> files
+     rather than taken from <code>summary.txt</code>, a JC-against-JCEC agreement
+     table, a PSI-difference volcano coloured by event type, per-replicate PSI for
+     the top 16 events, and a searchable table. It ends by counting the genes
+     whose splicing changed while their total expression did not, which the DE
+     tables miss by construction.</p>
+
+  <h3 id="out-meta">Execution metadata <a class="anchor" href="#out-meta">#</a></h3>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td><code>run_manifest.json</code></td>
+          <td>How the run was configured, machine-readable: version and commit, the command line, the aligner, the baseline, the design, samples per condition, and the reference set where known. Written before any process runs, so it records what was asked for</td></tr>
+      <tr><td><code>software_versions_mqc.yml</code></td>
+          <td>Every tool and version collected at run time. Use it for methods sections</td></tr>
+      <tr><td><code>run_summary.html</code></td>
+          <td>End-of-run summary written whether the run succeeded or failed: status, duration, command line, links to every key result directory, and per-process task counts, job time, peak memory and mean CPU</td></tr>
+      <tr><td><code>execution_report_*.html</code>, <code>execution_timeline_*.html</code>, <code>execution_trace_*.txt</code></td>
+          <td>Nextflow's own per-run resource report, timeline and trace, timestamped per launch</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="out-reproduce">Redrawing figures <a class="anchor" href="#out-reproduce">#</a></h3>
+
+  <p>Every figure can be redrawn, and adapted, from the results directory alone:
+     no rerunning, no access to the original compute, no digging through
+     <code>work/</code>. Each of <code>deseq2_output/</code>,
+     <code>edger_output/</code>, <code>gsea_output/</code> and
+     <code>gprofiler_output/</code> carries a <code>reproduce/</code> subfolder
+     with a standalone R script per figure type, gzipped copies of the tables
+     behind each figure, and only the R objects a plot genuinely needs.</p>
+
+  <p>The split is that the parent folder is for reading and
+     <code>reproduce/</code> is for running. Parent CSVs stay uncompressed so they
+     open by double-click; the <code>reproduce/</code> copies are gzipped, which R
+     reads transparently.</p>
+
+  <div class="codeblock"><pre><code>cd results/deseq2_output/reproduce
+Rscript volcano.R</code></pre></div>
+
+  <p>The scripts are written to be changed, not merely run. Contrast, cutoffs,
+     colours and dimensions are named constants in the first lines, so adjusting a
+     legend does not mean reading a <code>ggplot</code> chain:</p>
+
+  <div class="codeblock"><pre><code>CONTRAST      &lt;- <span class="str">"NaCl_vs_REF"</span>
+PADJ_CUT      &lt;- 0.05
+LFC_CUT       &lt;- 1
+WIDTH         &lt;- 8
+HEIGHT        &lt;- 6.5
+FIG_RES       &lt;- 300
+OUTPUT_PREFIX &lt;- <span class="str">"repro_"</span></code></pre></div>
+
+  <p>Regenerated figures are prefixed <code>repro_</code> and get a matching
+     <code>.info.txt</code> recording the settings used, the environment that
+     produced them and where they came from, so a regenerated figure is never
+     mistaken for the pipeline's own once it leaves the folder.
+     <code>isoform_switch/</code> is outside these conventions:
+     IsoformSwitchAnalyzeR writes its own figures, so they are PNG-only with no
+     <code>reproduce/</code> folder.</p>
+
+  <h3 id="checklist">Interpretation checklist <a class="anchor" href="#checklist">#</a></h3>
+
+  <ul class="checklist">
+    <li>MultiQC: no outlier samples, adapter content low after trimming</li>
+    <li>Alignment: uniquely-mapped rate acceptable for your organism</li>
+    <li>RSeQC: measured strandedness matches <code>--strandedness</code></li>
+    <li>PCA and MDS: replicates cluster by condition</li>
+    <li>DE: genes significant in both DESeq2 and edgeR are the high-confidence set</li>
+    <li>Enrichment: GSEA and gProfiler tell a consistent biological story</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 7 -->
+<section class="card" id="further">
+  <h2>7. Further reading</h2>
+  <p class="lede">This page is a single-file summary of the repository
+     documentation. Each source below carries more detail on its subject.</p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th>Contents</th></tr></thead>
+    <tbody>
+      <tr><td><a href="README.md">README.md</a></td><td>Overview, feature table, parameter reference</td></tr>
+      <tr><td><a href="USAGE.md">USAGE.md</a></td><td>Detailed run instructions, worked scenarios, cluster notes, troubleshooting</td></tr>
+      <tr><td><a href="OUTPUTS.md">OUTPUTS.md</a></td><td>Every output directory and how to interpret each file</td></tr>
+      <tr><td><a href="example/README.md">example/README.md</a></td><td>The runnable yeast example for all four aligners</td></tr>
+      <tr><td><a href="rnaseq-flow_Example_Analysis.md">rnaseq-flow_Example_Analysis.md</a></td><td>End-to-end worked example on GSE151251 with an expected signature</td></tr>
+      <tr><td><a href="rnaseq-flow_User_Guide.docx">rnaseq-flow_User_Guide.docx</a></td><td>The whole guide as a formatted Word document</td></tr>
+      <tr><td><a href="overview.html">overview.html</a></td><td>Interactive workflow diagram: DAG and metro-map views</td></tr>
+      <tr><td><a href="rnaseq-flow.html">rnaseq-flow.html</a></td><td>Slide-deck introduction with speaker notes</td></tr>
+      <tr><td><a href="CITATIONS.md">CITATIONS.md</a> / <a href="CITATIONS.html">CITATIONS.html</a></td><td>Every tool with its publication, plus a methods-paragraph template</td></tr>
+      <tr><td><a href="CHANGELOG.md">CHANGELOG.md</a></td><td>Release history</td></tr>
+      <tr><td><a href="https://doi.org/10.5281/zenodo.21880328" target="_blank" rel="noopener">Zenodo bundle</a></td><td>Offline Singularity container bundle for TRE and air-gapped use. Resolves to the most recent bundle</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Known limitations</h3>
+  <ul>
+    <li>Differential expression is gene-level by default. A transcript-level DTU
+        test using DEXSeq is available opt-in via <code>--dtu</code> for the
+        Salmon and Kallisto routes.</li>
+    <li>The tximport DE path requires <code>--gtf</code> so a transcript-to-gene
+        map can be built. Without it, DE is skipped for Salmon and Kallisto.</li>
+    <li>The Ensembl reference downloader scrapes the Ensembl FTP listing. For
+        unusual species, download references manually and pass them directly.</li>
+    <li><code>--ctat_lib</code> must point at an already-extracted CTAT genome
+        library directory, since the pipeline does not untar archives.</li>
+  </ul>
+
+  <h3>Citing a run</h3>
+  <p>Cite only the tools that actually ran for your analysis, which depends on
+     <code>--aligner</code> and the optional flags you set. The exact version of
+     every tool used is recorded in
+     <code>pipeline_info/software_versions_mqc.yml</code>.
+     <a href="CITATIONS.md">CITATIONS.md</a> carries the publication for each and
+     a methods paragraph to adapt.</p>
+</section>
+
+    <footer class="page">
+      rnaseq-flow 1.6.0 &middot; released under the GNU General Public License v3.0 &middot;
+      <a href="https://github.com/nicholas-owen/rnaseq-flow" target="_blank" rel="noopener">github.com/nicholas-owen/rnaseq-flow</a>
+    </footer>
+
+  </div><!-- /.main -->
+</div><!-- /.shell -->
+
+<button class="totop" id="totop" aria-label="Back to top">&uarr;</button>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- copy buttons on every code block -----------------------------------
+  document.querySelectorAll(".codeblock").forEach(function (block) {
+    var btn = document.createElement("button");
+    btn.className = "copy";
+    btn.type = "button";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", function () {
+      var text = block.querySelector("pre").innerText;
+      var done = function () {
+        btn.textContent = "Copied";
+        btn.classList.add("done");
+        setTimeout(function () { btn.textContent = "Copy"; btn.classList.remove("done"); }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else { fallback(); }
+      function fallback() {
+        // execCommand is deprecated but still the only route on file:// in some browsers
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) { btn.textContent = "Select and copy"; }
+        document.body.removeChild(ta);
+      }
+    });
+    block.appendChild(btn);
+  });
+
+  var toc = document.getElementById("toc");
+
+  // ---- scrollspy ----------------------------------------------------------
+  // Every nav target, in document order, matched against the heading nearest
+  // the top of the viewport. An IntersectionObserver alone misbehaves on long
+  // sections, so positions are read directly on scroll (rAF-throttled).
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a[href^='#']"));
+  var targets = links.map(function (a) {
+    return { link: a, el: document.getElementById(a.getAttribute("href").slice(1)) };
+  }).filter(function (t) { return t.el; });
+
+  var ticking = false;
+  function sync() {
+    ticking = false;
+    var best = null, bestTop = -Infinity, limit = 120;
+    targets.forEach(function (t) {
+      var top = t.el.getBoundingClientRect().top;
+      if (top <= limit && top > bestTop) { bestTop = top; best = t; }
+    });
+    if (!best && targets.length) { best = targets[0]; }
+    links.forEach(function (a) { a.classList.remove("active"); });
+    if (best) {
+      best.link.classList.add("active");
+      // light up the parent section too when a subsection is active
+      var li = best.link.closest("ol ol") ? best.link.closest("ol ol").parentElement : null;
+      if (li) {
+        var parent = li.querySelector(":scope > a");
+        if (parent) { parent.classList.add("active"); }
+      }
+      keepInView(best.link);
+    }
+  }
+
+  // The contents list is taller than its own box on most screens, so the
+  // active entry has to be scrolled to or it is never seen. Move the list by
+  // the smallest amount that brings the entry inside, and leave it alone while
+  // the reader is scrolling the list themselves.
+  // Hovering the list is not the same as using it, so the guard is on actual
+  // wheel scrolling inside the list, and lapses a few seconds after it stops.
+  var tocTouchedAt = 0;
+  toc.addEventListener("wheel", function () { tocTouchedAt = Date.now(); }, { passive: true });
+  function keepInView(link) {
+    if (Date.now() - tocTouchedAt < 4000) { return; }
+    if (toc.scrollHeight <= toc.clientHeight + 4) { return; }   // not scrollable
+    var box = toc.getBoundingClientRect(), item = link.getBoundingClientRect();
+    var pad = 48;
+    if (item.top < box.top + pad) {
+      toc.scrollTop -= (box.top + pad - item.top);
+    } else if (item.bottom > box.bottom - pad) {
+      toc.scrollTop += (item.bottom - (box.bottom - pad));
+    }
+  }
+  function onScroll() {
+    if (!ticking) { ticking = true; requestAnimationFrame(sync); }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  // A hidden tab gets no animation frames, so a page restored from the
+  // background can be showing a stale entry. Re-sync when it comes back.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) { ticking = false; sync(); }
+  });
+  sync();
+
+  // ---- back to top --------------------------------------------------------
+  var totop = document.getElementById("totop");
+  totop.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+  window.addEventListener("scroll", function () {
+    totop.classList.toggle("show", window.scrollY > 600);
+  }, { passive: true });
+
+  // ---- collapsible nav on narrow screens ----------------------------------
+  var toggle = document.getElementById("navToggle");
+  var narrow = window.matchMedia("(max-width: 1040px)");
+  // On a phone the contents list is sixty entries of scrolling before the
+  // content starts, so it opens closed there and stays open on a wide screen.
+  function applyNarrow(m) {
+    toc.classList.toggle("collapsed", m.matches);
+    toggle.setAttribute("aria-expanded", String(!m.matches));
+  }
+  applyNarrow(narrow);
+  if (narrow.addEventListener) { narrow.addEventListener("change", applyNarrow); }
+  toggle.addEventListener("click", function () {
+    var collapsed = toc.classList.toggle("collapsed");
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+  });
+  // collapse after following a link on narrow screens, so the content is visible
+  toc.addEventListener("click", function (ev) {
+    if (ev.target.tagName === "A" && window.matchMedia("(max-width: 1040px)").matches) {
+      toc.classList.add("collapsed");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+  });
+})();
+</script>
+</body>
+</html>
