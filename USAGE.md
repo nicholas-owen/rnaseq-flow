@@ -699,8 +699,9 @@ A prepared bundle of every container the pipeline uses is published on Zenodo:
 > **rnaseq-flow offline Singularity container bundle**
 > <https://doi.org/10.5281/zenodo.21880328>
 >
-> A concept DOI: it resolves to the most recent bundle. The current one was
-> built for v1.5.1.
+> A concept DOI: it resolves to the most recent bundle. The bundle built for
+> v1.5.1 covers v1.6.0 as well, so there is no separate download for the
+> current release.
 
 It holds 27 Singularity images (~7 GB), a `tre.config` profile, and a README.
 Download it outside the TRE, transfer it in by whatever route your environment
