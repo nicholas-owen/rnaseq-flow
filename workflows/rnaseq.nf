@@ -86,6 +86,17 @@ def normaliseRaid(raid) {
 }
 
 /*
+ * A map entry as a trimmed string, or null when absent or blank.
+ *
+ * A plain function rather than a closure assigned to a variable: Nextflow's
+ * strict parser rejects calling such a closure as `name(args)`.
+ */
+def trimmedField(m, k) {
+    def v = m[k]?.toString()?.trim()
+    return v ?: null
+}
+
+/*
  * The project this run belongs to, from params.project.
  *
  * Project-level metadata is deliberately separate from the per-sample and
@@ -101,16 +112,15 @@ def resolveProject() {
     if (!params.containsKey('project') || !params.project) return null
     def p = params.project
     def errors = []
-    def get = { k -> p[k]?.toString()?.trim() ?: null }
 
-    def raid = get('raid')
+    def raid = trimmedField(p, 'raid')
     def raid_url = normaliseRaid(raid)
     if (raid && !raid_url) {
         errors << "project.raid: '${raid}' is not a RAiD. Expected a DOI-form identifier " +
                   "such as 10.12345/abc123, with or without the https://raid.org/ prefix"
     }
 
-    def funder = get('funder')
+    def funder = trimmedField(p, 'funder')
     def funder_url = normaliseRor(funder)
     if (funder && !funder_url) {
         errors << "project.funder: '${funder}' is not a ROR identifier. Expected something " +
@@ -121,7 +131,7 @@ def resolveProject() {
     // CRediT role: CRediT describes contributions to a work, not control over
     // it. A person (ORCID) or an organisation (ROR) can hold those rights, so
     // both are accepted and a plain name is kept as a last resort.
-    def holder = get('rights_holder')
+    def holder = trimmedField(p, 'rights_holder')
     def holder_rec = null
     if (holder) {
         def as_orcid = holder ==~ /(https:\/\/orcid\.org\/)?\d{4}-\d{4}-\d{4}-\d{3}[\dX]/
@@ -136,11 +146,11 @@ def resolveProject() {
         error "Project metadata problems:\n  " + errors.join("\n  ")
     }
 
-    return [ name         : get('name'),
+    return [ name         : trimmedField(p, 'name'),
              raid         : raid_url,
              rights_holder: holder_rec,
              funder       : funder_url,
-             grant        : get('grant') ]
+             grant        : trimmedField(p, 'grant') ]
 }
 
 /*
@@ -234,7 +244,10 @@ def resolveContributors() {
             roles         : roles.collect { "https://credit.niso.org/contributor-roles/${it}/" },
             role_tokens   : roles,
             roles_declared: roles_declared,
-            affiliation   : e['affiliation']?.toString(),
+            // A ROR is normalised to its URL so it resolves; anything else is
+            // kept as typed, because an institution without a ROR is still
+            // worth naming.
+            affiliation   : normaliseRor(e['affiliation']) ?: e['affiliation']?.toString(),
             facility      : e['facility']?.toString(),
             facility_id   : e['facility_id']?.toString(),
             source        : declared ? 'declared' : 'system_user',
@@ -573,7 +586,10 @@ def buildRunManifest(design, notices) {
                 [ name        : c?.name?.toString(),
                   affiliation : c?.affiliation?.toString(),
                   orcid       : c?.orcid?.toString(),
-                  contribution: c?.contribution?.collect { it.toString() } ]
+                  // Nextflow returns these as enum names (AUTHOR, MAINTAINER);
+                  // lower-cased to match how they are written in the manifest
+                  // scope and everywhere else they appear.
+                  contribution: c?.contribution?.collect { it.toString().toLowerCase() } ]
             },
             contributors: resolveContributors(),
         ],
