@@ -687,16 +687,34 @@ ${procTable}
             // measured at about 1.6 s later, so there is no hook that sees the
             // file. The command is printed here instead, every run, because a
             // crate without checksums or credit looks complete and is not.
-            // Compared as a string, not tested for truth: `--ro_crate false`
-            // arrives as the String "false", which is truthy in Groovy, so a
-            // plain `params.ro_crate ?` prints this for a run that wrote no
-            // crate.
-            (params.ro_crate.toString() == 'false'
-                ? ''
-                : " RO-Crate: finish it with  python3 ${projectDir}/assets/enrich_crate.py ${params.outdir}\n") +
             ('-' * 66))
     }
     catch (Exception e) {
         log.warn "Could not write the run-completion summary: ${e.message}"
+    }
+
+    // --- finish the RO-Crate ------------------------------------------------
+    //
+    // In a JVM shutdown hook rather than here, because nf-prov writes
+    // ro-crate-metadata.json about 1.6 s after this handler returns: no
+    // Nextflow hook ever sees the file. A shutdown hook runs later than every
+    // hook and does see it, which was measured before relying on it.
+    //
+    // The work is in lib/CrateEnricher.groovy. It is Groovy rather than a
+    // script because the launching machine is only guaranteed to have Java;
+    // every tool the pipeline uses lives in a container.
+    if (params.ro_crate.toString() != 'false') {
+        def crateOutdir = params.outdir.toString()
+        def crateManifest = "${params.tracedir}/run_manifest.json".toString()
+        Runtime.runtime.addShutdownHook(new Thread({
+            try {
+                def summary = CrateEnricher.enrich(crateOutdir, crateManifest)
+                // println, not log: the logger is being torn down by now.
+                if (summary) println " ${summary}"
+            }
+            catch (Exception e) {
+                println " RO-Crate could not be completed: ${e}"
+            }
+        }))
     }
 }

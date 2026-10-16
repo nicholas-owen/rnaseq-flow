@@ -739,26 +739,27 @@ authority for Australia and New Zealand, SURF covers Europe, and elsewhere is
 arranged with the ARDC directly, so check whether your institution can mint one
 before planning around it. Everything else in the block works without it.
 
-#### A Workflow Run RO-Crate beside the results (`-profile prov`)
+#### A Workflow Run RO-Crate beside the results
 
 Everything above is recorded in `run_manifest.json`, which only this pipeline's
-readers understand. Add `prov` to the profile list and the run also writes
-`ro-crate-metadata.json`, a [Workflow Run RO-Crate](https://www.researchobject.org/workflow-run-crate/):
-standard JSON-LD that WorkflowHub, repositories and other tools can read.
+readers understand. Every run also writes `ro-crate-metadata.json`, a
+[Workflow Run RO-Crate](https://www.researchobject.org/workflow-run-crate/):
+standard JSON-LD that WorkflowHub, repositories and other tools can read. It is
+on by default, because provenance that has to be remembered is not provenance.
+`--ro_crate false` turns it off.
 
-```bash
-nextflow run main.nf ... -profile test_yeast,docker,prov
-python3 assets/enrich_crate.py results_star
+Nothing to run afterwards. The crate is finished before the pipeline exits, and
+the console says what went into it:
+
+```
+ RO-Crate: 867 entities, 145 files hashed, 6 result folders expanded (175 files), 1 contributor(s), project
 ```
 
-Two steps because the two halves come from different places. The
-[nf-prov](https://github.com/nextflow-io/nf-prov) plugin writes the execution
-graph: one `CreateAction` per task with its inputs, outputs and timings, and
-conformance to the three Workflow Run RO-Crate profiles. On the yeast example
-that is 686 entities, 193 of them task executions.
-
-`assets/enrich_crate.py` then adds what the plugin has no slot for, reading it
-from `run_manifest.json` so there is one source and nothing to drift:
+Two pieces produce it. The [nf-prov](https://github.com/nextflow-io/nf-prov)
+plugin writes the execution graph: one `CreateAction` per task with its inputs,
+outputs and timings, and conformance to the three Workflow Run RO-Crate
+profiles. `lib/CrateEnricher.groovy` then adds what the plugin has no slot for,
+reading it from `run_manifest.json` so there is one source and nothing to drift:
 
 | | |
 |---|---|
@@ -767,14 +768,12 @@ from `run_manifest.json` so there is one source and nothing to drift:
 | Credit | Every contributor as a `Person` behind `Role` entities carrying CRediT URIs. The plugin's config holds exactly one agent and no roles |
 | Project | The `ResearchProject` with its RAiD, the funder, the grant and the rights holder |
 
-It is safe to re-run: a second pass produces a byte-identical crate.
+It runs in a JVM shutdown hook rather than in the pipeline, because nf-prov
+writes the crate about 1.6 seconds after the last Nextflow hook returns, so
+nothing inside the run can see the file.
 
-On the yeast example this takes a 686-entity crate to 865, hashing 320 files
-and describing 175 result files that were previously inside opaque folders.
-
-Two things worth knowing. The plugin downloads on first use, which is why the
-profile is opt-in. And launching as `nextflow run main.nf` leaves the crate
-without a repository URL, which it warns about; launching by canonical name,
+Launching as `nextflow run main.nf` leaves the crate without a repository URL,
+which it warns about; launching by canonical name,
 `nextflow run nicholas-owen/rnaseq-flow`, records it, and is worth doing for a
 crate meant to travel.
 

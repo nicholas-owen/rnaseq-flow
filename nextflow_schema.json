@@ -273,7 +273,7 @@
           "type": "boolean",
           "default": true,
           "description": "Write a Workflow Run RO-Crate beside the results.",
-          "help_text": "On by default. Produces ro-crate-metadata.json in --outdir, a Workflow Run RO-Crate carrying the execution graph as standard JSON-LD, written by the nf-prov plugin. Complete it afterwards with 'python3 assets/enrich_crate.py <outdir>', which adds checksums, file sizes, modification times, every contributor with their CRediT roles, and the project: the plugin's own config has no slot for any of those, and it cannot be done during the run because the plugin writes the crate after the pipeline's last hook. Set false where the plugin cannot be downloaded; note that the plugin is declared either way, so an offline environment needs it staged in $NXF_HOME/plugins."
+          "help_text": "On by default. Produces ro-crate-metadata.json in --outdir, a Workflow Run RO-Crate carrying the execution graph as standard JSON-LD, written by the nf-prov plugin. lib/CrateEnricher.groovy completes it automatically before the pipeline exits, adding checksums, file sizes, modification times, every contributor with their CRediT roles, and the project: the plugin's own config has no slot for any of those. It runs in a JVM shutdown hook because the plugin writes the crate after the pipeline's last Nextflow hook. Set false where the plugin cannot be downloaded; note that the plugin is declared either way, so an offline environment needs it staged in $NXF_HOME/plugins."
         },
         "run_by": {
           "type": "string",
