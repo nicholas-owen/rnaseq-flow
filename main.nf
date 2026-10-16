@@ -682,6 +682,18 @@ ${procTable}
             " ${procRows.size()} process(es), ${totTasks} task(s), ${fmtTime(totReal)} total compute time\n" +
             (heaviest ? " heaviest: ${heaviest.join(', ')}\n" : '') +
             " summary: ${summaryFile.toUriString()}\n" +
+            // The RO-Crate cannot be finished from inside the pipeline: nf-prov
+            // writes ro-crate-metadata.json after this handler has already run,
+            // measured at about 1.6 s later, so there is no hook that sees the
+            // file. The command is printed here instead, every run, because a
+            // crate without checksums or credit looks complete and is not.
+            // Compared as a string, not tested for truth: `--ro_crate false`
+            // arrives as the String "false", which is truthy in Groovy, so a
+            // plain `params.ro_crate ?` prints this for a run that wrote no
+            // crate.
+            (params.ro_crate.toString() == 'false'
+                ? ''
+                : " RO-Crate: finish it with  python3 ${projectDir}/assets/enrich_crate.py ${params.outdir}\n") +
             ('-' * 66))
     }
     catch (Exception e) {
