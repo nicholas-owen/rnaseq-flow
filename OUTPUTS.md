@@ -549,6 +549,19 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
   All of it exists so a results directory that has been emailed on still states
   its terms, its analyst and what they did.
 
+- **`ro-crate-metadata.json`** (at the top of `--outdir`, only with
+  `-profile prov`): a
+  [Workflow Run RO-Crate](https://www.researchobject.org/workflow-run-crate/),
+  the same provenance as standard JSON-LD that other tools can read. The
+  nf-prov plugin writes the execution graph, one `CreateAction` per task with
+  its inputs, outputs and timings. `assets/enrich_crate.py` then adds `sha256`,
+  `contentSize` and `dateModified` for every published file, `hasPart` for the
+  directory outputs, every contributor as a `Person` behind `Role` entities
+  carrying CRediT URIs, and the project with its RAiD, funder and rights
+  holder. See [USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis).
+  Because `sha256` has no term in the RO-Crate 1.1 context, the crate's
+  `@context` is extended with one pointing at SPDX.
+
 The reference set's own provenance is not here: `--download_refs` writes
 `reference_metadata.json` beside the reference files
 ([USAGE.md §2](USAGE.md#2-mode-1-download-references)), and the manifest

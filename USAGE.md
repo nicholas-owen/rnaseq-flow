@@ -739,6 +739,45 @@ authority for Australia and New Zealand, SURF covers Europe, and elsewhere is
 arranged with the ARDC directly, so check whether your institution can mint one
 before planning around it. Everything else in the block works without it.
 
+#### A Workflow Run RO-Crate beside the results (`-profile prov`)
+
+Everything above is recorded in `run_manifest.json`, which only this pipeline's
+readers understand. Add `prov` to the profile list and the run also writes
+`ro-crate-metadata.json`, a [Workflow Run RO-Crate](https://www.researchobject.org/workflow-run-crate/):
+standard JSON-LD that WorkflowHub, repositories and other tools can read.
+
+```bash
+nextflow run main.nf ... -profile test_yeast,docker,prov
+python3 assets/enrich_crate.py results_star
+```
+
+Two steps because the two halves come from different places. The
+[nf-prov](https://github.com/nextflow-io/nf-prov) plugin writes the execution
+graph: one `CreateAction` per task with its inputs, outputs and timings, and
+conformance to the three Workflow Run RO-Crate profiles. On the yeast example
+that is 686 entities, 193 of them task executions.
+
+`assets/enrich_crate.py` then adds what the plugin has no slot for, reading it
+from `run_manifest.json` so there is one source and nothing to drift:
+
+| | |
+|---|---|
+| Integrity | `sha256`, `contentSize` and `dateModified` on every published file. The plugin records none, which leaves a crate naming files that a reader cannot verify |
+| Result contents | `hasPart` on the directory outputs. The plugin leaves `deseq2_output` and the rest as bare folder names, so the result tables are undescribed |
+| Credit | Every contributor as a `Person` behind `Role` entities carrying CRediT URIs. The plugin's config holds exactly one agent and no roles |
+| Project | The `ResearchProject` with its RAiD, the funder, the grant and the rights holder |
+
+It is safe to re-run: a second pass produces a byte-identical crate.
+
+On the yeast example this takes a 686-entity crate to 865, hashing 320 files
+and describing 175 result files that were previously inside opaque folders.
+
+Two things worth knowing. The plugin downloads on first use, which is why the
+profile is opt-in. And launching as `nextflow run main.nf` leaves the crate
+without a repository URL, which it warns about; launching by canonical name,
+`nextflow run nicholas-owen/rnaseq-flow`, records it, and is worth doing for a
+crate meant to travel.
+
 #### When nobody says who they are
 
 None of this is required. With nothing set, the pipeline records the launching
