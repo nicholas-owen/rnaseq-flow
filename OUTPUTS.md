@@ -476,7 +476,9 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
 - **`quarto_report/analysis_report.html`**: an interactive analysis report
   that brings the run together in one document. It opens with a **Run
   overview** (what ran it, what went in, the library layout, the aligner, the
-  baseline, and the reference set with its source and release, read from
+  baseline, the reference set with its source and release, and an
+  **Attribution** group giving the licence, the DOI to cite, the pipeline's
+  authors with their ORCIDs and who ran the analysis, all read from
   `pipeline_info/run_manifest.json`), a **Sample design** table, and a
   **Requested but not performed** notice that renders only when an analysis was
   asked for and skipped. Then the results: a MultiQC general-statistics summary,

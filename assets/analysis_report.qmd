@@ -719,6 +719,14 @@ row <- function(label, value) {
 group <- function(label) {
   paste0("<tr class='rf-group'><th colspan='2'>", label, "</th></tr>")
 }
+# An ORCID as a link showing the bare identifier. The manifest stores the URL
+# form, which is what CITATION.cff and the RO-Crate agent field use, but the
+# digits are what a reader recognises.
+orcid_link <- function(x) {
+  if (length(x) == 0 || is.na(x) || !nzchar(x)) return("")
+  paste0(" <a href='", esc(x), "'>",
+         esc(sub("^https?://orcid\\.org/", "", x)), "</a>")
+}
 
 rows <- c(
   group("Execution"),
@@ -766,6 +774,69 @@ rows <- c(
 if (!downloaded && !is.na(mf("references", "annotation", "note"))) {
   rows <- c(rows, row("Note", paste0("<em style='opacity:.75'>",
                                      esc(mf("references", "annotation", "note")), "</em>")))
+}
+
+# Licence, what to cite, and who to credit. The report is the artefact that
+# travels: once it has been emailed on, this table is the only thing that says
+# what may be done with the results and whose they are.
+#
+# Recorded from schema_version 2 onwards, so a results directory produced by an
+# earlier release has none of it and the whole group is skipped rather than
+# shown as four unrecorded rows.
+attr_rows <- character(0)
+
+if (!is.na(mf("attribution", "license"))) {
+  attr_rows <- c(attr_rows,
+    row("Licence", paste0("<code>", esc(mf("attribution", "license")), "</code>")))
+}
+
+if (!is.na(mf("attribution", "doi"))) {
+  doi <- mf("attribution", "doi")
+  attr_rows <- c(attr_rows,
+    row("Cite", paste0("<a href='https://doi.org/", esc(doi), "'>", esc(doi), "</a>")))
+}
+
+# A list of people rather than one scalar, so mf() cannot read it: it returns
+# the first element of whatever it lands on, which for a list of maps is the
+# first map.
+authors <- manifest$attribution$authors
+if (length(authors) > 0) {
+  described <- character(0)
+  for (a in authors) {
+    nm <- if (is.null(a$name))        "" else as.character(a$name)[1]
+    af <- if (is.null(a$affiliation)) "" else as.character(a$affiliation)[1]
+    oc <- if (is.null(a$orcid))       "" else as.character(a$orcid)[1]
+    if (!nzchar(nm)) next
+    described <- c(described,
+      paste0(esc(nm),
+             if (nzchar(af)) paste0(", ", esc(af)) else "",
+             orcid_link(oc)))
+  }
+  if (length(described) > 0) {
+    attr_rows <- c(attr_rows,
+      row(if (length(described) > 1) "Pipeline authors" else "Pipeline author",
+          paste(described, collapse = "<br>")))
+  }
+}
+
+# Who ran this analysis, as against who wrote the pipeline. When --run_by was
+# not given the manifest records the launching account's user name and says so,
+# and that distinction is carried through here: a login that happened to be in
+# use is not a claim anyone made.
+if (!is.na(mf("attribution", "run_by", "name"))) {
+  from_sys <- isTRUE(manifest$attribution$run_by$from_system_user)
+  attr_rows <- c(attr_rows,
+    row("Run by",
+        paste0(esc(mf("attribution", "run_by", "name")),
+               orcid_link(mf("attribution", "run_by", "orcid")),
+               if (from_sys) {
+                 paste0(" <em style='opacity:.75'>(the launching account's",
+                        " user name, not a stated author)</em>")
+               } else "")))
+}
+
+if (length(attr_rows) > 0) {
+  rows <- c(rows, group("Attribution"), attr_rows)
 }
 
 if (!is.na(mf("pipeline", "command_line"))) {
