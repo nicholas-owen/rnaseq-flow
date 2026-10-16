@@ -45,6 +45,8 @@ class CrateEnricher {
     static final String SPDX_CHECKSUM = 'http://spdx.org/rdf/terms#checksumValue'
     static final String CREDIT = 'https://credit.niso.org/contributor-roles/'
     static final String CRATE = 'ro-crate-metadata.json'
+    /** Where the workflow files nf-prov drops at the crate root are moved to. */
+    static final String WORKFLOW_DIR = 'workflow'
 
     /**
      * @return a one-line summary for the console, or null when there was no
@@ -83,6 +85,7 @@ class CrateEnricher {
         }
 
         def freed = externaliseInputs(doc, graph, byId, outdir, params)
+        int moved = relocateWorkflowFiles(doc, graph, byId, outdir, WORKFLOW_DIR)
         int hashed = addIntegrity(graph, outdir)
         def expanded = expandDirectories(graph, byId, outdir)
         int people = addPeople(graph, byId, root, attribution)
@@ -93,7 +96,8 @@ class CrateEnricher {
         return "RO-Crate: ${graph.size()} entities, ${hashed} files hashed, " +
                "${expanded[0]} result folders expanded (${expanded[1]} files), " +
                "${people} contributor(s)${project ? ', project' : ''}" +
-               (freed[0] ? ", ${freed[0]} input copies removed (${mib(freed[1])})" : '')
+               (freed[0] ? ", ${freed[0]} input copies removed (${mib(freed[1])})" : '') +
+               (moved ? ", ${moved} workflow files moved to ${WORKFLOW_DIR}/" : '')
     }
 
     // ---- crate helpers -----------------------------------------------------
@@ -247,6 +251,58 @@ class CrateEnricher {
             }
         }
         return [removed, bytes]
+    }
+
+    /**
+     * Move the workflow files nf-prov drops at the crate root into a subfolder,
+     * so the results directory is results rather than results plus a copy of
+     * the pipeline.
+     *
+     * ro-crate-metadata.json cannot come with them: RO-Crate 1.1 requires it to
+     * carry that exact name at the root of the crate, and the crate root has to
+     * remain the output directory or every result file would sit outside the
+     * crate and could not be a relative data entity. So the root keeps one
+     * file instead of five.
+     *
+     * Moving the workflow itself is allowed. Workflow RO-Crate 1.0 requires the
+     * crate to *contain* the main workflow and `mainEntity` to point at it; it
+     * says nothing about where in the crate it lives.
+     *
+     * Runs after externaliseInputs(), so by this point the only local file
+     * entities left at the root are the workflow files. Anything a task
+     * produced is excluded regardless, as a guard.
+     */
+    private static int relocateWorkflowFiles(doc, graph, Map byId, String outdir, String subdir) {
+        def produced = [] as Set
+        graph.each { e ->
+            if (e['@type'] != 'CreateAction') return
+            def results = e['result']
+            if (results instanceof Map) results = [results]
+            (results ?: []).each { r -> if (r instanceof Map) produced << r['@id'] }
+        }
+
+        int moved = 0
+        graph.toList().each { e ->
+            String id = e['@id']
+            if (!(id instanceof String) || !isLocal(id)) return
+            if (!typesOf(e).contains('File')) return
+            if (id.contains('/') || id == CRATE) return
+            if (produced.contains(id)) return
+
+            def src = new File(outdir, id)
+            if (!src.isFile()) return
+            def destDir = new File(outdir, subdir)
+            destDir.mkdirs()
+            def dest = new File(destDir, id)
+            if (!src.renameTo(dest)) return
+
+            String fixed = subdir + '/' + id
+            rewriteId(doc, id, fixed)
+            byId.remove(id)
+            byId[fixed] = e
+            moved++
+        }
+        return moved
     }
 
     /** Replace every occurrence of an @id, including references to it. */

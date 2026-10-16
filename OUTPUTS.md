@@ -46,24 +46,26 @@ results/
 ├── multiqc/            Aggregated MultiQC report (rnaseq-flow_multiqc_report.html)
 ├── quarto_report/      Interactive Quarto analysis report
 ├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
-│
-│   The rest are the RO-Crate and the workflow files it has to contain,
-│   written unless --ro_crate false. They are part of the crate, not strays:
-├── ro-crate-metadata.json   The crate itself
-├── main.nf                  The workflow. The profile requires it to be here
-├── nextflow.config          The resolved configuration for this run
-├── README.md                The workflow's README
-└── nextflow_schema.json     The parameter schema
+├── workflow/           The pipeline as it ran: main.nf, nextflow.config,
+│                       README.md, nextflow_schema.json
+└── ro-crate-metadata.json   The RO-Crate (§17), unless --ro_crate false
 ```
 
 Which directories appear depends on the aligner and options you chose.
 
-The loose files at the top are there because a Workflow Run RO-Crate is meant to
-be self-contained. `main.nf` is the crate's `mainEntity`, and
+`workflow/` and `ro-crate-metadata.json` exist because a Workflow Run RO-Crate
+is meant to be self-contained.
 [Workflow RO-Crate 1.0](https://about.workflowhub.eu/Workflow-RO-Crate/1.0/)
 says "The _Crate_ MUST contain a data entity of type `["File",
-"SoftwareSourceCode", "ComputationalWorkflow"]` as the _Main Workflow_".
-Deleting it leaves the crate pointing at a file that is not there.
+"SoftwareSourceCode", "ComputationalWorkflow"]` as the _Main Workflow_", which
+is `workflow/main.nf`, the crate's `mainEntity`. Deleting it leaves the crate
+pointing at a file that is not there.
+
+nf-prov drops those four at the top of `--outdir`; the pipeline moves them into
+`workflow/` afterwards, which the profile allows because a subfolder is still
+inside the crate. `ro-crate-metadata.json` cannot join them: RO-Crate 1.1
+requires that exact name at the crate root, and the root has to stay `--outdir`
+or every result file would fall outside the crate.
 
 Your **input files are not copied in**. nf-prov copies every file-valued
 parameter into the crate by default, which would duplicate the GTF, the GMT and
