@@ -819,20 +819,54 @@ if (length(authors) > 0) {
   }
 }
 
-# Who ran this analysis, as against who wrote the pipeline. When --run_by was
-# not given the manifest records the launching account's user name and says so,
-# and that distinction is carried through here: a login that happened to be in
-# use is not a claim anyone made.
-if (!is.na(mf("attribution", "run_by", "name"))) {
-  from_sys <- isTRUE(manifest$attribution$run_by$from_system_user)
-  attr_rows <- c(attr_rows,
-    row("Run by",
-        paste0(esc(mf("attribution", "run_by", "name")),
-               orcid_link(mf("attribution", "run_by", "orcid")),
-               if (from_sys) {
-                 paste0(" <em style='opacity:.75'>(the launching account's",
-                        " user name, not a stated author)</em>")
-               } else "")))
+# Who did this analysis, as against who wrote the pipeline, with each person's
+# CRediT roles. A list, so a facility analyst and whoever supervised can both be
+# credited with different roles.
+#
+# When nobody identified themselves the manifest records the launching account's
+# user name with no roles and `source` set to system_user, and that distinction
+# is carried through here: a login that happened to be in use is not a claim
+# anyone made, and gets no credit.
+contribs <- manifest$attribution$contributors
+if (length(contribs) > 0) {
+  described <- character(0)
+  for (p in contribs) {
+    nm <- if (is.null(p$name)) "" else as.character(p$name)[1]
+    if (!nzchar(nm)) next
+    oc <- if (is.null(p$orcid)) "" else as.character(p$orcid)[1]
+    toks <- if (is.null(p$role_tokens)) character(0) else unlist(p$role_tokens)
+    uris <- if (is.null(p$roles)) character(0) else unlist(p$roles)
+
+    # Each role links to its CRediT definition, so the authoritative name is one
+    # click away and this report carries no copy of the vocabulary to drift out
+    # of step with the pipeline. The link text is the token with its hyphens
+    # removed, which matches the official name for every role an analysis run
+    # plausibly uses.
+    roles <- if (length(toks) > 0) {
+      links <- vapply(seq_along(toks), function(k) {
+        u <- if (k <= length(uris)) uris[k] else
+               paste0("https://credit.niso.org/contributor-roles/", toks[k], "/")
+        paste0("<a href='", esc(u), "'>", esc(gsub("-", " ", toks[k])), "</a>")
+      }, character(1))
+      paste0(" <span style='opacity:.75'>(", paste(links, collapse = ", "),
+             if (!isTRUE(p$roles_declared)) ", inferred" else "", ")</span>")
+    } else ""
+
+    fac <- if (is.null(p$facility)) "" else as.character(p$facility)[1]
+    sys <- identical(as.character(p$source)[1], "system_user")
+    described <- c(described, paste0(
+      esc(nm), orcid_link(oc), roles,
+      if (nzchar(fac)) paste0("<br><span style='opacity:.6'>", esc(fac), "</span>") else "",
+      if (sys) {
+        paste0(" <em style='opacity:.75'>(the launching account's user name,",
+               " not a stated author)</em>")
+      } else ""))
+  }
+  if (length(described) > 0) {
+    attr_rows <- c(attr_rows,
+      row(if (length(described) > 1) "Analysis by" else "Run by",
+          paste(described, collapse = "<br>")))
+  }
 }
 
 if (length(attr_rows) > 0) {

@@ -514,13 +514,27 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
 
 - **Attribution** (`attribution` in `run_manifest.json`): the licence as an SPDX
   identifier, the Zenodo concept DOI, the pipeline's authors with their ORCIDs,
-  and who ran this analysis. The first three come from the `manifest` scope in
-  `nextflow.config` and are the same for every run. The last is `run_by`, set
-  with `--run_by "Jane Doe" --run_by_orcid 0000-0002-1825-0097`. Without
-  `--run_by` the name falls back to the launching account's user name and
-  `from_system_user` is `true`, which is the flag to check before treating that
-  name as a claim anyone made. This exists so a results directory that has been
-  emailed on still states its terms and its analyst.
+  and `contributors`, the people who did this analysis. The first three come
+  from the `manifest` scope in `nextflow.config` and are the same for every run.
+
+  Each entry in `contributors` carries a `name`, an `orcid` in URL form,
+  `role_tokens` and `roles` (the same CRediT roles as short tokens and as
+  resolvable `https://credit.niso.org/contributor-roles/` URIs), an
+  `affiliation`, a `facility` and `facility_id`, and two fields worth reading
+  before trusting the rest. `roles_declared` is `false` when the role was
+  inferred from the fact that someone ran the pipeline rather than stated by
+  them. `source` is `declared` when a person identified themselves and
+  `system_user` when nothing was set and the launching account's user name was
+  recorded instead, in which case no roles are assigned at all. See
+  [USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis) for
+  how to set them once rather than per run.
+
+  `pipeline.config_files` lists the configuration files the run loaded. Nextflow
+  exposes no per-parameter provenance, so this is as close as the manifest gets
+  to saying where an attribution came from.
+
+  All of it exists so a results directory that has been emailed on still states
+  its terms, its analyst and what they did.
 
 The reference set's own provenance is not here: `--download_refs` writes
 `reference_metadata.json` beside the reference files

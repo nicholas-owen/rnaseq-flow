@@ -5,7 +5,7 @@ nextflow.enable.dsl = 2
 /*
  * Import the main workflow
  */
-include { RNASEQ } from './workflows/rnaseq'
+include { RNASEQ; resolveContributors } from './workflows/rnaseq'
 include { DOWNLOAD } from './workflows/download'
 include { BUILD_INDICES } from './workflows/build_indices'
 
@@ -330,6 +330,12 @@ workflow {
     main:
     // Help / typo-detection / required-input checks (may print help and exit).
     checkParameters()
+
+    // Attribution, checked here so a misspelled CRediT role fails before any
+    // process is scheduled rather than at the end of a run that has already
+    // cost an hour. The result is discarded: buildRunManifest() resolves it
+    // again when it writes the manifest, and the call is pure.
+    resolveContributors()
 
     // --validate_only concerns the samplesheet, which the helper workflows do
     // not take. Warn rather than fail: the flag is harmless here, but silently

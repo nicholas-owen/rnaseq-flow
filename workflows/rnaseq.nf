@@ -57,6 +57,111 @@ def normaliseOrcid(orcid) {
 }
 
 /*
+ * The fourteen CRediT contributor roles (ANSI/NISO Z39.104-2022), as the tokens
+ * that form their URIs.
+ *
+ * A role is declared as the short token, because that is what anyone will type,
+ * and stored in the manifest as the full URI so a reader can resolve it. The
+ * two writing roles' tokens are not derivable from their display names
+ * ("Writing - original draft", "Writing - review & editing"), so both were
+ * checked against credit.niso.org rather than guessed.
+ */
+def creditRoles() {
+    [ 'conceptualization', 'data-curation', 'formal-analysis',
+      'funding-acquisition', 'investigation', 'methodology',
+      'project-administration', 'resources', 'software', 'supervision',
+      'validation', 'visualization', 'writing-original-draft',
+      'writing-review-editing' ]
+}
+
+/*
+ * Who worked on this run, with their CRediT roles.
+ *
+ * Three ways in, highest priority first: `run_contributors`, a list of maps for
+ * the case of several people with different roles; `--run_by` and
+ * `--run_by_orcid`, shorthand for the one-person case because a list is awkward
+ * to pass on a command line; and failing both, the launching account's user
+ * name.
+ *
+ * None of those params is declared in the project's nextflow.config, and that
+ * is deliberate. Nextflow merges config files with $HOME/.nextflow/config at
+ * the LOWEST priority, below the project's own nextflow.config, so a default
+ * declared there would silently override whatever someone had set once in their
+ * home config, which is the natural place to record who you are. They are
+ * declared in nextflow_schema.json instead, which is what the typo check reads,
+ * so `--run_by` is still a known parameter without a project-level default
+ * outranking the user's.
+ *
+ * An unknown role token is an error, not a warning. A misspelled token produces
+ * metadata that claims CRediT conformance for a role that does not exist, and
+ * nothing downstream would catch it. Every problem is reported at once, as the
+ * samplesheet validator does.
+ */
+def resolveContributors() {
+    def valid  = creditRoles()
+    def errors = []
+
+    def entries = null
+    if (params.containsKey('run_contributors') && params.run_contributors) {
+        entries = params.run_contributors instanceof List
+            ? params.run_contributors
+            : [params.run_contributors]
+    }
+    if (!entries) {
+        def named = params.containsKey('run_by') ? params.run_by : null
+        entries = named
+            ? [[ 'name' : named,
+                 'orcid': params.containsKey('run_by_orcid') ? params.run_by_orcid : null ]]
+            : []
+    }
+
+    // Whether anybody identified themselves at all. The fallback records the
+    // login that happened to be in use, which is not a claim anyone made.
+    def declared = !entries.isEmpty()
+    if (!declared) entries = [[ 'name': workflow.userName ]]
+
+    def contributors = []
+    entries.eachWithIndex { e, i ->
+        def name = e['name']?.toString()?.trim()
+        if (!name) errors << "contributor ${i + 1}: 'name' is required"
+
+        def roles = e['roles'] ?: []
+        if (!(roles instanceof List)) roles = [roles]
+        roles = roles.collect { it.toString().trim().toLowerCase() }.findAll { it }
+        roles.each { r ->
+            if (!valid.contains(r)) {
+                errors << "contributor ${i + 1} (${name ?: 'unnamed'}): '${r}' is not a CRediT role"
+            }
+        }
+
+        // Running the pipeline is formal analysis under CRediT, which covers
+        // applying computational techniques to analyse data. So default to it
+        // for someone who identified themselves, never for the fallback, and
+        // record that it was inferred rather than claimed.
+        def roles_declared = !roles.isEmpty()
+        if (!roles_declared && declared) roles = ['formal-analysis']
+
+        contributors << [
+            name          : name,
+            orcid         : normaliseOrcid(e['orcid']),
+            roles         : roles.collect { "https://credit.niso.org/contributor-roles/${it}/" },
+            role_tokens   : roles,
+            roles_declared: roles_declared,
+            affiliation   : e['affiliation']?.toString(),
+            facility      : e['facility']?.toString(),
+            facility_id   : e['facility_id']?.toString(),
+            source        : declared ? 'declared' : 'system_user',
+        ]
+    }
+
+    if (errors) {
+        error "Run contributor problems:\n  " + errors.join("\n  ") +
+              "\n\nValid CRediT roles:\n  " + valid.join(', ')
+    }
+    return contributors
+}
+
+/*
  * Resolve where the annotation came from, for the analysis report.
  *
  * `--download_refs` writes reference_metadata.json beside the files it fetches
@@ -358,6 +463,11 @@ def buildRunManifest(design, notices) {
             // report renders; this is the fallback that answers questions the
             // schema did not anticipate.
             command_line    : workflow.commandLine,
+            // Nextflow exposes no per-parameter provenance, so there is no way
+            // to record which file a contributor's details came from. The list
+            // of config files that were in play is the next best thing: a
+            // reader chasing an attribution at least knows where to look.
+            config_files    : workflow.configFiles?.collect { it.toString() },
         ],
         // Who to credit, and under what terms. The results travel: a reader who
         // has only a results directory can otherwise tell what was run but not
@@ -365,24 +475,20 @@ def buildRunManifest(design, notices) {
         //
         // Two different claims, kept apart. `authors` and `license` describe the
         // pipeline and come from the manifest scope, so they are the same for
-        // every run. `run_by` describes this analysis. When --run_by was not
-        // given it falls back to the launching account's user name, and
-        // `from_system_user` says so, because a unix login is a weaker claim
-        // than a name someone chose to put their ORCID beside.
+        // every run. `contributors` describes the people who did this analysis,
+        // each with their CRediT roles, and each carrying `source` so a name
+        // somebody declared is distinguishable from the login that happened to
+        // be in use. See resolveContributors().
         attribution: [
-            license: workflow.manifest.license,
-            doi    : workflow.manifest.doi,
-            authors: (workflow.manifest.contributors ?: []).collect { c ->
+            license     : workflow.manifest.license,
+            doi         : workflow.manifest.doi,
+            authors     : (workflow.manifest.contributors ?: []).collect { c ->
                 [ name        : c?.name?.toString(),
                   affiliation : c?.affiliation?.toString(),
                   orcid       : c?.orcid?.toString(),
                   contribution: c?.contribution?.collect { it.toString() } ]
             },
-            run_by : [
-                name            : params.run_by ?: workflow.userName,
-                orcid           : normaliseOrcid(params.run_by_orcid),
-                from_system_user: !params.run_by,
-            ],
+            contributors: resolveContributors(),
         ],
         analysis: [
             entry         : from_counts ? 'count matrix' : 'sequencing reads',

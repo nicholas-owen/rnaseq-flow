@@ -561,12 +561,15 @@ cannot run from a count matrix.
 
 ---
 
-### 4.8 Recording who ran the analysis (`--run_by`)
+### 4.8 Credit for the people who did the analysis
 
 Results outlive the machine that made them. Once a results directory has been
 copied to a share or emailed to a collaborator, nothing in it says who produced
 it, which is the question that comes up months later when a figure needs
-explaining.
+explaining. For anyone running analyses as a service, in a core facility or
+otherwise, it is also the record that credit is claimed from.
+
+The quick way, for one person:
 
 ```bash
 nextflow run main.nf --input samplesheet.csv --aligner star \
@@ -574,17 +577,76 @@ nextflow run main.nf --input samplesheet.csv --aligner star \
     --run_by "Jane Doe" --run_by_orcid 0000-0002-1825-0097
 ```
 
-Both land in `attribution.run_by` in
-[`pipeline_info/run_manifest.json`](OUTPUTS.md#17-execution-metadata-pipeline_info),
-alongside the pipeline's own licence, DOI and authorship, which come from the
-`manifest` scope in `nextflow.config` and do not change between runs. The ORCID
-is accepted either bare or as a full `https://orcid.org/` URL and is recorded as
-the URL.
+#### Set it once instead of typing it
 
-Neither is required. Without `--run_by` the pipeline records the launching
-account's user name and sets `from_system_user` to `true`, so a reader can tell
-a login that happened to be in use apart from a name somebody put their ORCID
-next to.
+Nobody retypes a sixteen-digit identifier per run, so put it in
+`$HOME/.nextflow/config`, which Nextflow reads on every run. This is also how
+you state CRediT roles, a facility and an affiliation:
+
+```groovy
+params.run_contributors = [[
+    name        : 'Jane Doe',
+    orcid       : '0000-0002-1825-0097',
+    roles       : ['formal-analysis', 'data-curation'],
+    affiliation : 'https://ror.org/02jx3x895',
+    facility    : 'UCL Genomics',
+    facility_id : 'RRID:SCR_000000'
+]]
+```
+
+Put the same block in a `nextflow.config` in the launch directory instead when
+several people work under one shared account, so the identity belongs to the
+project rather than to the login.
+
+`run_contributors` is a list, so a run can credit more than one person with
+different roles:
+
+```groovy
+params.run_contributors = [
+    [ name: 'Jane Doe',      orcid: '0000-0002-1825-0097',
+      roles: ['formal-analysis', 'software'] ],
+    [ name: 'A Supervisor',  orcid: '0000-0001-5598-6274',
+      roles: ['supervision', 'funding-acquisition'] ]
+]
+```
+
+#### Roles are CRediT, and they are checked
+
+`roles` takes CRediT contributor roles (ANSI/NISO Z39.104-2022) as lowercase
+hyphenated tokens. The fourteen valid values:
+
+```
+conceptualization        funding-acquisition      resources
+data-curation            investigation            software
+formal-analysis          methodology              supervision
+project-administration   validation               visualization
+writing-original-draft   writing-review-editing
+```
+
+A token that is not one of those stops the run before any process is scheduled,
+listing every problem at once and printing the valid set. This is deliberate: a
+misspelled role would otherwise produce metadata claiming conformance to a
+standard for a role that does not exist, and nothing downstream would catch it.
+Each role is stored in the manifest as its resolvable URI, for example
+`https://credit.niso.org/contributor-roles/formal-analysis/`.
+
+Give a name and ORCID with no `roles` and you are credited with
+`formal-analysis`, since running the pipeline is what that role describes. The
+manifest marks it `roles_declared: false` so a reader can tell an inferred role
+from a claimed one.
+
+#### When nobody says who they are
+
+None of this is required. With nothing set, the pipeline records the launching
+account's user name, assigns **no** roles, and sets `source` to `system_user`.
+A login that happened to be in use is not a claim anyone made, so it earns no
+credit, and the report says as much next to the name.
+
+Everything lands in `attribution.contributors` in
+[`pipeline_info/run_manifest.json`](OUTPUTS.md#17-execution-metadata-pipeline_info)
+and in the Attribution group of the analysis report, alongside the pipeline's
+own licence, DOI and authorship, which come from the `manifest` scope in
+`nextflow.config` and do not change between runs.
 
 ---
 
