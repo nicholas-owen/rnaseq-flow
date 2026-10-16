@@ -128,7 +128,7 @@ mqc_report_name <- if (is.na(mqc_data_dir) ||
 # ---- Run manifest ----------------------------------------------------------
 # Written by the workflow before this report renders (buildRunManifest() in
 # workflows/rnaseq.nf) and staged beside this .qmd. It is the only route by
-# which the report learns how the run was *configured* — which aligner, which
+# which the report learns how the run was *configured*: which aligner, which
 # references, which gene sets. None of that can be recovered from the result
 # files, so without it a reader of this HTML alone cannot tell what was run.
 #
@@ -221,10 +221,10 @@ read_de <- function(files, prefix) {
 # Figures are written as both SVG and PNG by the upstream scripts. Prefer the
 # SVG: it is vector, so it stays sharp at any zoom, and for these plots (few
 # points) it is no larger than the raster copy. Its text is rendered as glyph
-# outlines rather than <text> elements, so it is not selectable or searchable —
-# sharpness, not text fidelity, is what the SVG buys here.
-# Falls back to the PNG when only that exists — an older results directory, or
-# a figure whose device failed — and returns nothing when neither is present.
+# outlines rather than <text> elements, so it is not selectable or searchable.
+# Sharpness, not text fidelity, is what the SVG buys here.
+# Falls back to the PNG when only that exists: an older results directory, or
+# a figure whose device failed, and returns nothing when neither is present.
 fig_path <- function(dir, name) {
   for (ext in c(".svg", ".png")) {
     f <- file.path(dir, paste0(name, ext))
@@ -336,7 +336,7 @@ nice_table <- function(df, caption = NULL) {
 # Logo and pipeline link, lifted into Quarto's title block.
 #
 # The SVG is embedded as a base64 data URI rather than inlined as markup. Chunk
-# output marked `asis` is still parsed by Pandoc, which treats it as HTML — and
+# output marked `asis` is still parsed by Pandoc, which treats it as HTML, and
 # SVG is case-sensitive XML that does not survive that: `viewBox` comes back as
 # `viewbox` (silently ignored by the renderer), the self-closing <line> elements
 # are pushed out of an early-closed <svg> into <p> wrappers, and non-ASCII text
@@ -345,7 +345,7 @@ nice_table <- function(df, caption = NULL) {
 #
 # Quarto renders the title block before any chunk output, so the elements are
 # emitted here and moved into it on load. If the script does not run they simply
-# remain where they are, at the top of the document — degraded, not broken.
+# remain where they are, at the top of the document: degraded, not broken.
 logo_file <- "rnaseq-flow_logo.svg"
 if (file.exists(logo_file)) {
   # xfun ships with knitr and states the MIME type explicitly, so it is tried
@@ -619,8 +619,8 @@ if (have_manifest) {
 # Overview
 
 This report is produced automatically at the end of every **rnaseq-flow** run.
-It gathers the run's quality-control metrics and — when differential expression
-was run — the differential-expression and functional-enrichment results into a
+It gathers the run's quality-control metrics and, when differential expression
+was run, the differential-expression and functional-enrichment results into a
 single interactive document. The plots are [plotly](https://plotly.com/r/)
 widgets (hover for gene identities, zoom, pan) and the tables are searchable and
 sortable. Use the code-folding toggle to reveal how any panel was built.
@@ -653,7 +653,7 @@ cat("\n*This results directory carries no run manifest, so the aligner,",
 # ran it, what went in, what kind of library, and what was actually done.
 #
 # The first three come from the manifest, which records *configuration*. The
-# analysis level is built from have_* instead — those reflect which result
+# analysis level is built from have_* instead: those reflect which result
 # directories exist, so it describes what the run produced rather than what it
 # was asked to produce. A stage that was requested and then failed would
 # otherwise be reported here as though it had worked.
@@ -676,7 +676,7 @@ fact <- function(label, value) {
 
 # &mdash; as an entity, never the literal character: the rendering container runs
 # in the C locale, where R escapes a non-ASCII byte to <U+2014> on output. That
-# applies to anything R emits — cat(), a DT caption, a plotly label — not just
+# applies to anything R emits (cat(), a DT caption, a plotly label), not just
 # to raw HTML, so every string leaving R has to stay ASCII.
 input_desc <- if (!is.na(mf("analysis", "counts"))) {
   paste0("Count matrix &mdash; <code>", esc(basename(mf("analysis", "counts"))), "</code>")
@@ -707,7 +707,7 @@ cat("<div class='rf-facts'>",
 # The full record. The annotation is described differently depending on where it
 # came from: when the pipeline downloaded it, reference_metadata.json beside the
 # files records source, release and assembly authoritatively. When the user
-# supplied it the release is genuinely unknowable — an Ensembl GTF's header
+# supplied it the release is genuinely unknowable: an Ensembl GTF's header
 # carries the assembly and genebuild date but never the release, and the
 # trailing number in the filename is an annotation version, not the release. So
 # it is reported as not recorded rather than inferred.
@@ -1112,8 +1112,8 @@ have_heatmaply <- requireNamespace("heatmaply", quietly = TRUE)
 ### Effect-size shrinkage
 
 `log2FoldChange` in the table below is the **apeglm-shrunken** estimate. Shrinkage
-pulls fold changes toward zero where the evidence is weak — low counts, high
-dispersion — so that a gene with three reads cannot outrank a well-measured one
+pulls fold changes toward zero where the evidence is weak (low counts, high
+dispersion), so that a gene with three reads cannot outrank a well-measured one
 on effect size alone. These two panels are the same contrast before and after:
 the left is the raw maximum-likelihood fit, the right is what the rest of this
 report uses. Most of the difference should be at the left-hand (low-count) end;
@@ -1160,7 +1160,7 @@ cat("\n*These results predate the unshrunken fold-change column",
 ```
 
 Colouring marks significance, which comes from the **unshrunken** Wald test in
-both panels — shrinkage changes the effect-size estimate, not the test. That is
+both panels: shrinkage changes the effect-size estimate, not the test. That is
 why a gene can move noticeably between panels without changing colour.
 
 ### Significant genes per contrast
@@ -1211,7 +1211,7 @@ ggplotly(p, tooltip = "text")
 ### Sample similarity and top variable genes
 
 Replicates of a condition should group together. Distance in a PCA is only
-meaningful if both axes are on the same scale, so the aspect ratio is locked —
+meaningful if both axes are on the same scale, so the aspect ratio is locked, so
 what looks like a big separation on PC1 really is one.
 
 ```{r deseq2-pca, eval=(have_deseq2 && have_pca), fig.width=7, fig.height=6}
@@ -1250,7 +1250,7 @@ cat("\n*No PCA coordinates were found (`reproduce/pca_data.csv.gz`), so the",
 The heatmap below shows the 20 most variable genes across all samples, on the
 variance-stabilised scale, with the condition of each sample as a colour bar
 along the top. Rows and columns are ordered by the same clustering the published
-figure uses — Euclidean distance, complete linkage, no scaling — so the layout
+figure uses (Euclidean distance, complete linkage, no scaling), so the layout
 matches it exactly. Hover for the gene, the sample and its value.
 
 ```{r deseq2-heatmap, eval=(have_deseq2 && have_heatmap && have_heatmaply), fig.width=8, fig.height=7}
@@ -1413,7 +1413,7 @@ point is a gene: average abundance across all samples on the x axis, fold change
 on the y. Low-abundance genes spread out to the left, which is the usual place
 for large but poorly-supported fold changes.
 
-Unlike DESeq2 above, these fold changes are **not shrunk** — edgeR's
+Unlike DESeq2 above, these fold changes are **not shrunk**: edgeR's
 quasi-likelihood test moderates the dispersion rather than the effect size, so
 what you see is the raw estimate.
 
@@ -1470,7 +1470,7 @@ ggplotly(p, tooltip = "text")
 
 ### Sample similarity
 
-edgeR's MDS places samples by the leading log fold change between them — the
+edgeR's MDS places samples by the leading log fold change between them: the
 same question as the PCA above, asked a different way. Both axes are the same
 kind of distance, so the aspect ratio is locked here too.
 

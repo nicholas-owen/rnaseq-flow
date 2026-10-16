@@ -11,7 +11,7 @@
 title: "rnaseq-flow"
 subtitle: "Bulk RNA-seq quality-control report"
 intro_text: >-
-  Aggregated quality control for an rnaseq-flow run — read QC, adapter and
+  Aggregated quality control for an rnaseq-flow run: read QC, adapter and
   quality trimming, alignment / quantification, library strandedness and gene
   counting, summarised across every sample. Read this report first: confirm
   there are no outlier samples and that mapping and strandedness look sane
@@ -52,10 +52,10 @@ extra_fn_clean_exts:
 # Only the aligner that actually ran will contribute a section.
 module_order:
   - fastqc:
-      name: "FastQC — raw reads"
+      name: "FastQC: raw reads"
       info: "Sequence quality of the raw input reads, before trimming."
   - fastp:
-      name: "fastp — adapter & quality trimming"
+      name: "fastp: adapter and quality trimming"
   - star
   - hisat2
   - salmon
