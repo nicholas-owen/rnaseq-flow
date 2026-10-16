@@ -776,6 +776,51 @@ if (!downloaded && !is.na(mf("references", "annotation", "note"))) {
                                      esc(mf("references", "annotation", "note")), "</em>")))
 }
 
+# A persistent identifier as a link showing the bare id, since the identifier
+# is what a reader recognises and the URL is what resolves.
+id_link <- function(url, strip = "^https?://[^/]+/") {
+  if (length(url) == 0 || is.na(url) || !nzchar(url)) return("")
+  paste0("<a href='", esc(url), "'>", esc(sub(strip, "", url)), "</a>")
+}
+
+# The research activity this run belongs to. Absent from the manifest when no
+# project was declared, in which case the whole group is skipped: an empty
+# Project heading would imply the question had been asked and answered with
+# nothing.
+proj <- manifest$project
+if (length(proj) > 0) {
+  proj_rows <- character(0)
+
+  if (!is.na(mf("project", "name"))) {
+    proj_rows <- c(proj_rows, row("Project", esc(mf("project", "name"))))
+  }
+  if (!is.na(mf("project", "raid"))) {
+    proj_rows <- c(proj_rows, row("RAiD", id_link(mf("project", "raid"))))
+  }
+
+  # Who owns the data, which is a rights relation rather than a CRediT role.
+  # Either a person (ORCID), an organisation (ROR), or a bare name.
+  rh <- proj$rights_holder
+  if (length(rh) > 0) {
+    held <- if (!is.null(rh$orcid))     id_link(as.character(rh$orcid)[1])
+            else if (!is.null(rh$ror))  id_link(as.character(rh$ror)[1])
+            else if (!is.null(rh$name)) esc(as.character(rh$name)[1])
+            else ""
+    if (nzchar(held)) proj_rows <- c(proj_rows, row("Data owner", held))
+  }
+
+  fund  <- mf("project", "funder")
+  grant <- mf("project", "grant")
+  if (!is.na(fund) || !is.na(grant)) {
+    proj_rows <- c(proj_rows, row("Funding", paste0(
+      if (!is.na(fund))  id_link(fund) else "",
+      if (!is.na(fund) && !is.na(grant)) " " else "",
+      if (!is.na(grant)) paste0("<code>", esc(grant), "</code>") else "")))
+  }
+
+  if (length(proj_rows) > 0) rows <- c(rows, group("Project"), proj_rows)
+}
+
 # Licence, what to cite, and who to credit. The report is the artefact that
 # travels: once it has been emailed on, this table is the only thing that says
 # what may be done with the results and whose they are.

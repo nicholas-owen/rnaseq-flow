@@ -533,6 +533,16 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
   exposes no per-parameter provenance, so this is as close as the manifest gets
   to saying where an attribution came from.
 
+- **Project** (`project` in `run_manifest.json`): the research activity the run
+  belongs to, when one was declared with `params.project`, and absent entirely
+  when it was not. Holds the project `name`, a `raid` (a
+  [RAiD](https://raid.org) research activity identifier, stored as its
+  `https://raid.org/` URL), a `rights_holder` naming who owns the data as an
+  ORCID, a ROR or a plain name, a `funder` as a ROR, and the `grant` reference.
+  Every identifier is validated at launch, so a value that reached the manifest
+  is at least well formed. Ownership is recorded here rather than as a CRediT
+  role because CRediT describes contributions to a work, not control over it.
+
   All of it exists so a results directory that has been emailed on still states
   its terms, its analyst and what they did.
 

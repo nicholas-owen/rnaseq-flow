@@ -57,6 +57,93 @@ def normaliseOrcid(orcid) {
 }
 
 /*
+ * A ROR organisation identifier in URL form, from either the bare id or a URL.
+ * A ROR id is 0 followed by eight lowercase alphanumerics, with the last two a
+ * checksum, so anything else is not one and is returned unchanged for the
+ * caller to reject.
+ */
+def normaliseRor(ror) {
+    if (!ror) return null
+    def id = ror.toString().trim().replaceFirst(/^(https?:\/\/)?ror\.org\//, '')
+    return id ==~ /0[a-z0-9]{8}/ ? "https://ror.org/${id}" : null
+}
+
+/*
+ * A RAiD in URL form. RAiD names (ISO 23527:2022) are DataCite DOIs with a
+ * raid.org URL form, so 10.12345/abc123 and https://raid.org/10.12345/abc123
+ * name the same project, and either also resolves through doi.org or
+ * handle.net. The URL form is stored because it is the one a reader can follow.
+ *
+ * The suffix is specified as alphanumeric ASCII; a dot, hyphen and underscore
+ * are tolerated here so that a validly minted identifier is never rejected,
+ * while a value that is not an identifier at all still is.
+ */
+def normaliseRaid(raid) {
+    if (!raid) return null
+    def id = raid.toString().trim()
+                 .replaceFirst(/^(https?:\/\/)?(raid\.org|doi\.org|hdl\.handle\.net)\//, '')
+    return id ==~ /10\.\d{4,9}\/[A-Za-z0-9._-]+/ ? "https://raid.org/${id}" : null
+}
+
+/*
+ * The project this run belongs to, from params.project.
+ *
+ * Project-level metadata is deliberately separate from the per-sample and
+ * per-run kinds. It changes rarely, it describes the research activity rather
+ * than this execution of the pipeline, and it is the level at which a RAiD and
+ * a funder make sense.
+ *
+ * Every identifier is validated and normalised. An identifier that does not
+ * resolve is worse than an absent one: it reads as provenance while pointing
+ * nowhere, and a reader cannot tell it from a good one without trying it.
+ */
+def resolveProject() {
+    if (!params.containsKey('project') || !params.project) return null
+    def p = params.project
+    def errors = []
+    def get = { k -> p[k]?.toString()?.trim() ?: null }
+
+    def raid = get('raid')
+    def raid_url = normaliseRaid(raid)
+    if (raid && !raid_url) {
+        errors << "project.raid: '${raid}' is not a RAiD. Expected a DOI-form identifier " +
+                  "such as 10.12345/abc123, with or without the https://raid.org/ prefix"
+    }
+
+    def funder = get('funder')
+    def funder_url = normaliseRor(funder)
+    if (funder && !funder_url) {
+        errors << "project.funder: '${funder}' is not a ROR identifier. Expected something " +
+                  "like 03x94j517 or https://ror.org/03x94j517, from ror.org"
+    }
+
+    // The data's owner, which is a rights relation and so deliberately not a
+    // CRediT role: CRediT describes contributions to a work, not control over
+    // it. A person (ORCID) or an organisation (ROR) can hold those rights, so
+    // both are accepted and a plain name is kept as a last resort.
+    def holder = get('rights_holder')
+    def holder_rec = null
+    if (holder) {
+        def as_orcid = holder ==~ /(https:\/\/orcid\.org\/)?\d{4}-\d{4}-\d{4}-\d{3}[\dX]/
+            ? normaliseOrcid(holder) : null
+        def as_ror = as_orcid ? null : normaliseRor(holder)
+        holder_rec = [ name : (as_orcid || as_ror) ? null : holder,
+                       orcid: as_orcid,
+                       ror  : as_ror ]
+    }
+
+    if (errors) {
+        error "Project metadata problems:\n  " + errors.join("\n  ")
+    }
+
+    return [ name         : get('name'),
+             raid         : raid_url,
+             rights_holder: holder_rec,
+             funder       : funder_url,
+             grant        : get('grant') ]
+}
+
+/*
  * The fourteen CRediT contributor roles (ANSI/NISO Z39.104-2022), as the tokens
  * that form their URIs.
  *
@@ -490,6 +577,10 @@ def buildRunManifest(design, notices) {
             },
             contributors: resolveContributors(),
         ],
+        // The research activity this run belongs to, where one has been
+        // declared. Null when it has not, and the report skips the group
+        // rather than showing a row of blanks.
+        project: resolveProject(),
         analysis: [
             entry         : from_counts ? 'count matrix' : 'sequencing reads',
             // The samplesheet or read glob, and the matrix for a --counts run.

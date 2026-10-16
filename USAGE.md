@@ -697,6 +697,45 @@ be told apart from a true one. Hence the fields a reader should check before
 trusting an attribution, `source` and `roles_declared`, both described in
 [OUTPUTS.md §17](OUTPUTS.md#17-execution-metadata-pipeline_info).
 
+#### The project the run belongs to (`params.project`)
+
+Contributors answer who did the work. A project record answers what the work was
+part of, and it is the level at which a funder, a data owner and a project
+identifier make sense. It changes rarely, so it belongs in a `nextflow.config`
+beside the data rather than in your home config:
+
+```groovy
+params.project = [
+    name         : 'Yeast osmotic stress response',
+    raid         : '10.12345/abc123',
+    rights_holder: '0000-0001-5598-6274',
+    funder       : 'https://ror.org/03x94j517',
+    grant        : 'MR/X000000/1'
+]
+```
+
+| Field | What it takes |
+|---|---|
+| `raid` | A [RAiD](https://raid.org) (ISO 23527:2022), the persistent identifier for a research activity. RAiDs are DataCite DOIs, so `10.12345/abc123` and `https://raid.org/10.12345/abc123` are the same thing and either resolves through doi.org as well. Stored as the raid.org URL |
+| `funder` | A [ROR](https://ror.org) identifier. RAiD is explicitly not for organisations or for grants, so the funder and the grant number are recorded separately |
+| `rights_holder` | Who owns the data. An ORCID for a person, a ROR for an organisation, or a plain name if neither applies |
+| `grant` | The grant reference as the funder writes it |
+
+Every identifier is checked at launch and the run stops on a malformed one. An
+identifier that does not resolve is worse than an absent one: it reads as
+provenance while pointing nowhere, and a reader cannot tell it from a good one
+without trying it.
+
+Note that `rights_holder` is not a CRediT role, deliberately. CRediT describes
+contributions to a piece of work; owning the data is a rights relation over it.
+Someone who owns the data and also contributed gets both, their ownership here
+and their roles in `run_contributors`.
+
+RAiD registration is not yet uniform worldwide. The ARDC is the registration
+authority for Australia and New Zealand, SURF covers Europe, and elsewhere is
+arranged with the ARDC directly, so check whether your institution can mint one
+before planning around it. Everything else in the block works without it.
+
 #### When nobody says who they are
 
 None of this is required. With nothing set, the pipeline records the launching
