@@ -180,6 +180,17 @@ esc <- function(x) {
 # A field that was not recorded is shown as such, never omitted and never
 # inferred: a release guessed from a filename is a false record that outlives
 # the run and cannot afterwards be told apart from a true one.
+# Escaped, then with every hyphen written as its HTML entity.
+#
+# Pandoc's `smart` extension rewrites `--` as an en dash, and it reaches `asis`
+# chunk output: the recorded command line rendered as "-input" rather than
+# "--input", so copying it out of the report produced a command that does not
+# run. An entity renders as a hyphen and leaves no `--` in the markdown for
+# smart punctuation to find. Use it for anything that has to survive verbatim.
+no_smart <- function(x) {
+  gsub("-", "&#45;", esc(x), fixed = TRUE)
+}
+
 or_unrecorded <- function(x) {
   if (length(x) == 0 || all(is.na(x)) || !nzchar(x[1])) {
     "<em style='opacity:.6'>not recorded</em>"
@@ -921,7 +932,7 @@ if (length(attr_rows) > 0) {
 if (!is.na(mf("pipeline", "command_line"))) {
   rows <- c(rows, group("Invocation"),
             row("Command", paste0("<code class='rf-cmd'>",
-                                  esc(mf("pipeline", "command_line")), "</code>")))
+                                  no_smart(mf("pipeline", "command_line")), "</code>")))
 }
 
 cat("<table class='rf-runtable'>", paste(rows, collapse = ""), "</table>\n", sep = "")
@@ -937,8 +948,10 @@ cat("<table class='rf-runtable'>", paste(rows, collapse = ""), "</table>\n", sep
 cat("<div class='rf-notices'>",
     "<div class='rf-notices-head'>Requested but not performed</div>",
     "<ul>",
+    # no_smart, not esc: a notice names the flag that was asked for, and
+    # "--dtu" would otherwise render as an en dash followed by "dtu".
     paste(vapply(unlist(manifest$notices),
-                 function(n) paste0("<li>", esc(n), "</li>"), character(1)),
+                 function(n) paste0("<li>", no_smart(n), "</li>"), character(1)),
           collapse = ""),
     "</ul>",
     "<p>The run completed; these steps were skipped for the reasons given, so the",
