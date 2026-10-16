@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: If you use rnaseq-flow in your work, please cite it as below.
+title: rnaseq-flow
+abstract: >-
+  A modular bulk RNA-seq analysis pipeline built with Nextflow DSL2. It takes
+  raw FASTQ files through quality control, alignment or quantification,
+  differential expression, alternative splicing, fusion detection and
+  functional enrichment, and aggregates the results into interactive HTML
+  reports. The aligner and the analysis stages are selectable, references can
+  be supplied directly or downloaded and indexed by built-in helper workflows,
+  and every published figure ships the script that drew it.
+type: software
+authors:
+  - family-names: Owen
+    given-names: Nicholas
+    orcid: https://orcid.org/0000-0001-5598-6274
+    affiliation: University College London
+version: 1.6.0
+date-released: 2026-09-02
+license: GPL-3.0-only
+repository-code: https://github.com/nicholas-owen/rnaseq-flow
+url: https://github.com/nicholas-owen/rnaseq-flow
+doi: 10.5281/zenodo.21880328
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21880328
+    description: Zenodo deposit, concept DOI resolving to all versions
+  - type: doi
+    value: 10.5281/zenodo.21880329
+    description: >-
+      Offline Singularity container bundle for rnaseq-flow v1.5.1, used with
+      -profile tre in air-gapped environments
+keywords:
+  - RNA-seq
+  - bulk RNA-seq
+  - transcriptomics
+  - differential gene expression
+  - alternative splicing
+  - functional enrichment
+  - Nextflow
+  - DSL2
+  - workflow
+  - reproducible research
