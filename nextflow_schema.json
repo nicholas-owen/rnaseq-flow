@@ -268,6 +268,17 @@
           "default": false,
           "description": "Validate the samplesheet and inputs, then exit without running the pipeline.",
           "help_text": "Runs the same validation the pipeline performs at launch -- required columns, duplicate sample ids, empty values, FASTQ paths that resolve, at least two conditions and at least two replicates per condition -- reports every problem at once, and stops before any process is scheduled. Exits non-zero when validation fails, so it can gate a script. Has no effect with --download_refs or --build_indices, which take no samplesheet."
+        },
+        "run_by": {
+          "type": "string",
+          "description": "Name of the person responsible for this run, recorded in the run manifest.",
+          "help_text": "Written to pipeline_info/run_manifest.json so a results directory states who produced it, which matters once the results travel away from the machine that made them. This is the analyst, not the pipeline author: authorship comes from the manifest scope in nextflow.config. Defaults to the launching account's user name."
+        },
+        "run_by_orcid": {
+          "type": "string",
+          "description": "ORCID of the person responsible for this run.",
+          "help_text": "Accepts either the bare identifier (0000-0002-1825-0097) or the full https://orcid.org/ URL, and is normalised to the URL form in the run manifest. Only useful alongside --run_by.",
+          "pattern": "^(https://orcid\\.org/)?\\d{4}-\\d{4}-\\d{4}-\\d{3}[\\dX]$"
         }
       }
     }

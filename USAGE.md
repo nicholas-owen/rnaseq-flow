@@ -561,6 +561,33 @@ cannot run from a count matrix.
 
 ---
 
+### 4.8 Recording who ran the analysis (`--run_by`)
+
+Results outlive the machine that made them. Once a results directory has been
+copied to a share or emailed to a collaborator, nothing in it says who produced
+it, which is the question that comes up months later when a figure needs
+explaining.
+
+```bash
+nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --run_by "Jane Doe" --run_by_orcid 0000-0002-1825-0097
+```
+
+Both land in `attribution.run_by` in
+[`pipeline_info/run_manifest.json`](OUTPUTS.md#17-execution-metadata-pipeline_info),
+alongside the pipeline's own licence, DOI and authorship, which come from the
+`manifest` scope in `nextflow.config` and do not change between runs. The ORCID
+is accepted either bare or as a full `https://orcid.org/` URL and is recorded as
+the URL.
+
+Neither is required. Without `--run_by` the pipeline records the launching
+account's user name and sets `from_system_user` to `true`, so a reader can tell
+a login that happened to be in use apart from a name somebody put their ORCID
+next to.
+
+---
+
 ## 5. Profiles & execution
 
 | Profile | Effect |

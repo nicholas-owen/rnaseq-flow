@@ -505,10 +505,20 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
 
 | File | Contents |
 |---|---|
-| `run_manifest.json` | How the run was configured, machine-readable: pipeline version and commit, the command line, the aligner, the baseline (`--reference_level`), the design, the samples per condition, the notices, and the reference set with its release where known. Written before any process runs, so it records what was asked for; the report derives what was produced from the result directories that exist |
+| `run_manifest.json` | How the run was configured, machine-readable: pipeline version and commit, the command line, the aligner, the baseline (`--reference_level`), the design, the samples per condition, the notices, and the reference set with its release where known. Written before any process runs, so it records what was asked for; the report derives what was produced from the result directories that exist. Also carries the attribution block described below |
 | `software_versions_mqc.yml` | Every tool and version collected at run time, the same table MultiQC shows. Use it for methods sections |
 | `run_summary.html` | See below |
 | `execution_report_*.html`, `execution_timeline_*.html`, `execution_trace_*.txt` | Nextflow's own per-run resource report, timeline and trace, timestamped per launch. Use them to see which processes ran, how long they took, peak memory, and if a run failed, exactly which task and why |
+
+- **Attribution** (`attribution` in `run_manifest.json`): the licence as an SPDX
+  identifier, the Zenodo concept DOI, the pipeline's authors with their ORCIDs,
+  and who ran this analysis. The first three come from the `manifest` scope in
+  `nextflow.config` and are the same for every run. The last is `run_by`, set
+  with `--run_by "Jane Doe" --run_by_orcid 0000-0002-1825-0097`. Without
+  `--run_by` the name falls back to the launching account's user name and
+  `from_system_user` is `true`, which is the flag to check before treating that
+  name as a claim anyone made. This exists so a results directory that has been
+  emailed on still states its terms and its analyst.
 
 The reference set's own provenance is not here: `--download_refs` writes
 `reference_metadata.json` beside the reference files

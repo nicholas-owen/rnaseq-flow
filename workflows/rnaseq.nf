@@ -43,6 +43,20 @@ def resolveDesign(samplesheet) {
 }
 
 /*
+ * An ORCID in its canonical URL form, from either the bare identifier or a URL.
+ *
+ * The schema accepts both because people copy whichever their profile shows.
+ * Recording one shape means a reader does not have to normalise before
+ * comparing, and the URL form is what CITATION.cff, .zenodo.json and the
+ * Workflow Run RO-Crate agent field all use.
+ */
+def normaliseOrcid(orcid) {
+    if (!orcid) return null
+    def id = orcid.toString().trim()
+    return id.startsWith('http') ? id : "https://orcid.org/${id}"
+}
+
+/*
  * Resolve where the annotation came from, for the analysis report.
  *
  * `--download_refs` writes reference_metadata.json beside the files it fetches
@@ -324,7 +338,9 @@ def buildRunManifest(design, notices) {
     if (params.ctat_lib)       optional.add('fusion calling (STAR-Fusion)')
 
     return [
-        schema_version: 1,
+        // 2 adds the `attribution` block. Additive, so a reader written against
+        // 1 still works.
+        schema_version: 2,
         pipeline: [
             name            : workflow.manifest.name,
             version         : workflow.manifest.version,
@@ -342,6 +358,31 @@ def buildRunManifest(design, notices) {
             // report renders; this is the fallback that answers questions the
             // schema did not anticipate.
             command_line    : workflow.commandLine,
+        ],
+        // Who to credit, and under what terms. The results travel: a reader who
+        // has only a results directory can otherwise tell what was run but not
+        // whose it is or what they may do with it.
+        //
+        // Two different claims, kept apart. `authors` and `license` describe the
+        // pipeline and come from the manifest scope, so they are the same for
+        // every run. `run_by` describes this analysis. When --run_by was not
+        // given it falls back to the launching account's user name, and
+        // `from_system_user` says so, because a unix login is a weaker claim
+        // than a name someone chose to put their ORCID beside.
+        attribution: [
+            license: workflow.manifest.license,
+            doi    : workflow.manifest.doi,
+            authors: (workflow.manifest.contributors ?: []).collect { c ->
+                [ name        : c?.name?.toString(),
+                  affiliation : c?.affiliation?.toString(),
+                  orcid       : c?.orcid?.toString(),
+                  contribution: c?.contribution?.collect { it.toString() } ]
+            },
+            run_by : [
+                name            : params.run_by ?: workflow.userName,
+                orcid           : normaliseOrcid(params.run_by_orcid),
+                from_system_user: !params.run_by,
+            ],
         ],
         analysis: [
             entry         : from_counts ? 'count matrix' : 'sequencing reads',
