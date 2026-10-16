@@ -706,9 +706,13 @@ ${procTable}
     if (params.ro_crate.toString() != 'false') {
         def crateOutdir = params.outdir.toString()
         def crateManifest = "${params.tracedir}/run_manifest.json".toString()
+        // Copied so the hook does not read Nextflow state during shutdown, and
+        // so the enricher can resolve "Input file specified by params.<name>"
+        // back to the file it was copied from.
+        def crateParams = new LinkedHashMap(params)
         Runtime.runtime.addShutdownHook(new Thread({
             try {
-                def summary = CrateEnricher.enrich(crateOutdir, crateManifest)
+                def summary = CrateEnricher.enrich(crateOutdir, crateManifest, crateParams)
                 // println, not log: the logger is being torn down by now.
                 if (summary) println " ${summary}"
             }

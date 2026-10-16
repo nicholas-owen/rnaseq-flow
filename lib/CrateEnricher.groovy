@@ -50,7 +50,7 @@ class CrateEnricher {
      * @return a one-line summary for the console, or null when there was no
      *         crate to enrich (the plugin disabled, or it failed to write one).
      */
-    static String enrich(String outdir, String manifestPath) {
+    static String enrich(String outdir, String manifestPath, Map params = [:]) {
         def crateFile = new File(outdir, CRATE)
         def manifestFile = new File(manifestPath)
         if (!crateFile.exists() || !manifestFile.exists()) return null
@@ -66,6 +66,14 @@ class CrateEnricher {
         def root = byId['./']
         def attribution = manifest['attribution'] ?: [:]
         if (root != null) {
+            // Ensure the CRediT vocabulary itself is described, since the role
+            // terms added below point at it.
+            def set = entity(graph, byId, CREDIT, 'DefinedTermSet')
+            set['name'] = 'CRediT, Contributor Roles Taxonomy (ANSI/NISO Z39.104-2022)'
+        }
+        normaliseLocalPaths(doc, graph, byId, outdir)
+
+        if (root != null) {
             // Licence and citation come from the manifest so the crate has one
             // source rather than repeating them in the plugin's own config.
             if (attribution['license'])
@@ -74,6 +82,7 @@ class CrateEnricher {
                 root['identifier'] = 'https://doi.org/' + attribution['doi']
         }
 
+        def freed = externaliseInputs(doc, graph, byId, outdir, params)
         int hashed = addIntegrity(graph, outdir)
         def expanded = expandDirectories(graph, byId, outdir)
         int people = addPeople(graph, byId, root, attribution)
@@ -83,7 +92,8 @@ class CrateEnricher {
 
         return "RO-Crate: ${graph.size()} entities, ${hashed} files hashed, " +
                "${expanded[0]} result folders expanded (${expanded[1]} files), " +
-               "${people} contributor(s)${project ? ', project' : ''}"
+               "${people} contributor(s)${project ? ', project' : ''}" +
+               (freed[0] ? ", ${freed[0]} input copies removed (${mib(freed[1])})" : '')
     }
 
     // ---- crate helpers -----------------------------------------------------
@@ -150,6 +160,111 @@ class CrateEnricher {
     private static List typesOf(e) {
         def t = e['@type']
         return (t instanceof List) ? t : [t]
+    }
+
+    /**
+     * Fix entity ids recorded relative to the launch directory rather than to
+     * the crate root.
+     *
+     * nf-prov records files it writes through storeDir with a path that
+     * includes the output directory, so a crate rooted at results_star refers
+     * to "results_star/pipeline_info/run_manifest.json". From inside the crate
+     * that path does not exist, and the entity dangles. Observed for the run
+     * manifest; this corrects any entity with the same shape.
+     */
+    private static void normaliseLocalPaths(doc, graph, Map byId, String outdir) {
+        String prefix = new File(outdir).name + '/'
+        graph.toList().each { e ->
+            String id = e['@id']
+            if (!(id instanceof String) || !isLocal(id)) return
+            if (!id.startsWith(prefix)) return
+            if (new File(outdir, id).exists()) return
+            String fixed = id.substring(prefix.length())
+            if (!new File(outdir, fixed).exists()) return
+            rewriteId(doc, id, fixed)
+            byId.remove(id)
+            byId[fixed] = e
+        }
+    }
+
+    // ---- input copies ------------------------------------------------------
+
+    /**
+     * Point each copied input at the file it was copied from, and delete the
+     * copy.
+     *
+     * nf-prov copies every file-valued parameter into the crate directory. No
+     * specification asks for it: RO-Crate 1.1 allows a data entity to be an
+     * external reference, and the Workflow Run Crate profile requires nothing
+     * about inputs being present. Only the Workflow RO-Crate profile mandates
+     * anything, and only for the main workflow ("The Crate MUST contain a data
+     * entity ... as the Main Workflow"), which is why main.nf is left alone
+     * here along with the other workflow files.
+     *
+     * The plugin already treats directory-valued inputs this way: the aligner
+     * index appears as an absolute file: URI and is not copied. This does the
+     * same for the file-valued ones, which is where the cost is. A human GTF is
+     * tens of megabytes duplicated into every results directory.
+     *
+     * Conservative by construction. A copy is removed only when the crate says
+     * it is an input, the parameter it names resolves to a file that still
+     * exists, and that file is outside the output directory. Anything else is
+     * left exactly as it is.
+     */
+    private static List externaliseInputs(doc, graph, Map byId, String outdir, Map params) {
+        if (!params) return [0, 0L]
+        def outRoot = new File(outdir).canonicalFile
+        int removed = 0
+        long bytes = 0L
+
+        graph.toList().each { e ->
+            String id = e['@id']
+            if (!(id instanceof String) || !isLocal(id)) return
+            if (!typesOf(e).contains('File')) return
+
+            // nf-prov labels these "Input file specified by params.<name>",
+            // which names the parameter holding the original path.
+            def m = (e['description'] ?: '') =~ /^Input file specified by params\.([A-Za-z0-9_]+)/
+            if (!m) return
+            def source = params[m[0][1]]
+            if (!source) return
+
+            def src = new File(source.toString())
+            if (!src.isAbsolute()) src = new File(System.getProperty('user.dir'), source.toString())
+            src = src.canonicalFile
+            if (!src.isFile()) return
+            if (src.path.startsWith(outRoot.path + File.separator)) return
+
+            def copy = new File(outdir, id)
+            String newId = 'file://' + src.path
+            rewriteId(doc, id, newId)
+            byId.remove(id)
+            byId[newId] = e
+
+            if (copy.isFile() && copy.canonicalFile != src) {
+                bytes += copy.length()
+                if (copy.delete()) removed++
+            }
+        }
+        return [removed, bytes]
+    }
+
+    /** Replace every occurrence of an @id, including references to it. */
+    private static void rewriteId(node, String oldId, String newId) {
+        if (node instanceof Map) {
+            node.each { k, v ->
+                if (v instanceof String && v == oldId && (k == '@id')) node[k] = newId
+                else rewriteId(v, oldId, newId)
+            }
+        }
+        else if (node instanceof List) {
+            node.each { rewriteId(it, oldId, newId) }
+        }
+    }
+
+    private static String mib(long bytes) {
+        return bytes >= (1L << 20) ? String.format('%.1f MB', bytes / (1024.0 * 1024.0))
+                                   : String.format('%d kB', (long) (bytes / 1024))
     }
 
     // ---- integrity ---------------------------------------------------------
@@ -272,11 +387,19 @@ class CrateEnricher {
             unlink(root, 'author', pid)
             tokens.each { tok ->
                 String rid = "#role-${i + 1}-${tok}"
+                String termId = CREDIT + tok + '/'
                 def role = entity(graph, byId, rid, 'Role')
-                role['roleName'] = ['@id': CREDIT + tok + '/']
+                role['roleName'] = ['@id': termId]
                 role['name'] = tok.replace('-', ' ')
                 link(role, 'author', pid)
                 link(root, 'author', rid)
+                // Describe the role itself, so the crate does not reference a
+                // URI it says nothing about. RO-Crate expects a referenced
+                // contextual entity to be described in the crate.
+                def term = entity(graph, byId, termId, 'DefinedTerm')
+                term['name'] = tok.replace('-', ' ')
+                term['termCode'] = tok
+                term['inDefinedTermSet'] = ['@id': CREDIT]
             }
         }
         return n

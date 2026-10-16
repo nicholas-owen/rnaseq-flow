@@ -47,29 +47,33 @@ results/
 ├── quarto_report/      Interactive Quarto analysis report
 ├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
 │
-│   The rest are the RO-Crate and its contents (see below), written unless
-│   --ro_crate false. They are part of the crate, not strays:
+│   The rest are the RO-Crate and the workflow files it has to contain,
+│   written unless --ro_crate false. They are part of the crate, not strays:
 ├── ro-crate-metadata.json   The crate itself
-├── main.nf                  The workflow, copied in: the profile requires it
+├── main.nf                  The workflow. The profile requires it to be here
 ├── nextflow.config          The resolved configuration for this run
 ├── README.md                The workflow's README
-├── nextflow_schema.json     The parameter schema
-└── <inputs>                 A copy of each file-valued parameter: the
-                             samplesheet, the GTF, the GMT
+└── nextflow_schema.json     The parameter schema
 ```
 
 Which directories appear depends on the aligner and options you chose.
 
 The loose files at the top are there because a Workflow Run RO-Crate is meant to
-be self-contained: `main.nf` is the crate's `mainEntity`, and the Workflow
-RO-Crate profile requires the workflow to be inside the crate rather than
-referenced outside it. The inputs are copied for the same reason, so the run can
-be understood from the crate alone after the results have been moved or
-archived. Deleting them leaves the crate pointing at files that are not there.
+be self-contained. `main.nf` is the crate's `mainEntity`, and
+[Workflow RO-Crate 1.0](https://about.workflowhub.eu/Workflow-RO-Crate/1.0/)
+says "The _Crate_ MUST contain a data entity of type `["File",
+"SoftwareSourceCode", "ComputationalWorkflow"]` as the _Main Workflow_".
+Deleting it leaves the crate pointing at a file that is not there.
 
-They are small for a small reference set, around 1.7 MB on the yeast example,
-but a human GTF is tens of megabytes and gets copied into every results
-directory. Use `--ro_crate false` if that matters more than the crate does.
+Your **input files are not copied in**. nf-prov copies every file-valued
+parameter into the crate by default, which would duplicate the GTF, the GMT and
+the samplesheet into every results directory, tens of megabytes for a human
+reference. No specification asks for that: RO-Crate 1.1 allows a data entity to
+be an external reference, and the Workflow Run Crate profile requires nothing
+about inputs being present. So the pipeline rewrites those entities to absolute
+`file:` references, exactly as nf-prov already does for directory-valued inputs
+such as the aligner index, and removes the copies. The console says how much
+was reclaimed.
 
 > **Count-matrix runs (`--counts`).** Starting from a pre-computed count matrix
 > skips read QC, alignment and quantification, so those directories
