@@ -120,24 +120,35 @@ def resolveProject() {
                   "such as 10.12345/abc123, with or without the https://raid.org/ prefix"
     }
 
+    // An identifier resolves, a name reads. Recording both means the report can
+    // say "Medical Research Council" and still link the ROR behind it, rather
+    // than showing a reader nine characters of hex and expecting them to click.
     def funder = trimmedField(p, 'funder')
     def funder_url = normaliseRor(funder)
     if (funder && !funder_url) {
         errors << "project.funder: '${funder}' is not a ROR identifier. Expected something " +
                   "like 03x94j517 or https://ror.org/03x94j517, from ror.org"
     }
+    def funder_name = trimmedField(p, 'funder_name')
+    def funder_rec = (funder_url || funder_name)
+        ? [ name: funder_name, ror: funder_url ]
+        : null
 
     // The data's owner, which is a rights relation and so deliberately not a
     // CRediT role: CRediT describes contributions to a work, not control over
     // it. A person (ORCID) or an organisation (ROR) can hold those rights, so
-    // both are accepted and a plain name is kept as a last resort.
+    // both are accepted, with rights_holder_name alongside for display.
+    //
+    // Where rights_holder is neither an ORCID nor a ROR it is taken as a name,
+    // so naming an owner who has no identifier still works with one field.
     def holder = trimmedField(p, 'rights_holder')
+    def holder_name = trimmedField(p, 'rights_holder_name')
     def holder_rec = null
-    if (holder) {
-        def as_orcid = holder ==~ /(https:\/\/orcid\.org\/)?\d{4}-\d{4}-\d{4}-\d{3}[\dX]/
+    if (holder || holder_name) {
+        def as_orcid = holder && holder ==~ /(https:\/\/orcid\.org\/)?\d{4}-\d{4}-\d{4}-\d{3}[\dX]/
             ? normaliseOrcid(holder) : null
-        def as_ror = as_orcid ? null : normaliseRor(holder)
-        holder_rec = [ name : (as_orcid || as_ror) ? null : holder,
+        def as_ror = (holder && !as_orcid) ? normaliseRor(holder) : null
+        holder_rec = [ name : holder_name ?: ((as_orcid || as_ror) ? null : holder),
                        orcid: as_orcid,
                        ror  : as_ror ]
     }
@@ -149,7 +160,7 @@ def resolveProject() {
     return [ name         : trimmedField(p, 'name'),
              raid         : raid_url,
              rights_holder: holder_rec,
-             funder       : funder_url,
+             funder       : funder_rec,
              grant        : trimmedField(p, 'grant') ]
 }
 

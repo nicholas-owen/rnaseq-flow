@@ -706,11 +706,13 @@ beside the data rather than in your home config:
 
 ```groovy
 params.project = [
-    name         : 'Yeast osmotic stress response',
-    raid         : '10.12345/abc123',
-    rights_holder: '0000-0001-5598-6274',
-    funder       : 'https://ror.org/03x94j517',
-    grant        : 'MR/X000000/1'
+    name              : 'Yeast osmotic stress response',
+    raid              : '10.12345/abc123',
+    rights_holder     : '0000-0001-5598-6274',
+    rights_holder_name: 'Nicholas Owen',
+    funder            : 'https://ror.org/03x94j517',
+    funder_name       : 'Medical Research Council',
+    grant             : 'MR/X000000/1'
 ]
 ```
 
@@ -720,6 +722,7 @@ params.project = [
 | `funder` | A [ROR](https://ror.org) identifier. RAiD is explicitly not for organisations or for grants, so the funder and the grant number are recorded separately |
 | `rights_holder` | Who owns the data. An ORCID for a person, a ROR for an organisation, or a plain name if neither applies |
 | `grant` | The grant reference as the funder writes it |
+| `funder_name`, `rights_holder_name` | Display names. An identifier resolves but reads as nine characters of hex, so the report shows the name and links the identifier behind it: "Medical Research Council 03x94j517" rather than the bare id. Both optional, and either can be given without its identifier |
 
 Every identifier is checked at launch and the run stops on a malformed one. An
 identifier that does not resolve is worse than an absent one: it reads as

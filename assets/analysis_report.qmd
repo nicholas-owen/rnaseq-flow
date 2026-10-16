@@ -739,7 +739,21 @@ orcid_link <- function(x) {
          esc(sub("^https?://orcid\\.org/", "", x)), "</a>")
 }
 
+# The verbatim command goes first. It is the only row that answers "what was
+# run" completely, and every structured row below is derived from it, so a
+# reader reproducing the run should not have to scroll past thirty rows of
+# fields to reach it. It wraps and renders small (code.rf-cmd above), so it
+# does not crowd out what follows.
+invocation <- if (!is.na(mf("pipeline", "command_line"))) {
+  c(group("Invocation"),
+    row("Command", paste0("<code class='rf-cmd'>",
+                          no_smart(mf("pipeline", "command_line")), "</code>")))
+} else {
+  character(0)
+}
+
 rows <- c(
+  invocation,
   group("Execution"),
   row("Run name",  or_unrecorded(mf("pipeline", "run_name"))),
   row("Started",   or_unrecorded(mf("pipeline", "started_at"))),
@@ -809,23 +823,31 @@ if (length(proj) > 0) {
     proj_rows <- c(proj_rows, row("RAiD", id_link(mf("project", "raid"))))
   }
 
+  # A name reads, an identifier resolves, so show the name and hang the
+  # identifier off it. With only one of the two, show whichever exists.
+  named_pid <- function(name, pid) {
+    nm <- if (length(name) == 0 || is.null(name[[1]])) "" else as.character(name[[1]])[1]
+    id <- if (length(pid) == 0 || is.null(pid[[1]]))   "" else as.character(pid[[1]])[1]
+    paste0(if (nzchar(nm)) esc(nm) else "",
+           if (nzchar(nm) && nzchar(id)) " " else "",
+           if (nzchar(id)) id_link(id) else "")
+  }
+
   # Who owns the data, which is a rights relation rather than a CRediT role.
-  # Either a person (ORCID), an organisation (ROR), or a bare name.
+  # A person (ORCID), an organisation (ROR), or a name with neither.
   rh <- proj$rights_holder
   if (length(rh) > 0) {
-    held <- if (!is.null(rh$orcid))     id_link(as.character(rh$orcid)[1])
-            else if (!is.null(rh$ror))  id_link(as.character(rh$ror)[1])
-            else if (!is.null(rh$name)) esc(as.character(rh$name)[1])
-            else ""
+    held <- named_pid(rh["name"], if (!is.null(rh$orcid)) rh["orcid"] else rh["ror"])
     if (nzchar(held)) proj_rows <- c(proj_rows, row("Data owner", held))
   }
 
-  fund  <- mf("project", "funder")
+  fu    <- proj$funder
   grant <- mf("project", "grant")
-  if (!is.na(fund) || !is.na(grant)) {
+  funded <- if (length(fu) > 0) named_pid(fu["name"], fu["ror"]) else ""
+  if (nzchar(funded) || !is.na(grant)) {
     proj_rows <- c(proj_rows, row("Funding", paste0(
-      if (!is.na(fund))  id_link(fund) else "",
-      if (!is.na(fund) && !is.na(grant)) " " else "",
+      funded,
+      if (nzchar(funded) && !is.na(grant)) " " else "",
       if (!is.na(grant)) paste0("<code>", esc(grant), "</code>") else "")))
   }
 
@@ -927,12 +949,6 @@ if (length(contribs) > 0) {
 
 if (length(attr_rows) > 0) {
   rows <- c(rows, group("Attribution"), attr_rows)
-}
-
-if (!is.na(mf("pipeline", "command_line"))) {
-  rows <- c(rows, group("Invocation"),
-            row("Command", paste0("<code class='rf-cmd'>",
-                                  no_smart(mf("pipeline", "command_line")), "</code>")))
 }
 
 cat("<table class='rf-runtable'>", paste(rows, collapse = ""), "</table>\n", sep = "")

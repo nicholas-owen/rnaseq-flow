@@ -537,8 +537,11 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
   belongs to, when one was declared with `params.project`, and absent entirely
   when it was not. Holds the project `name`, a `raid` (a
   [RAiD](https://raid.org) research activity identifier, stored as its
-  `https://raid.org/` URL), a `rights_holder` naming who owns the data as an
-  ORCID, a ROR or a plain name, a `funder` as a ROR, and the `grant` reference.
+  `https://raid.org/` URL), a `rights_holder` naming who owns the data, a
+  `funder`, and the `grant` reference. `rights_holder` and `funder` are each an
+  object holding a display `name` beside the identifier, `orcid` or `ror` for
+  the first and `ror` for the second, so the report can print the name and link
+  the identifier behind it rather than showing bare characters.
   Every identifier is validated at launch, so a value that reached the manifest
   is at least well formed. Ownership is recorded here rather than as a CRediT
   role because CRediT describes contributions to a work, not control over it.
