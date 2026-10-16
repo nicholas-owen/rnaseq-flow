@@ -36,6 +36,39 @@ git clone <your-repo-url> rnaseq-flow
 cd rnaseq-flow
 ```
 
+### Say who you are, once, before the first run
+
+Every run writes a record of how it was configured, and that record is where
+your contribution to the analysis is captured. Left unset, it falls back to
+whatever account launched the job, credits nobody, and says so. Five minutes now
+saves reconstructing it from memory later.
+
+Nothing in the cloned repository needs editing. Create or open
+`$HOME/.nextflow/config`, which Nextflow reads on every run from any directory,
+and add yourself:
+
+```groovy
+params.run_contributors = [[
+    name        : 'Jane Doe',
+    orcid       : '0000-0002-1825-0097',
+    roles       : ['formal-analysis', 'data-curation'],
+    affiliation : 'https://ror.org/02jx3x895',
+    facility    : 'UCL Genomics',
+    facility_id : 'RRID:SCR_000000'
+]]
+```
+
+Only `name` is required. `roles` are CRediT contributor roles and are checked
+against the standard's fourteen values at launch, so a typo stops the run rather
+than producing a bad record. `affiliation` takes a [ROR](https://ror.org)
+identifier for your institution and `facility_id` an
+[RRID](https://scicrunch.org/resources) for a core facility, where one exists.
+
+Working under a shared service account, or want the attribution to belong to the
+project rather than to your login? Put the same block in a `nextflow.config` in
+the directory you launch from instead. [Section 4.8](#48-credit-for-the-people-who-did-the-analysis)
+covers both, several contributors at once, and what each field does.
+
 ### Validate the install without real data
 
 Every process ships a `stub` block, so you can dry-run the whole DAG in seconds
@@ -634,6 +667,35 @@ Give a name and ORCID with no `roles` and you are credited with
 `formal-analysis`, since running the pipeline is what that role describes. The
 manifest marks it `roles_declared: false` so a reader can tell an inferred role
 from a claimed one.
+
+#### What gets credited, and what does not
+
+Three different claims end up in the same record, and they are not
+interchangeable:
+
+| Claim | Where it comes from | Changes between runs? |
+|---|---|---|
+| Who wrote the pipeline | `manifest.contributors` in `nextflow.config` | No |
+| What licence the results carry | `manifest.license` | No |
+| Who did this analysis | `run_contributors`, or `--run_by` | Yes |
+
+Editing the `manifest` scope is only appropriate if you have forked the pipeline
+and are changing it. Running it does not make you its author, and claiming
+authorship of the software in a record that also claims your analysis roles
+muddies both. Your contribution as an analyst belongs in `run_contributors`,
+which is exactly what it is for.
+
+Credit is recorded, never inferred from activity. The pipeline will not decide
+you deserve a role because a process ran under your login. The only inference it
+makes is the narrow one above: give a name and an ORCID and it concludes you did
+`formal-analysis`, flagged as inferred. Everything else has to be stated.
+
+That matters because CRediT roles are claims about people. A record naming the
+wrong analyst, or crediting someone who merely had a shell open, is worse than
+no record: it is a false attribution that outlives the run and cannot afterwards
+be told apart from a true one. Hence the fields a reader should check before
+trusting an attribution, `source` and `roles_declared`, both described in
+[OUTPUTS.md §17](OUTPUTS.md#17-execution-metadata-pipeline_info).
 
 #### When nobody says who they are
 
