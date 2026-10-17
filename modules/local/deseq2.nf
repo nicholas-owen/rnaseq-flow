@@ -12,7 +12,7 @@ process DESEQ2 {
     // heatmap_top_var.png while the report still described one. It is left
     // unpinned so the solver can pick the build matching the R version that
     // DESeq2 1.38.0 pulls in.
-    conda 'bioconda::bioconductor-deseq2=1.38.0 bioconda::bioconductor-apeglm=1.20.0 conda-forge::r-pheatmap=1.0.12'
+    conda 'bioconda::bioconductor-deseq2=1.50.2 bioconda::bioconductor-apeglm=1.32.0 conda-forge::r-pheatmap=1.0.13'
 
     input:
     path samplesheet

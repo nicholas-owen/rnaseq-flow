@@ -7,7 +7,7 @@ process GSEA {
     // from quay.io, so GSEA could never actually run. Declaring the four
     // packages assets/gsea.R loads is both verifiable and self-documenting:
     // fgsea is Bioconductor (bioconda), the rest are CRAN (conda-forge).
-    conda 'bioconda::bioconductor-fgsea=1.28.0 conda-forge::r-ggplot2=3.5.2 conda-forge::r-dplyr=1.1.4 conda-forge::r-tibble=3.3.0'
+    conda 'bioconda::bioconductor-fgsea=1.36.2 conda-forge::r-ggplot2=3.5.2 conda-forge::r-dplyr=1.1.4 conda-forge::r-tibble=3.3.0'
 
     input:
     path gmt
