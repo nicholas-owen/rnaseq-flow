@@ -43,6 +43,236 @@ def resolveDesign(samplesheet) {
 }
 
 /*
+ * An ORCID in its canonical URL form, from either the bare identifier or a URL.
+ *
+ * The schema accepts both because people copy whichever their profile shows.
+ * Recording one shape means a reader does not have to normalise before
+ * comparing, and the URL form is what CITATION.cff, .zenodo.json and the
+ * Workflow Run RO-Crate agent field all use.
+ */
+def normaliseOrcid(orcid) {
+    if (!orcid) return null
+    def id = orcid.toString().trim()
+    return id.startsWith('http') ? id : "https://orcid.org/${id}"
+}
+
+/*
+ * A ROR organisation identifier in URL form, from either the bare id or a URL.
+ * A ROR id is 0 followed by eight lowercase alphanumerics, with the last two a
+ * checksum, so anything else is not one and is returned unchanged for the
+ * caller to reject.
+ */
+def normaliseRor(ror) {
+    if (!ror) return null
+    def id = ror.toString().trim().replaceFirst(/^(https?:\/\/)?ror\.org\//, '')
+    return id ==~ /0[a-z0-9]{8}/ ? "https://ror.org/${id}" : null
+}
+
+/*
+ * A RAiD in URL form. RAiD names (ISO 23527:2022) are DataCite DOIs with a
+ * raid.org URL form, so 10.12345/abc123 and https://raid.org/10.12345/abc123
+ * name the same project, and either also resolves through doi.org or
+ * handle.net. The URL form is stored because it is the one a reader can follow.
+ *
+ * The suffix is specified as alphanumeric ASCII; a dot, hyphen and underscore
+ * are tolerated here so that a validly minted identifier is never rejected,
+ * while a value that is not an identifier at all still is.
+ */
+def normaliseRaid(raid) {
+    if (!raid) return null
+    def id = raid.toString().trim()
+                 .replaceFirst(/^(https?:\/\/)?(raid\.org|doi\.org|hdl\.handle\.net)\//, '')
+    return id ==~ /10\.\d{4,9}\/[A-Za-z0-9._-]+/ ? "https://raid.org/${id}" : null
+}
+
+/*
+ * A map entry as a trimmed string, or null when absent or blank.
+ *
+ * A plain function rather than a closure assigned to a variable: Nextflow's
+ * strict parser rejects calling such a closure as `name(args)`.
+ */
+def trimmedField(m, k) {
+    def v = m[k]?.toString()?.trim()
+    return v ?: null
+}
+
+/*
+ * The project this run belongs to, from params.project.
+ *
+ * Project-level metadata is deliberately separate from the per-sample and
+ * per-run kinds. It changes rarely, it describes the research activity rather
+ * than this execution of the pipeline, and it is the level at which a RAiD and
+ * a funder make sense.
+ *
+ * Every identifier is validated and normalised. An identifier that does not
+ * resolve is worse than an absent one: it reads as provenance while pointing
+ * nowhere, and a reader cannot tell it from a good one without trying it.
+ */
+def resolveProject() {
+    if (!params.containsKey('project') || !params.project) return null
+    def p = params.project
+    def errors = []
+
+    def raid = trimmedField(p, 'raid')
+    def raid_url = normaliseRaid(raid)
+    if (raid && !raid_url) {
+        errors << "project.raid: '${raid}' is not a RAiD. Expected a DOI-form identifier " +
+                  "such as 10.12345/abc123, with or without the https://raid.org/ prefix"
+    }
+
+    // An identifier resolves, a name reads. Recording both means the report can
+    // say "Medical Research Council" and still link the ROR behind it, rather
+    // than showing a reader nine characters of hex and expecting them to click.
+    def funder = trimmedField(p, 'funder')
+    def funder_url = normaliseRor(funder)
+    if (funder && !funder_url) {
+        errors << "project.funder: '${funder}' is not a ROR identifier. Expected something " +
+                  "like 03x94j517 or https://ror.org/03x94j517, from ror.org"
+    }
+    def funder_name = trimmedField(p, 'funder_name')
+    def funder_rec = (funder_url || funder_name)
+        ? [ name: funder_name, ror: funder_url ]
+        : null
+
+    // The data's owner, which is a rights relation and so deliberately not a
+    // CRediT role: CRediT describes contributions to a work, not control over
+    // it. A person (ORCID) or an organisation (ROR) can hold those rights, so
+    // both are accepted, with rights_holder_name alongside for display.
+    //
+    // Where rights_holder is neither an ORCID nor a ROR it is taken as a name,
+    // so naming an owner who has no identifier still works with one field.
+    def holder = trimmedField(p, 'rights_holder')
+    def holder_name = trimmedField(p, 'rights_holder_name')
+    def holder_rec = null
+    if (holder || holder_name) {
+        def as_orcid = holder && holder ==~ /(https:\/\/orcid\.org\/)?\d{4}-\d{4}-\d{4}-\d{3}[\dX]/
+            ? normaliseOrcid(holder) : null
+        def as_ror = (holder && !as_orcid) ? normaliseRor(holder) : null
+        holder_rec = [ name : holder_name ?: ((as_orcid || as_ror) ? null : holder),
+                       orcid: as_orcid,
+                       ror  : as_ror ]
+    }
+
+    if (errors) {
+        error "Project metadata problems:\n  " + errors.join("\n  ")
+    }
+
+    return [ name         : trimmedField(p, 'name'),
+             raid         : raid_url,
+             rights_holder: holder_rec,
+             funder       : funder_rec,
+             grant        : trimmedField(p, 'grant') ]
+}
+
+/*
+ * The fourteen CRediT contributor roles (ANSI/NISO Z39.104-2022), as the tokens
+ * that form their URIs.
+ *
+ * A role is declared as the short token, because that is what anyone will type,
+ * and stored in the manifest as the full URI so a reader can resolve it. The
+ * two writing roles' tokens are not derivable from their display names
+ * ("Writing - original draft", "Writing - review & editing"), so both were
+ * checked against credit.niso.org rather than guessed.
+ */
+def creditRoles() {
+    [ 'conceptualization', 'data-curation', 'formal-analysis',
+      'funding-acquisition', 'investigation', 'methodology',
+      'project-administration', 'resources', 'software', 'supervision',
+      'validation', 'visualization', 'writing-original-draft',
+      'writing-review-editing' ]
+}
+
+/*
+ * Who worked on this run, with their CRediT roles.
+ *
+ * Three ways in, highest priority first: `run_contributors`, a list of maps for
+ * the case of several people with different roles; `--run_by` and
+ * `--run_by_orcid`, shorthand for the one-person case because a list is awkward
+ * to pass on a command line; and failing both, the launching account's user
+ * name.
+ *
+ * None of those params is declared in the project's nextflow.config, and that
+ * is deliberate. Nextflow merges config files with $HOME/.nextflow/config at
+ * the LOWEST priority, below the project's own nextflow.config, so a default
+ * declared there would silently override whatever someone had set once in their
+ * home config, which is the natural place to record who you are. They are
+ * declared in nextflow_schema.json instead, which is what the typo check reads,
+ * so `--run_by` is still a known parameter without a project-level default
+ * outranking the user's.
+ *
+ * An unknown role token is an error, not a warning. A misspelled token produces
+ * metadata that claims CRediT conformance for a role that does not exist, and
+ * nothing downstream would catch it. Every problem is reported at once, as the
+ * samplesheet validator does.
+ */
+def resolveContributors() {
+    def valid  = creditRoles()
+    def errors = []
+
+    def entries = null
+    if (params.containsKey('run_contributors') && params.run_contributors) {
+        entries = params.run_contributors instanceof List
+            ? params.run_contributors
+            : [params.run_contributors]
+    }
+    if (!entries) {
+        def named = params.containsKey('run_by') ? params.run_by : null
+        entries = named
+            ? [[ 'name' : named,
+                 'orcid': params.containsKey('run_by_orcid') ? params.run_by_orcid : null ]]
+            : []
+    }
+
+    // Whether anybody identified themselves at all. The fallback records the
+    // login that happened to be in use, which is not a claim anyone made.
+    def declared = !entries.isEmpty()
+    if (!declared) entries = [[ 'name': workflow.userName ]]
+
+    def contributors = []
+    entries.eachWithIndex { e, i ->
+        def name = e['name']?.toString()?.trim()
+        if (!name) errors << "contributor ${i + 1}: 'name' is required"
+
+        def roles = e['roles'] ?: []
+        if (!(roles instanceof List)) roles = [roles]
+        roles = roles.collect { it.toString().trim().toLowerCase() }.findAll { it }
+        roles.each { r ->
+            if (!valid.contains(r)) {
+                errors << "contributor ${i + 1} (${name ?: 'unnamed'}): '${r}' is not a CRediT role"
+            }
+        }
+
+        // Running the pipeline is formal analysis under CRediT, which covers
+        // applying computational techniques to analyse data. So default to it
+        // for someone who identified themselves, never for the fallback, and
+        // record that it was inferred rather than claimed.
+        def roles_declared = !roles.isEmpty()
+        if (!roles_declared && declared) roles = ['formal-analysis']
+
+        contributors << [
+            name          : name,
+            orcid         : normaliseOrcid(e['orcid']),
+            roles         : roles.collect { "https://credit.niso.org/contributor-roles/${it}/" },
+            role_tokens   : roles,
+            roles_declared: roles_declared,
+            // A ROR is normalised to its URL so it resolves; anything else is
+            // kept as typed, because an institution without a ROR is still
+            // worth naming.
+            affiliation   : normaliseRor(e['affiliation']) ?: e['affiliation']?.toString(),
+            facility      : e['facility']?.toString(),
+            facility_id   : e['facility_id']?.toString(),
+            source        : declared ? 'declared' : 'system_user',
+        ]
+    }
+
+    if (errors) {
+        error "Run contributor problems:\n  " + errors.join("\n  ") +
+              "\n\nValid CRediT roles:\n  " + valid.join(', ')
+    }
+    return contributors
+}
+
+/*
  * Resolve where the annotation came from, for the analysis report.
  *
  * `--download_refs` writes reference_metadata.json beside the files it fetches
@@ -324,7 +554,9 @@ def buildRunManifest(design, notices) {
     if (params.ctat_lib)       optional.add('fusion calling (STAR-Fusion)')
 
     return [
-        schema_version: 1,
+        // 2 adds the `attribution` block. Additive, so a reader written against
+        // 1 still works.
+        schema_version: 2,
         pipeline: [
             name            : workflow.manifest.name,
             version         : workflow.manifest.version,
@@ -342,7 +574,40 @@ def buildRunManifest(design, notices) {
             // report renders; this is the fallback that answers questions the
             // schema did not anticipate.
             command_line    : workflow.commandLine,
+            // Nextflow exposes no per-parameter provenance, so there is no way
+            // to record which file a contributor's details came from. The list
+            // of config files that were in play is the next best thing: a
+            // reader chasing an attribution at least knows where to look.
+            config_files    : workflow.configFiles?.collect { it.toString() },
         ],
+        // Who to credit, and under what terms. The results travel: a reader who
+        // has only a results directory can otherwise tell what was run but not
+        // whose it is or what they may do with it.
+        //
+        // Two different claims, kept apart. `authors` and `license` describe the
+        // pipeline and come from the manifest scope, so they are the same for
+        // every run. `contributors` describes the people who did this analysis,
+        // each with their CRediT roles, and each carrying `source` so a name
+        // somebody declared is distinguishable from the login that happened to
+        // be in use. See resolveContributors().
+        attribution: [
+            license     : workflow.manifest.license,
+            doi         : workflow.manifest.doi,
+            authors     : (workflow.manifest.contributors ?: []).collect { c ->
+                [ name        : c?.name?.toString(),
+                  affiliation : c?.affiliation?.toString(),
+                  orcid       : c?.orcid?.toString(),
+                  // Nextflow returns these as enum names (AUTHOR, MAINTAINER);
+                  // lower-cased to match how they are written in the manifest
+                  // scope and everywhere else they appear.
+                  contribution: c?.contribution?.collect { it.toString().toLowerCase() } ]
+            },
+            contributors: resolveContributors(),
+        ],
+        // The research activity this run belongs to, where one has been
+        // declared. Null when it has not, and the report skips the group
+        // rather than showing a row of blanks.
+        project: resolveProject(),
         analysis: [
             entry         : from_counts ? 'count matrix' : 'sequencing reads',
             // The samplesheet or read glob, and the matrix for a --counts run.

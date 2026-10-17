@@ -5,7 +5,7 @@ nextflow.enable.dsl = 2
 /*
  * Import the main workflow
  */
-include { RNASEQ } from './workflows/rnaseq'
+include { RNASEQ; resolveContributors; resolveProject } from './workflows/rnaseq'
 include { DOWNLOAD } from './workflows/download'
 include { BUILD_INDICES } from './workflows/build_indices'
 
@@ -330,6 +330,14 @@ workflow {
     main:
     // Help / typo-detection / required-input checks (may print help and exit).
     checkParameters()
+
+    // Attribution and project metadata, checked here so a misspelled CRediT
+    // role or a malformed RAiD fails before any process is scheduled rather
+    // than at the end of a run that has already cost an hour. The results are
+    // discarded: buildRunManifest() resolves them again when it writes the
+    // manifest, and both calls are pure.
+    resolveContributors()
+    resolveProject()
 
     // --validate_only concerns the samplesheet, which the helper workflows do
     // not take. Warn rather than fail: the flag is harmless here, but silently
@@ -674,9 +682,43 @@ ${procTable}
             " ${procRows.size()} process(es), ${totTasks} task(s), ${fmtTime(totReal)} total compute time\n" +
             (heaviest ? " heaviest: ${heaviest.join(', ')}\n" : '') +
             " summary: ${summaryFile.toUriString()}\n" +
+            // The RO-Crate cannot be finished from inside the pipeline: nf-prov
+            // writes ro-crate-metadata.json after this handler has already run,
+            // measured at about 1.6 s later, so there is no hook that sees the
+            // file. The command is printed here instead, every run, because a
+            // crate without checksums or credit looks complete and is not.
             ('-' * 66))
     }
     catch (Exception e) {
         log.warn "Could not write the run-completion summary: ${e.message}"
+    }
+
+    // --- finish the RO-Crate ------------------------------------------------
+    //
+    // In a JVM shutdown hook rather than here, because nf-prov writes
+    // ro-crate-metadata.json about 1.6 s after this handler returns: no
+    // Nextflow hook ever sees the file. A shutdown hook runs later than every
+    // hook and does see it, which was measured before relying on it.
+    //
+    // The work is in lib/CrateEnricher.groovy. It is Groovy rather than a
+    // script because the launching machine is only guaranteed to have Java;
+    // every tool the pipeline uses lives in a container.
+    if (params.ro_crate.toString() != 'false') {
+        def crateOutdir = params.outdir.toString()
+        def crateManifest = "${params.tracedir}/run_manifest.json".toString()
+        // Copied so the hook does not read Nextflow state during shutdown, and
+        // so the enricher can resolve "Input file specified by params.<name>"
+        // back to the file it was copied from.
+        def crateParams = new LinkedHashMap(params)
+        Runtime.runtime.addShutdownHook(new Thread({
+            try {
+                def summary = CrateEnricher.enrich(crateOutdir, crateManifest, crateParams)
+                // println, not log: the logger is being torn down by now.
+                if (summary) println " ${summary}"
+            }
+            catch (Exception e) {
+                println " RO-Crate could not be completed: ${e}"
+            }
+        }))
     }
 }

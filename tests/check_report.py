@@ -195,6 +195,30 @@ def main():
         print(f"        {where}  {codes}")
         print(f"          {line}")
 
+    # ---- 1b. non-ASCII in rendered text ------------------------------------
+    # The check above covers code R executes. It missed an em dash in a MultiQC
+    # section name, which reached the report heading as raw bytes, because
+    # nothing here looked at the document's own prose or at multiqc_config.yml.
+    # Both are rendered, so both have to stay ASCII for the same reason: use an
+    # HTML entity, or plain punctuation.
+    print("\nnon-ASCII in rendered text")
+    prose = re.sub(r"^```.*?^```", "", src, flags=re.S | re.M)
+    text_bad = []
+    for i, line in enumerate(prose.split("\n"), 1):
+        chars = sorted({c for c in line if ord(c) >= 128})
+        if chars:
+            text_bad.append(("analysis_report.qmd prose", chars, line.strip()[:88]))
+    mqc = os.path.join(ROOT, "assets", "multiqc_config.yml")
+    if os.path.exists(mqc):
+        for i, line in enumerate(open(mqc, encoding="utf-8").read().split("\n"), 1):
+            chars = sorted({c for c in line if ord(c) >= 128})
+            if chars:
+                text_bad.append((f"multiqc_config.yml:{i}", chars, line.strip()[:88]))
+    report("no non-ASCII in report prose or MultiQC config", not text_bad)
+    for where, chars, line in text_bad:
+        print(f"        {where}  " + " ".join(f"U+{ord(c):04X} ({c})" for c in chars))
+        print(f"          {line}")
+
     # ---- 2. chunk syntax ---------------------------------------------------
     print("\nR chunk syntax")
     rscript = shutil.which("Rscript")

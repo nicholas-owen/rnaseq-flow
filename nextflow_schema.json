@@ -268,6 +268,35 @@
           "default": false,
           "description": "Validate the samplesheet and inputs, then exit without running the pipeline.",
           "help_text": "Runs the same validation the pipeline performs at launch -- required columns, duplicate sample ids, empty values, FASTQ paths that resolve, at least two conditions and at least two replicates per condition -- reports every problem at once, and stops before any process is scheduled. Exits non-zero when validation fails, so it can gate a script. Has no effect with --download_refs or --build_indices, which take no samplesheet."
+        },
+        "ro_crate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write a Workflow Run RO-Crate beside the results.",
+          "help_text": "On by default. Produces ro-crate-metadata.json in --outdir, a Workflow Run RO-Crate carrying the execution graph as standard JSON-LD, written by the nf-prov plugin. lib/CrateEnricher.groovy completes it automatically before the pipeline exits, adding checksums, file sizes, modification times, every contributor with their CRediT roles, and the project: the plugin's own config has no slot for any of those. It runs in a JVM shutdown hook because the plugin writes the crate after the pipeline's last Nextflow hook. Set false where the plugin cannot be downloaded; note that the plugin is declared either way, so an offline environment needs it staged in $NXF_HOME/plugins."
+        },
+        "run_by": {
+          "type": "string",
+          "description": "Name of the person responsible for this run, recorded in the run manifest.",
+          "help_text": "Written to pipeline_info/run_manifest.json so a results directory states who produced it, which matters once the results travel away from the machine that made them. This is the analyst, not the pipeline author: authorship comes from the manifest scope in nextflow.config. Without it the launching account's user name is recorded and marked as such. Set it once in $HOME/.nextflow/config rather than typing it per run. For several people, or to give CRediT roles, use run_contributors instead."
+        },
+        "run_by_orcid": {
+          "type": "string",
+          "description": "ORCID of the person responsible for this run.",
+          "help_text": "Accepts either the bare identifier (0000-0002-1825-0097) or the full https://orcid.org/ URL, and is normalised to the URL form in the run manifest. Only useful alongside --run_by. Someone who identifies themselves this way is credited with the CRediT role formal-analysis, recorded as inferred rather than declared; use run_contributors to state roles explicitly.",
+          "pattern": "^(https://orcid\\.org/)?\\d{4}-\\d{4}-\\d{4}-\\d{3}[\\dX]$"
+        },
+        "run_contributors": {
+          "type": "array",
+          "hidden": true,
+          "description": "The people who did this analysis, with their CRediT roles. Set in a config file, not on the command line.",
+          "help_text": "A list of maps, each taking name, orcid, roles, affiliation, facility and facility_id. Roles are CRediT tokens (ANSI/NISO Z39.104-2022) and are validated at launch against the fourteen valid values, then stored in the run manifest as resolvable https://credit.niso.org/contributor-roles/ URIs. Intended for $HOME/.nextflow/config, so a core-facility analyst records themselves once:\n\nparams.run_contributors = [[\n    name        : 'Jane Doe',\n    orcid       : '0000-0002-1825-0097',\n    roles       : ['formal-analysis', 'data-curation'],\n    affiliation : 'https://ror.org/02jx3x895',\n    facility    : 'UCL Genomics',\n    facility_id : 'RRID:SCR_000000'\n]]\n\nTakes priority over --run_by and --run_by_orcid."
+        },
+        "project": {
+          "type": "object",
+          "hidden": true,
+          "description": "The research activity this run belongs to, with its persistent identifiers. Set in a config file, not on the command line.",
+          "help_text": "Project-level metadata, as against the per-run attribution in run_contributors. Belongs in a nextflow.config in the launch directory, beside the data, since it describes the project rather than the person:\n\nparams.project = [\n    name              : 'Yeast osmotic stress response',\n    raid              : '10.12345/abc123',\n    rights_holder     : '0000-0001-5598-6274',\n    rights_holder_name: 'Nicholas Owen',\n    funder            : 'https://ror.org/03x94j517',\n    funder_name       : 'Medical Research Council',\n    grant             : 'MR/X000000/1'\n]\n\nraid takes a RAiD (ISO 23527:2022), which is a DataCite DOI, with or without the https://raid.org/ prefix. funder takes a ROR identifier. rights_holder takes an ORCID for a person or a ROR for an organisation, and falls back to a plain name when it is neither; it is who owns the data, which is a rights relation and so deliberately not a CRediT role. The two _name fields are for display: an identifier resolves but reads as nine characters of hex, so the report shows the name and links the identifier behind it. Every identifier is validated at launch and stored in the run manifest in resolvable URL form."
         }
       }
     }

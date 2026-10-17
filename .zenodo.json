@@ -1,0 +1,34 @@
+{
+  "title": "rnaseq-flow: a modular bulk RNA-seq analysis pipeline in Nextflow DSL2",
+  "description": "<p>A modular bulk RNA-seq analysis pipeline built with Nextflow DSL2. It takes raw FASTQ files through quality control, alignment or quantification, differential expression, alternative splicing, fusion detection and functional enrichment, and aggregates the results into interactive HTML reports.</p><p>The aligner is selectable (STAR, HISAT2, Salmon, kallisto), analysis stages can be switched on or off, and references are either supplied directly or downloaded and indexed by built-in helper workflows that record the source, release and SHA-256 of every file. Each run writes a machine-readable manifest of how it was configured, and every published figure ships the standalone R script that drew it.</p><p>Documentation, usage and output descriptions are in the repository: <a href=\"https://github.com/nicholas-owen/rnaseq-flow\">github.com/nicholas-owen/rnaseq-flow</a></p>",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "gpl-3.0-only",
+  "creators": [
+    {
+      "name": "Owen, Nicholas",
+      "affiliation": "University College London",
+      "orcid": "0000-0001-5598-6274"
+    }
+  ],
+  "keywords": [
+    "RNA-seq",
+    "bulk RNA-seq",
+    "transcriptomics",
+    "differential gene expression",
+    "alternative splicing",
+    "functional enrichment",
+    "Nextflow",
+    "DSL2",
+    "workflow",
+    "reproducible research",
+    "FAIR"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/nicholas-owen/rnaseq-flow",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

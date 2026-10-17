@@ -45,10 +45,40 @@ results/
 ├── diffsplice_output/  Differential splicing (edgeR diffSpliceDGE)
 ├── multiqc/            Aggregated MultiQC report (rnaseq-flow_multiqc_report.html)
 ├── quarto_report/      Interactive Quarto analysis report
-└── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
+├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
+├── .crate/             The pipeline as it ran: main.nf, nextflow.config,
+│                       README.md, nextflow_schema.json. Hidden, and part
+│                       of the RO-Crate rather than a result
+└── ro-crate-metadata.json   The RO-Crate (§17), unless --ro_crate false
 ```
 
 Which directories appear depends on the aligner and options you chose.
+
+`.crate/` and `ro-crate-metadata.json` exist because a Workflow Run RO-Crate
+is meant to be self-contained.
+[Workflow RO-Crate 1.0](https://about.workflowhub.eu/Workflow-RO-Crate/1.0/)
+says "The _Crate_ MUST contain a data entity of type `["File",
+"SoftwareSourceCode", "ComputationalWorkflow"]` as the _Main Workflow_", which
+is `.crate/main.nf`, the crate's `mainEntity`. Deleting it leaves the crate
+pointing at a file that is not there.
+
+nf-prov drops those four at the top of `--outdir`; the pipeline moves them into
+`.crate/` afterwards, which the profile allows because a subfolder is still
+inside the crate. The folder is hidden because it is crate machinery rather
+than a result, and being hidden costs nothing: `cp -r`, `rsync` and `tar` all
+carry it, and `ro-crate-metadata.json` at the root is the entry point. `ro-crate-metadata.json` cannot join them: RO-Crate 1.1
+requires that exact name at the crate root, and the root has to stay `--outdir`
+or every result file would fall outside the crate.
+
+Your **input files are not copied in**. nf-prov copies every file-valued
+parameter into the crate by default, which would duplicate the GTF, the GMT and
+the samplesheet into every results directory, tens of megabytes for a human
+reference. No specification asks for that: RO-Crate 1.1 allows a data entity to
+be an external reference, and the Workflow Run Crate profile requires nothing
+about inputs being present. So the pipeline rewrites those entities to absolute
+`file:` references, exactly as nf-prov already does for directory-valued inputs
+such as the aligner index, and removes the copies. The console says how much
+was reclaimed.
 
 > **Count-matrix runs (`--counts`).** Starting from a pre-computed count matrix
 > skips read QC, alignment and quantification, so those directories
@@ -476,7 +506,9 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
 - **`quarto_report/analysis_report.html`**: an interactive analysis report
   that brings the run together in one document. It opens with a **Run
   overview** (what ran it, what went in, the library layout, the aligner, the
-  baseline, and the reference set with its source and release, read from
+  baseline, the reference set with its source and release, and an
+  **Attribution** group giving the licence, the DOI to cite, the pipeline's
+  authors with their ORCIDs and who ran the analysis, all read from
   `pipeline_info/run_manifest.json`), a **Sample design** table, and a
   **Requested but not performed** notice that renders only when an analysis was
   asked for and skipped. Then the results: a MultiQC general-statistics summary,
@@ -505,10 +537,61 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
 
 | File | Contents |
 |---|---|
-| `run_manifest.json` | How the run was configured, machine-readable: pipeline version and commit, the command line, the aligner, the baseline (`--reference_level`), the design, the samples per condition, the notices, and the reference set with its release where known. Written before any process runs, so it records what was asked for; the report derives what was produced from the result directories that exist |
+| `run_manifest.json` | How the run was configured, machine-readable: pipeline version and commit, the command line, the aligner, the baseline (`--reference_level`), the design, the samples per condition, the notices, and the reference set with its release where known. Written before any process runs, so it records what was asked for; the report derives what was produced from the result directories that exist. Also carries the attribution block described below |
 | `software_versions_mqc.yml` | Every tool and version collected at run time, the same table MultiQC shows. Use it for methods sections |
 | `run_summary.html` | See below |
 | `execution_report_*.html`, `execution_timeline_*.html`, `execution_trace_*.txt` | Nextflow's own per-run resource report, timeline and trace, timestamped per launch. Use them to see which processes ran, how long they took, peak memory, and if a run failed, exactly which task and why |
+
+- **Attribution** (`attribution` in `run_manifest.json`): the licence as an SPDX
+  identifier, the Zenodo concept DOI, the pipeline's authors with their ORCIDs,
+  and `contributors`, the people who did this analysis. The first three come
+  from the `manifest` scope in `nextflow.config` and are the same for every run.
+
+  Each entry in `contributors` carries a `name`, an `orcid` in URL form,
+  `role_tokens` and `roles` (the same CRediT roles as short tokens and as
+  resolvable `https://credit.niso.org/contributor-roles/` URIs), an
+  `affiliation`, a `facility` and `facility_id`, and two fields worth reading
+  before trusting the rest. `roles_declared` is `false` when the role was
+  inferred from the fact that someone ran the pipeline rather than stated by
+  them. `source` is `declared` when a person identified themselves and
+  `system_user` when nothing was set and the launching account's user name was
+  recorded instead, in which case no roles are assigned at all. See
+  [USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis) for
+  how to set them once rather than per run.
+
+  `pipeline.config_files` lists the configuration files the run loaded. Nextflow
+  exposes no per-parameter provenance, so this is as close as the manifest gets
+  to saying where an attribution came from.
+
+- **Project** (`project` in `run_manifest.json`): the research activity the run
+  belongs to, when one was declared with `params.project`, and absent entirely
+  when it was not. Holds the project `name`, a `raid` (a
+  [RAiD](https://raid.org) research activity identifier, stored as its
+  `https://raid.org/` URL), a `rights_holder` naming who owns the data, a
+  `funder`, and the `grant` reference. `rights_holder` and `funder` are each an
+  object holding a display `name` beside the identifier, `orcid` or `ror` for
+  the first and `ror` for the second, so the report can print the name and link
+  the identifier behind it rather than showing bare characters.
+  Every identifier is validated at launch, so a value that reached the manifest
+  is at least well formed. Ownership is recorded here rather than as a CRediT
+  role because CRediT describes contributions to a work, not control over it.
+
+  All of it exists so a results directory that has been emailed on still states
+  its terms, its analyst and what they did.
+
+- **`ro-crate-metadata.json`** (at the top of `--outdir`, written on every run unless
+  `--ro_crate false`): a
+  [Workflow Run RO-Crate](https://www.researchobject.org/workflow-run-crate/),
+  the same provenance as standard JSON-LD that other tools can read. The
+  nf-prov plugin writes the execution graph, one `CreateAction` per task with
+  its inputs, outputs and timings. `lib/CrateEnricher.groovy` then adds `sha256`,
+  `contentSize` and `dateModified` for every published file, `hasPart` for the
+  directory outputs, every contributor as a `Person` behind `Role` entities
+  carrying CRediT URIs, and the project with its RAiD, funder and rights
+  holder. No separate step: it is finished before the pipeline exits. See
+  [USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis).
+  Because `sha256` has no term in the RO-Crate 1.1 context, the crate's
+  `@context` is extended with one pointing at SPDX.
 
 The reference set's own provenance is not here: `--download_refs` writes
 `reference_metadata.json` beside the reference files

@@ -36,6 +36,39 @@ git clone <your-repo-url> rnaseq-flow
 cd rnaseq-flow
 ```
 
+### Say who you are, once, before the first run
+
+Every run writes a record of how it was configured, and that record is where
+your contribution to the analysis is captured. Left unset, it falls back to
+whatever account launched the job, credits nobody, and says so. Five minutes now
+saves reconstructing it from memory later.
+
+Nothing in the cloned repository needs editing. Create or open
+`$HOME/.nextflow/config`, which Nextflow reads on every run from any directory,
+and add yourself:
+
+```groovy
+params.run_contributors = [[
+    name        : 'Jane Doe',
+    orcid       : '0000-0002-1825-0097',
+    roles       : ['formal-analysis', 'data-curation'],
+    affiliation : 'https://ror.org/02jx3x895',
+    facility    : 'UCL Genomics',
+    facility_id : 'RRID:SCR_000000'
+]]
+```
+
+Only `name` is required. `roles` are CRediT contributor roles and are checked
+against the standard's fourteen values at launch, so a typo stops the run rather
+than producing a bad record. `affiliation` takes a [ROR](https://ror.org)
+identifier for your institution and `facility_id` an
+[RRID](https://scicrunch.org/resources) for a core facility, where one exists.
+
+Working under a shared service account, or want the attribution to belong to the
+project rather than to your login? Put the same block in a `nextflow.config` in
+the directory you launch from instead. [Section 4.8](#48-credit-for-the-people-who-did-the-analysis)
+covers both, several contributors at once, and what each field does.
+
 ### Validate the install without real data
 
 Every process ships a `stub` block, so you can dry-run the whole DAG in seconds
@@ -561,6 +594,204 @@ cannot run from a count matrix.
 
 ---
 
+### 4.8 Credit for the people who did the analysis
+
+Results outlive the machine that made them. Once a results directory has been
+copied to a share or emailed to a collaborator, nothing in it says who produced
+it, which is the question that comes up months later when a figure needs
+explaining. For anyone running analyses as a service, in a core facility or
+otherwise, it is also the record that credit is claimed from.
+
+The quick way, for one person:
+
+```bash
+nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --run_by "Jane Doe" --run_by_orcid 0000-0002-1825-0097
+```
+
+#### Set it once instead of typing it
+
+Nobody retypes a sixteen-digit identifier per run, so put it in
+`$HOME/.nextflow/config`, which Nextflow reads on every run. This is also how
+you state CRediT roles, a facility and an affiliation:
+
+```groovy
+params.run_contributors = [[
+    name        : 'Jane Doe',
+    orcid       : '0000-0002-1825-0097',
+    roles       : ['formal-analysis', 'data-curation'],
+    affiliation : 'https://ror.org/02jx3x895',
+    facility    : 'UCL Genomics',
+    facility_id : 'RRID:SCR_000000'
+]]
+```
+
+Put the same block in a `nextflow.config` in the launch directory instead when
+several people work under one shared account, so the identity belongs to the
+project rather than to the login.
+
+`run_contributors` is a list, so a run can credit more than one person with
+different roles:
+
+```groovy
+params.run_contributors = [
+    [ name: 'Jane Doe',      orcid: '0000-0002-1825-0097',
+      roles: ['formal-analysis', 'software'] ],
+    [ name: 'A Supervisor',  orcid: '0000-0001-5598-6274',
+      roles: ['supervision', 'funding-acquisition'] ]
+]
+```
+
+#### Roles are CRediT, and they are checked
+
+`roles` takes CRediT contributor roles (ANSI/NISO Z39.104-2022) as lowercase
+hyphenated tokens. The fourteen valid values:
+
+```
+conceptualization        funding-acquisition      resources
+data-curation            investigation            software
+formal-analysis          methodology              supervision
+project-administration   validation               visualization
+writing-original-draft   writing-review-editing
+```
+
+A token that is not one of those stops the run before any process is scheduled,
+listing every problem at once and printing the valid set. This is deliberate: a
+misspelled role would otherwise produce metadata claiming conformance to a
+standard for a role that does not exist, and nothing downstream would catch it.
+Each role is stored in the manifest as its resolvable URI, for example
+`https://credit.niso.org/contributor-roles/formal-analysis/`.
+
+Give a name and ORCID with no `roles` and you are credited with
+`formal-analysis`, since running the pipeline is what that role describes. The
+manifest marks it `roles_declared: false` so a reader can tell an inferred role
+from a claimed one.
+
+#### What gets credited, and what does not
+
+Three different claims end up in the same record, and they are not
+interchangeable:
+
+| Claim | Where it comes from | Changes between runs? |
+|---|---|---|
+| Who wrote the pipeline | `manifest.contributors` in `nextflow.config` | No |
+| What licence the results carry | `manifest.license` | No |
+| Who did this analysis | `run_contributors`, or `--run_by` | Yes |
+
+Editing the `manifest` scope is only appropriate if you have forked the pipeline
+and are changing it. Running it does not make you its author, and claiming
+authorship of the software in a record that also claims your analysis roles
+muddies both. Your contribution as an analyst belongs in `run_contributors`,
+which is exactly what it is for.
+
+Credit is recorded, never inferred from activity. The pipeline will not decide
+you deserve a role because a process ran under your login. The only inference it
+makes is the narrow one above: give a name and an ORCID and it concludes you did
+`formal-analysis`, flagged as inferred. Everything else has to be stated.
+
+That matters because CRediT roles are claims about people. A record naming the
+wrong analyst, or crediting someone who merely had a shell open, is worse than
+no record: it is a false attribution that outlives the run and cannot afterwards
+be told apart from a true one. Hence the fields a reader should check before
+trusting an attribution, `source` and `roles_declared`, both described in
+[OUTPUTS.md §17](OUTPUTS.md#17-execution-metadata-pipeline_info).
+
+#### The project the run belongs to (`params.project`)
+
+Contributors answer who did the work. A project record answers what the work was
+part of, and it is the level at which a funder, a data owner and a project
+identifier make sense. It changes rarely, so it belongs in a `nextflow.config`
+beside the data rather than in your home config:
+
+```groovy
+params.project = [
+    name              : 'Yeast osmotic stress response',
+    raid              : '10.12345/abc123',
+    rights_holder     : '0000-0001-5598-6274',
+    rights_holder_name: 'Nicholas Owen',
+    funder            : 'https://ror.org/03x94j517',
+    funder_name       : 'Medical Research Council',
+    grant             : 'MR/X000000/1'
+]
+```
+
+| Field | What it takes |
+|---|---|
+| `raid` | A [RAiD](https://raid.org) (ISO 23527:2022), the persistent identifier for a research activity. RAiDs are DataCite DOIs, so `10.12345/abc123` and `https://raid.org/10.12345/abc123` are the same thing and either resolves through doi.org as well. Stored as the raid.org URL |
+| `funder` | A [ROR](https://ror.org) identifier. RAiD is explicitly not for organisations or for grants, so the funder and the grant number are recorded separately |
+| `rights_holder` | Who owns the data. An ORCID for a person, a ROR for an organisation, or a plain name if neither applies |
+| `grant` | The grant reference as the funder writes it |
+| `funder_name`, `rights_holder_name` | Display names. An identifier resolves but reads as nine characters of hex, so the report shows the name and links the identifier behind it: "Medical Research Council 03x94j517" rather than the bare id. Both optional, and either can be given without its identifier |
+
+Every identifier is checked at launch and the run stops on a malformed one. An
+identifier that does not resolve is worse than an absent one: it reads as
+provenance while pointing nowhere, and a reader cannot tell it from a good one
+without trying it.
+
+Note that `rights_holder` is not a CRediT role, deliberately. CRediT describes
+contributions to a piece of work; owning the data is a rights relation over it.
+Someone who owns the data and also contributed gets both, their ownership here
+and their roles in `run_contributors`.
+
+RAiD registration is not yet uniform worldwide. The ARDC is the registration
+authority for Australia and New Zealand, SURF covers Europe, and elsewhere is
+arranged with the ARDC directly, so check whether your institution can mint one
+before planning around it. Everything else in the block works without it.
+
+#### A Workflow Run RO-Crate beside the results
+
+Everything above is recorded in `run_manifest.json`, which only this pipeline's
+readers understand. Every run also writes `ro-crate-metadata.json`, a
+[Workflow Run RO-Crate](https://www.researchobject.org/workflow-run-crate/):
+standard JSON-LD that WorkflowHub, repositories and other tools can read. It is
+on by default, because provenance that has to be remembered is not provenance.
+`--ro_crate false` turns it off.
+
+Nothing to run afterwards. The crate is finished before the pipeline exits, and
+the console says what went into it:
+
+```
+ RO-Crate: 867 entities, 145 files hashed, 6 result folders expanded (175 files), 1 contributor(s), project
+```
+
+Two pieces produce it. The [nf-prov](https://github.com/nextflow-io/nf-prov)
+plugin writes the execution graph: one `CreateAction` per task with its inputs,
+outputs and timings, and conformance to the three Workflow Run RO-Crate
+profiles. `lib/CrateEnricher.groovy` then adds what the plugin has no slot for,
+reading it from `run_manifest.json` so there is one source and nothing to drift:
+
+| | |
+|---|---|
+| Integrity | `sha256`, `contentSize` and `dateModified` on every published file. The plugin records none, which leaves a crate naming files that a reader cannot verify |
+| Result contents | `hasPart` on the directory outputs. The plugin leaves `deseq2_output` and the rest as bare folder names, so the result tables are undescribed |
+| Credit | Every contributor as a `Person` behind `Role` entities carrying CRediT URIs. The plugin's config holds exactly one agent and no roles |
+| Project | The `ResearchProject` with its RAiD, the funder, the grant and the rights holder |
+
+It runs in a JVM shutdown hook rather than in the pipeline, because nf-prov
+writes the crate about 1.6 seconds after the last Nextflow hook returns, so
+nothing inside the run can see the file.
+
+Launching as `nextflow run main.nf` leaves the crate without a repository URL,
+which it warns about; launching by canonical name,
+`nextflow run nicholas-owen/rnaseq-flow`, records it, and is worth doing for a
+crate meant to travel.
+
+#### When nobody says who they are
+
+None of this is required. With nothing set, the pipeline records the launching
+account's user name, assigns **no** roles, and sets `source` to `system_user`.
+A login that happened to be in use is not a claim anyone made, so it earns no
+credit, and the report says as much next to the name.
+
+Everything lands in `attribution.contributors` in
+[`pipeline_info/run_manifest.json`](OUTPUTS.md#17-execution-metadata-pipeline_info)
+and in the Attribution group of the analysis report, alongside the pipeline's
+own licence, DOI and authorship, which come from the `manifest` scope in
+`nextflow.config` and do not change between runs.
+
+---
+
 ## 5. Profiles & execution
 
 | Profile | Effect |
@@ -694,10 +925,22 @@ provisions several containers on the fly by contacting an external service at ru
 time.** Nothing about that can be tuned: it has to be switched off, and every
 image supplied locally.
 
+> **The nf-prov plugin is a second thing to stage.** The RO-Crate is written on
+> every run (§4.8), which means Nextflow resolves `nf-prov@1.7.0` on every run,
+> downloading it on first use. `--ro_crate false` does not avoid this: the
+> plugin is declared whether or not the crate is enabled. Until the offline
+> bundle carries it, copy `$NXF_HOME/plugins/nf-prov-1.7.0` (by default
+> `~/.nextflow/plugins/nf-prov-1.7.0`) from a machine that has run the pipeline
+> once, into the same path inside the enclave.
+
 A prepared bundle of every container the pipeline uses is published on Zenodo:
 
-> **rnaseq-flow v1.5.1 — offline Singularity container bundle**
-> <https://doi.org/10.5281/zenodo.21880329>
+> **rnaseq-flow offline Singularity container bundle**
+> <https://doi.org/10.5281/zenodo.21880328>
+>
+> A concept DOI: it resolves to the most recent bundle. The bundle built for
+> v1.5.1 covers v1.6.0 as well, so there is no separate download for the
+> current release.
 
 It holds 27 Singularity images (~7 GB), a `tre.config` profile, and a README.
 Download it outside the TRE, transfer it in by whatever route your environment

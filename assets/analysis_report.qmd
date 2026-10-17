@@ -128,7 +128,7 @@ mqc_report_name <- if (is.na(mqc_data_dir) ||
 # ---- Run manifest ----------------------------------------------------------
 # Written by the workflow before this report renders (buildRunManifest() in
 # workflows/rnaseq.nf) and staged beside this .qmd. It is the only route by
-# which the report learns how the run was *configured* — which aligner, which
+# which the report learns how the run was *configured*: which aligner, which
 # references, which gene sets. None of that can be recovered from the result
 # files, so without it a reader of this HTML alone cannot tell what was run.
 #
@@ -180,6 +180,17 @@ esc <- function(x) {
 # A field that was not recorded is shown as such, never omitted and never
 # inferred: a release guessed from a filename is a false record that outlives
 # the run and cannot afterwards be told apart from a true one.
+# Escaped, then with every hyphen written as its HTML entity.
+#
+# Pandoc's `smart` extension rewrites `--` as an en dash, and it reaches `asis`
+# chunk output: the recorded command line rendered as "-input" rather than
+# "--input", so copying it out of the report produced a command that does not
+# run. An entity renders as a hyphen and leaves no `--` in the markdown for
+# smart punctuation to find. Use it for anything that has to survive verbatim.
+no_smart <- function(x) {
+  gsub("-", "&#45;", esc(x), fixed = TRUE)
+}
+
 or_unrecorded <- function(x) {
   if (length(x) == 0 || all(is.na(x)) || !nzchar(x[1])) {
     "<em style='opacity:.6'>not recorded</em>"
@@ -221,10 +232,10 @@ read_de <- function(files, prefix) {
 # Figures are written as both SVG and PNG by the upstream scripts. Prefer the
 # SVG: it is vector, so it stays sharp at any zoom, and for these plots (few
 # points) it is no larger than the raster copy. Its text is rendered as glyph
-# outlines rather than <text> elements, so it is not selectable or searchable —
-# sharpness, not text fidelity, is what the SVG buys here.
-# Falls back to the PNG when only that exists — an older results directory, or
-# a figure whose device failed — and returns nothing when neither is present.
+# outlines rather than <text> elements, so it is not selectable or searchable.
+# Sharpness, not text fidelity, is what the SVG buys here.
+# Falls back to the PNG when only that exists: an older results directory, or
+# a figure whose device failed, and returns nothing when neither is present.
 fig_path <- function(dir, name) {
   for (ext in c(".svg", ".png")) {
     f <- file.path(dir, paste0(name, ext))
@@ -336,7 +347,7 @@ nice_table <- function(df, caption = NULL) {
 # Logo and pipeline link, lifted into Quarto's title block.
 #
 # The SVG is embedded as a base64 data URI rather than inlined as markup. Chunk
-# output marked `asis` is still parsed by Pandoc, which treats it as HTML — and
+# output marked `asis` is still parsed by Pandoc, which treats it as HTML, and
 # SVG is case-sensitive XML that does not survive that: `viewBox` comes back as
 # `viewbox` (silently ignored by the renderer), the self-closing <line> elements
 # are pushed out of an early-closed <svg> into <p> wrappers, and non-ASCII text
@@ -345,7 +356,7 @@ nice_table <- function(df, caption = NULL) {
 #
 # Quarto renders the title block before any chunk output, so the elements are
 # emitted here and moved into it on load. If the script does not run they simply
-# remain where they are, at the top of the document — degraded, not broken.
+# remain where they are, at the top of the document: degraded, not broken.
 logo_file <- "rnaseq-flow_logo.svg"
 if (file.exists(logo_file)) {
   # xfun ships with knitr and states the MIME type explicitly, so it is tried
@@ -619,8 +630,8 @@ if (have_manifest) {
 # Overview
 
 This report is produced automatically at the end of every **rnaseq-flow** run.
-It gathers the run's quality-control metrics and — when differential expression
-was run — the differential-expression and functional-enrichment results into a
+It gathers the run's quality-control metrics and, when differential expression
+was run, the differential-expression and functional-enrichment results into a
 single interactive document. The plots are [plotly](https://plotly.com/r/)
 widgets (hover for gene identities, zoom, pan) and the tables are searchable and
 sortable. Use the code-folding toggle to reveal how any panel was built.
@@ -653,7 +664,7 @@ cat("\n*This results directory carries no run manifest, so the aligner,",
 # ran it, what went in, what kind of library, and what was actually done.
 #
 # The first three come from the manifest, which records *configuration*. The
-# analysis level is built from have_* instead — those reflect which result
+# analysis level is built from have_* instead: those reflect which result
 # directories exist, so it describes what the run produced rather than what it
 # was asked to produce. A stage that was requested and then failed would
 # otherwise be reported here as though it had worked.
@@ -676,7 +687,7 @@ fact <- function(label, value) {
 
 # &mdash; as an entity, never the literal character: the rendering container runs
 # in the C locale, where R escapes a non-ASCII byte to <U+2014> on output. That
-# applies to anything R emits — cat(), a DT caption, a plotly label — not just
+# applies to anything R emits (cat(), a DT caption, a plotly label), not just
 # to raw HTML, so every string leaving R has to stay ASCII.
 input_desc <- if (!is.na(mf("analysis", "counts"))) {
   paste0("Count matrix &mdash; <code>", esc(basename(mf("analysis", "counts"))), "</code>")
@@ -707,7 +718,7 @@ cat("<div class='rf-facts'>",
 # The full record. The annotation is described differently depending on where it
 # came from: when the pipeline downloaded it, reference_metadata.json beside the
 # files records source, release and assembly authoritatively. When the user
-# supplied it the release is genuinely unknowable — an Ensembl GTF's header
+# supplied it the release is genuinely unknowable: an Ensembl GTF's header
 # carries the assembly and genebuild date but never the release, and the
 # trailing number in the filename is an annotation version, not the release. So
 # it is reported as not recorded rather than inferred.
@@ -719,8 +730,30 @@ row <- function(label, value) {
 group <- function(label) {
   paste0("<tr class='rf-group'><th colspan='2'>", label, "</th></tr>")
 }
+# An ORCID as a link showing the bare identifier. The manifest stores the URL
+# form, which is what CITATION.cff and the RO-Crate agent field use, but the
+# digits are what a reader recognises.
+orcid_link <- function(x) {
+  if (length(x) == 0 || is.na(x) || !nzchar(x)) return("")
+  paste0(" <a href='", esc(x), "'>",
+         esc(sub("^https?://orcid\\.org/", "", x)), "</a>")
+}
+
+# The verbatim command goes first. It is the only row that answers "what was
+# run" completely, and every structured row below is derived from it, so a
+# reader reproducing the run should not have to scroll past thirty rows of
+# fields to reach it. It wraps and renders small (code.rf-cmd above), so it
+# does not crowd out what follows.
+invocation <- if (!is.na(mf("pipeline", "command_line"))) {
+  c(group("Invocation"),
+    row("Command", paste0("<code class='rf-cmd'>",
+                          no_smart(mf("pipeline", "command_line")), "</code>")))
+} else {
+  character(0)
+}
 
 rows <- c(
+  invocation,
   group("Execution"),
   row("Run name",  or_unrecorded(mf("pipeline", "run_name"))),
   row("Started",   or_unrecorded(mf("pipeline", "started_at"))),
@@ -768,10 +801,154 @@ if (!downloaded && !is.na(mf("references", "annotation", "note"))) {
                                      esc(mf("references", "annotation", "note")), "</em>")))
 }
 
-if (!is.na(mf("pipeline", "command_line"))) {
-  rows <- c(rows, group("Invocation"),
-            row("Command", paste0("<code class='rf-cmd'>",
-                                  esc(mf("pipeline", "command_line")), "</code>")))
+# A persistent identifier as a link showing the bare id, since the identifier
+# is what a reader recognises and the URL is what resolves.
+id_link <- function(url, strip = "^https?://[^/]+/") {
+  if (length(url) == 0 || is.na(url) || !nzchar(url)) return("")
+  paste0("<a href='", esc(url), "'>", esc(sub(strip, "", url)), "</a>")
+}
+
+# The research activity this run belongs to. Absent from the manifest when no
+# project was declared, in which case the whole group is skipped: an empty
+# Project heading would imply the question had been asked and answered with
+# nothing.
+proj <- manifest$project
+if (length(proj) > 0) {
+  proj_rows <- character(0)
+
+  if (!is.na(mf("project", "name"))) {
+    proj_rows <- c(proj_rows, row("Project", esc(mf("project", "name"))))
+  }
+  if (!is.na(mf("project", "raid"))) {
+    proj_rows <- c(proj_rows, row("RAiD", id_link(mf("project", "raid"))))
+  }
+
+  # A name reads, an identifier resolves, so show the name and hang the
+  # identifier off it. With only one of the two, show whichever exists.
+  named_pid <- function(name, pid) {
+    nm <- if (length(name) == 0 || is.null(name[[1]])) "" else as.character(name[[1]])[1]
+    id <- if (length(pid) == 0 || is.null(pid[[1]]))   "" else as.character(pid[[1]])[1]
+    paste0(if (nzchar(nm)) esc(nm) else "",
+           if (nzchar(nm) && nzchar(id)) " " else "",
+           if (nzchar(id)) id_link(id) else "")
+  }
+
+  # Who owns the data, which is a rights relation rather than a CRediT role.
+  # A person (ORCID), an organisation (ROR), or a name with neither.
+  rh <- proj$rights_holder
+  if (length(rh) > 0) {
+    held <- named_pid(rh["name"], if (!is.null(rh$orcid)) rh["orcid"] else rh["ror"])
+    if (nzchar(held)) proj_rows <- c(proj_rows, row("Data owner", held))
+  }
+
+  fu    <- proj$funder
+  grant <- mf("project", "grant")
+  funded <- if (length(fu) > 0) named_pid(fu["name"], fu["ror"]) else ""
+  if (nzchar(funded) || !is.na(grant)) {
+    proj_rows <- c(proj_rows, row("Funding", paste0(
+      funded,
+      if (nzchar(funded) && !is.na(grant)) " " else "",
+      if (!is.na(grant)) paste0("<code>", esc(grant), "</code>") else "")))
+  }
+
+  if (length(proj_rows) > 0) rows <- c(rows, group("Project"), proj_rows)
+}
+
+# Licence, what to cite, and who to credit. The report is the artefact that
+# travels: once it has been emailed on, this table is the only thing that says
+# what may be done with the results and whose they are.
+#
+# Recorded from schema_version 2 onwards, so a results directory produced by an
+# earlier release has none of it and the whole group is skipped rather than
+# shown as four unrecorded rows.
+attr_rows <- character(0)
+
+if (!is.na(mf("attribution", "license"))) {
+  attr_rows <- c(attr_rows,
+    row("Licence", paste0("<code>", esc(mf("attribution", "license")), "</code>")))
+}
+
+if (!is.na(mf("attribution", "doi"))) {
+  doi <- mf("attribution", "doi")
+  attr_rows <- c(attr_rows,
+    row("Cite", paste0("<a href='https://doi.org/", esc(doi), "'>", esc(doi), "</a>")))
+}
+
+# A list of people rather than one scalar, so mf() cannot read it: it returns
+# the first element of whatever it lands on, which for a list of maps is the
+# first map.
+authors <- manifest$attribution$authors
+if (length(authors) > 0) {
+  described <- character(0)
+  for (a in authors) {
+    nm <- if (is.null(a$name))        "" else as.character(a$name)[1]
+    af <- if (is.null(a$affiliation)) "" else as.character(a$affiliation)[1]
+    oc <- if (is.null(a$orcid))       "" else as.character(a$orcid)[1]
+    if (!nzchar(nm)) next
+    described <- c(described,
+      paste0(esc(nm),
+             if (nzchar(af)) paste0(", ", esc(af)) else "",
+             orcid_link(oc)))
+  }
+  if (length(described) > 0) {
+    attr_rows <- c(attr_rows,
+      row(if (length(described) > 1) "Pipeline authors" else "Pipeline author",
+          paste(described, collapse = "<br>")))
+  }
+}
+
+# Who did this analysis, as against who wrote the pipeline, with each person's
+# CRediT roles. A list, so a facility analyst and whoever supervised can both be
+# credited with different roles.
+#
+# When nobody identified themselves the manifest records the launching account's
+# user name with no roles and `source` set to system_user, and that distinction
+# is carried through here: a login that happened to be in use is not a claim
+# anyone made, and gets no credit.
+contribs <- manifest$attribution$contributors
+if (length(contribs) > 0) {
+  described <- character(0)
+  for (p in contribs) {
+    nm <- if (is.null(p$name)) "" else as.character(p$name)[1]
+    if (!nzchar(nm)) next
+    oc <- if (is.null(p$orcid)) "" else as.character(p$orcid)[1]
+    toks <- if (is.null(p$role_tokens)) character(0) else unlist(p$role_tokens)
+    uris <- if (is.null(p$roles)) character(0) else unlist(p$roles)
+
+    # Each role links to its CRediT definition, so the authoritative name is one
+    # click away and this report carries no copy of the vocabulary to drift out
+    # of step with the pipeline. The link text is the token with its hyphens
+    # removed, which matches the official name for every role an analysis run
+    # plausibly uses.
+    roles <- if (length(toks) > 0) {
+      links <- vapply(seq_along(toks), function(k) {
+        u <- if (k <= length(uris)) uris[k] else
+               paste0("https://credit.niso.org/contributor-roles/", toks[k], "/")
+        paste0("<a href='", esc(u), "'>", esc(gsub("-", " ", toks[k])), "</a>")
+      }, character(1))
+      paste0(" <span style='opacity:.75'>(", paste(links, collapse = ", "),
+             if (!isTRUE(p$roles_declared)) ", inferred" else "", ")</span>")
+    } else ""
+
+    fac <- if (is.null(p$facility)) "" else as.character(p$facility)[1]
+    sys <- identical(as.character(p$source)[1], "system_user")
+    described <- c(described, paste0(
+      esc(nm), orcid_link(oc), roles,
+      if (nzchar(fac)) paste0("<br><span style='opacity:.6'>", esc(fac), "</span>") else "",
+      if (sys) {
+        paste0(" <em style='opacity:.75'>(the launching account's user name,",
+               " not a stated author)</em>")
+      } else ""))
+  }
+  if (length(described) > 0) {
+    attr_rows <- c(attr_rows,
+      row(if (length(described) > 1) "Analysis by" else "Run by",
+          paste(described, collapse = "<br>")))
+  }
+}
+
+if (length(attr_rows) > 0) {
+  rows <- c(rows, group("Attribution"), attr_rows)
 }
 
 cat("<table class='rf-runtable'>", paste(rows, collapse = ""), "</table>\n", sep = "")
@@ -787,8 +964,10 @@ cat("<table class='rf-runtable'>", paste(rows, collapse = ""), "</table>\n", sep
 cat("<div class='rf-notices'>",
     "<div class='rf-notices-head'>Requested but not performed</div>",
     "<ul>",
+    # no_smart, not esc: a notice names the flag that was asked for, and
+    # "--dtu" would otherwise render as an en dash followed by "dtu".
     paste(vapply(unlist(manifest$notices),
-                 function(n) paste0("<li>", esc(n), "</li>"), character(1)),
+                 function(n) paste0("<li>", no_smart(n), "</li>"), character(1)),
           collapse = ""),
     "</ul>",
     "<p>The run completed; these steps were skipped for the reasons given, so the",
@@ -962,8 +1141,8 @@ have_heatmaply <- requireNamespace("heatmaply", quietly = TRUE)
 ### Effect-size shrinkage
 
 `log2FoldChange` in the table below is the **apeglm-shrunken** estimate. Shrinkage
-pulls fold changes toward zero where the evidence is weak — low counts, high
-dispersion — so that a gene with three reads cannot outrank a well-measured one
+pulls fold changes toward zero where the evidence is weak (low counts, high
+dispersion), so that a gene with three reads cannot outrank a well-measured one
 on effect size alone. These two panels are the same contrast before and after:
 the left is the raw maximum-likelihood fit, the right is what the rest of this
 report uses. Most of the difference should be at the left-hand (low-count) end;
@@ -1010,7 +1189,7 @@ cat("\n*These results predate the unshrunken fold-change column",
 ```
 
 Colouring marks significance, which comes from the **unshrunken** Wald test in
-both panels — shrinkage changes the effect-size estimate, not the test. That is
+both panels: shrinkage changes the effect-size estimate, not the test. That is
 why a gene can move noticeably between panels without changing colour.
 
 ### Significant genes per contrast
@@ -1061,7 +1240,7 @@ ggplotly(p, tooltip = "text")
 ### Sample similarity and top variable genes
 
 Replicates of a condition should group together. Distance in a PCA is only
-meaningful if both axes are on the same scale, so the aspect ratio is locked —
+meaningful if both axes are on the same scale, so the aspect ratio is locked, so
 what looks like a big separation on PC1 really is one.
 
 ```{r deseq2-pca, eval=(have_deseq2 && have_pca), fig.width=7, fig.height=6}
@@ -1100,7 +1279,7 @@ cat("\n*No PCA coordinates were found (`reproduce/pca_data.csv.gz`), so the",
 The heatmap below shows the 20 most variable genes across all samples, on the
 variance-stabilised scale, with the condition of each sample as a colour bar
 along the top. Rows and columns are ordered by the same clustering the published
-figure uses — Euclidean distance, complete linkage, no scaling — so the layout
+figure uses (Euclidean distance, complete linkage, no scaling), so the layout
 matches it exactly. Hover for the gene, the sample and its value.
 
 ```{r deseq2-heatmap, eval=(have_deseq2 && have_heatmap && have_heatmaply), fig.width=8, fig.height=7}
@@ -1263,7 +1442,7 @@ point is a gene: average abundance across all samples on the x axis, fold change
 on the y. Low-abundance genes spread out to the left, which is the usual place
 for large but poorly-supported fold changes.
 
-Unlike DESeq2 above, these fold changes are **not shrunk** — edgeR's
+Unlike DESeq2 above, these fold changes are **not shrunk**: edgeR's
 quasi-likelihood test moderates the dispersion rather than the effect size, so
 what you see is the raw estimate.
 
@@ -1320,7 +1499,7 @@ ggplotly(p, tooltip = "text")
 
 ### Sample similarity
 
-edgeR's MDS places samples by the leading log fold change between them — the
+edgeR's MDS places samples by the leading log fold change between them: the
 same question as the PCA above, asked a different way. Both axes are the same
 kind of distance, so the aspect ratio is locked here too.
 

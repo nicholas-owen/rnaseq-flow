@@ -110,7 +110,8 @@ Combine them with a comma. The engine and the environment are separate choices:
 > Nextflow Wave, which contacts an external service, so the pipeline does not run
 > as-is in a TRE or air-gapped environment. A complete offline container bundle
 > is published on Zenodo
-> ([doi.org/10.5281/zenodo.21880329](https://doi.org/10.5281/zenodo.21880329))
+> ([doi.org/10.5281/zenodo.21880328](https://doi.org/10.5281/zenodo.21880328),
+> which resolves to the most recent bundle)
 > and used with `-profile tre`. See
 > [USAGE.md](USAGE.md#running-without-internet-access-tre--air-gapped).
 
@@ -401,7 +402,8 @@ silently ignored.
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CITATIONS.md](CITATIONS.md) | Every tool with its publication, plus a methods-paragraph template |
 | [CITATIONS.html](CITATIONS.html) | The citations page as a styled HTML report (open in a browser) |
-| [Zenodo bundle](https://doi.org/10.5281/zenodo.21880329) | Offline Singularity container bundle for TRE / air-gapped use |
+| [CITATION.cff](CITATION.cff) | How to cite the pipeline itself, machine-readable |
+| [Zenodo bundle](https://doi.org/10.5281/zenodo.21880328) | Offline Singularity container bundle for TRE / air-gapped use. This DOI resolves to the most recent bundle |
 
 ---
 
@@ -430,6 +432,47 @@ silently ignored.
 | `assets/multiqc_config.yml` | MultiQC report config: title, module order, sample-name cleaning, and a custom CSS/logo theme |
 | `assets/analysis_report.qmd` | Quarto template for the interactive analysis report (run overview, sample design, QC, DE, splicing, enrichment, files index) |
 | `tests/check_report.py` | Static guard for the report and modules: non-ASCII in emitted R, chunk syntax, `eval=` gates, and module heredocs. Run it after editing the `.qmd` |
+
+---
+
+## Citing rnaseq-flow
+
+[CITATION.cff](CITATION.cff) carries the citation in machine-readable form, so
+GitHub's "Cite this repository" panel and reference managers read it directly.
+The Zenodo deposit is
+[doi.org/10.5281/zenodo.21880328](https://doi.org/10.5281/zenodo.21880328), a
+concept DOI that resolves to all versions.
+
+For the tools the pipeline runs rather than the pipeline itself, see
+[CITATIONS.md](CITATIONS.md), which gives every tool with its publication and a
+methods-paragraph template.
+
+### Credit for the analysis
+
+Citing the pipeline is separate from crediting the people who ran it. Every run
+records its own contributors with their [CRediT](https://credit.niso.org/) roles
+(ANSI/NISO Z39.104-2022), so an analysis done as a service, in a core facility
+or otherwise, carries the evidence for a credit claim with it. Add yourself once
+in `$HOME/.nextflow/config`:
+
+```groovy
+params.run_contributors = [[
+    name        : 'Jane Doe',
+    orcid       : '0000-0002-1825-0097',
+    roles       : ['formal-analysis', 'data-curation'],
+    affiliation : 'https://ror.org/02jx3x895',
+    facility    : 'UCL Genomics',
+    facility_id : 'RRID:SCR_000000'
+]]
+```
+
+The roles are validated against the standard at launch, land in
+`pipeline_info/run_manifest.json` as resolvable
+`credit.niso.org/contributor-roles/` URIs, and appear in the analysis report's
+Run overview. Set nothing and the run records the launching account's name with
+no roles, marked as such.
+[USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis) has the
+detail, including several contributors and shared accounts.
 
 ---
 
