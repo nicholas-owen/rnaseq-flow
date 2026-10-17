@@ -20,7 +20,7 @@ process QUARTO_REPORT {
     // starts failing in the heatmap chunk, check it first. The report falls back
     // to a plain geom_tile heatmap when the package is absent, so an older image
     // still renders.
-    conda 'conda-forge::quarto=1.7.31 conda-forge::r-base conda-forge::r-rmarkdown conda-forge::r-knitr conda-forge::r-ggplot2 conda-forge::r-dplyr conda-forge::r-tidyr conda-forge::r-jsonlite conda-forge::r-plotly conda-forge::r-dt conda-forge::r-heatmaply'
+    conda 'conda-forge::quarto=1.7.31 conda-forge::r-base=4.5.3 conda-forge::r-rmarkdown=2.31 conda-forge::r-knitr=1.51 conda-forge::r-ggplot2=4.0.3 conda-forge::r-dplyr=1.2.1 conda-forge::r-tidyr=1.3.2 conda-forge::r-jsonlite=2.0.0 conda-forge::r-plotly=4.12.1 conda-forge::r-dt=0.34.0 conda-forge::r-heatmaply=1.6.0'
 
     input:
     // Staged under its incoming name rather than a fixed one. MultiQC prefixes

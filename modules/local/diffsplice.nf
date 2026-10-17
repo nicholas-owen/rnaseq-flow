@@ -2,7 +2,7 @@ process DIFFSPLICE {
     label 'process_high'
     // edgeR (+ tximport for the transcript level), provisioned on the fly by
     // Nextflow Wave from the Conda packages below - no fixed image required.
-    conda 'bioconda::bioconductor-edger bioconda::bioconductor-tximport'
+    conda 'bioconda::bioconductor-edger=4.8.2 bioconda::bioconductor-tximport=1.38.2'
 
     input:
     path samplesheet

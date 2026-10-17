@@ -2,7 +2,7 @@ process DTU {
     label 'process_high'
     // tximport + DEXSeq, provisioned on the fly by Nextflow Wave from the Conda
     // packages below (no fixed container image required).
-    conda 'bioconda::bioconductor-dexseq bioconda::bioconductor-tximport'
+    conda 'bioconda::bioconductor-dexseq=1.56.0 bioconda::bioconductor-tximport=1.38.2'
 
     input:
     path samplesheet
