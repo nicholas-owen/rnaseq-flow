@@ -949,17 +949,17 @@ A prepared bundle of every container the pipeline uses is published on Zenodo:
 > **rnaseq-flow offline Singularity container bundle**
 > <https://doi.org/10.5281/zenodo.21880328>
 >
-> A concept DOI: it resolves to the most recent bundle. The bundle built for
-> v1.5.1 covers v1.6.0 as well, so there is no separate download for the
-> current release.
+> A concept DOI: it resolves to the most recent bundle, which is the v1.6.0
+> one.
 
-It holds 27 Singularity images (~7 GB), a `tre.config` profile, and a README.
+It holds 27 Singularity images (~7 GB), the `nf-prov` plugin, a `tre.config`
+profile, and a README.
 Download it outside the TRE, transfer it in by whatever route your environment
 allows, then:
 
 ```bash
-tar -xf rnaseq-flow-1.5.1-singularity.tar
-export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.5.1
+tar -xf rnaseq-flow-1.6.0-singularity.tar
+export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.6.0
 ```
 
 ```bash
@@ -979,16 +979,17 @@ Verify the download before transferring it, since a truncated 7 GB file fails in
 confusing ways much later:
 
 ```bash
-sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
+sha256sum -c rnaseq-flow-1.6.0-singularity.tar.sha256
 ```
 
 **Points worth knowing:**
 
 - **The bundle is pinned to a release.** Container references are resolved per
-  release, so the bundle has to match the pipeline. The 1.5.1 bundle also covers
-  1.6.0: no container reference changed between the two, so there is nothing new
-  to download. A genuine mismatch surfaces as a process failing to find its
-  image, not as a clear version error.
+  release, so the bundle has to match the pipeline. A mismatch surfaces as a
+  process failing to find its image, not as a clear version error. The v1.6.0
+  bundle is the current one; v1.5.1 also worked for v1.6.0, because none of the
+  twenty container references and none of the seven Conda specs changed between
+  them, but it predates the plugin.
 - **The `tre` profile only works with the bundle.** The seven Conda-built images
   are named locally to it and resolve nowhere online, so the profile is not
   usable on its own.

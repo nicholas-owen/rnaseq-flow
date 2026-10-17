@@ -938,9 +938,9 @@ process.queue    = <span class="str">'normal'</span></code></pre></div>
      profile and a README. Download it outside the TRE, verify it, transfer it in,
      then:</p>
 
-  <div class="codeblock"><pre><code>sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
-tar -xf rnaseq-flow-1.5.1-singularity.tar
-export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.5.1
+  <div class="codeblock"><pre><code>sha256sum -c rnaseq-flow-1.6.0-singularity.tar.sha256
+tar -xf rnaseq-flow-1.6.0-singularity.tar
+export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.6.0
 
 nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
     -profile tre,sge \
@@ -954,10 +954,17 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
      Combine it with whichever executor profile you need.</p>
 
   <ul>
-    <li>The bundle is pinned to a release. The 1.5.1 bundle also covers 1.6.0,
-        since no container reference changed between them. A genuine mismatch
-        surfaces as a process failing to find its image, not as a clear version
-        error.</li>
+    <li>The bundle is pinned to a release, and v1.6.0 is the current one. A
+        mismatch surfaces as a process failing to find its image, not as a
+        clear version error.</li>
+    <li>It also carries the <code>nf-prov</code> plugin, which the RO-Crate
+        needs. Copy it into place and set offline mode, or the run fails with
+        no network to fetch it:
+        <div class="codeblock"><pre><code>cp -r $NXF_SINGULARITY_CACHEDIR/plugins/nf-prov-1.7.0 ~/.nextflow/plugins/
+export NXF_OFFLINE=true</code></pre></div>
+        It has to be <code>~/.nextflow/plugins</code>. Pointing
+        <code>NXF_PLUGINS_DIR</code> at the bundle makes Nextflow report "No
+        plugins" and carry on, so the crate goes silently missing.</li>
     <li>References and gene sets are separate. The bundle carries software, not
         data. Run <code>--download_refs</code> and <code>--download_gmt</code>
         outside the TRE and transfer the reference directory in, keeping
