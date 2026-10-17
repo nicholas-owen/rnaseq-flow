@@ -453,6 +453,14 @@ Produced when `--dtu` is set (Salmon/Kallisto). DEXSeq tests whether the
 *proportions* of a gene's transcript isoforms shift between conditions. A gene
 can be significant here even when its total expression (gene-level DE) is flat.
 
+> **Both files can legitimately come back empty.** DTU is only defined for genes
+> annotated with two or more transcripts, and some annotations have none at all:
+> the Ensembl R64-1-1 yeast GTF used by the `example/` dataset has 7127 genes and
+> 7127 transcripts, one each, so nothing is testable and the step writes empty
+> files and exits cleanly. The process log says "No multi-transcript genes passed
+> filtering". Check the transcripts-per-gene distribution of your annotation
+> before reading an empty result as a failure.
+
 | File | Contents |
 |---|---|
 | `dtu_transcript_results.csv` | Per-transcript test: `groupID` (gene), `gene_name`, `gene_biotype`, `featureID` (transcript), `exonBaseMean`, `dispersion`, `stat`, `pvalue`, `padj` |
