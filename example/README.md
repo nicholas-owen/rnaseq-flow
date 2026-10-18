@@ -302,12 +302,17 @@ Observed on this dataset (1 M read pairs, DESeq2, `padj < 0.05` and
 | --- | --- | --- | --- | --- |
 | STAR | 5579 | 852 | 152 | 700 |
 | HISAT2 | 5773 | 833 | 132 | 701 |
-| Salmon | 5509 | 778 | 130 | 648 |
-| Kallisto | 5961 | 865 | 146 | 719 |
+| Salmon | 5510 | 778 | 130 | 648 |
+| Kallisto | 5961 | 866 | 146 | 720 |
 
-667 genes were called significant by all four, every pairwise overlap was ≥83%
+668 genes were called significant by all four, every pairwise overlap was ≥83%
 of the smaller set, and all four reproduced the same strong down-regulation
 bias.
+
+These are the DESeq2 calls. edgeR on the same data is consistently a little more
+generous, having gained power in version 4.x: 924, 951, 893 and 964 significant
+for STAR, HISAT2, Salmon and Kallisto respectively, 722 called by all four, every
+pairwise overlap at or above 84%. The direction of the bias is the same.
 
 > **These numbers come from a subsample, so treat them as a shape to match, not
 > targets to hit.** They were produced from the fetch script's default output:
