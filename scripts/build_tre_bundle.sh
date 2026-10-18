@@ -2,10 +2,10 @@
 #
 # Build the offline Singularity bundle for a TRE or air-gapped cluster.
 #
-#   scripts/build_tre_bundle.sh <version> [work-dir]
+#   scripts/build_tre_bundle.sh <version> [work-dir] [destination]
 #   scripts/build_tre_bundle.sh 1.7.0
 #
-# Produces, next to the repository:
+# Produces, in the destination directory (default $HOME):
 #
 #   singularity-<version>/                 the bundle directory
 #     *.img                                every container the pipeline uses
@@ -32,11 +32,15 @@ set -euo pipefail
 
 VERSION="${1:-}"
 WORK="${2:-work}"
-[ -n "$VERSION" ] || { echo "usage: $0 <version> [work-dir]" >&2; exit 2; }
+[ -n "$VERSION" ] || { echo "usage: $0 <version> [work-dir] [destination]" >&2; exit 2; }
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="$REPO/../singularity-$VERSION"
-TAR="$REPO/../rnaseq-flow-$VERSION-singularity.tar"
+# Third argument, else $HOME. Not $REPO/.. : a repository cloned inside another
+# directory of the same name puts the bundle somewhere surprising, and it
+# should not land inside the checkout either.
+DEST="${3:-$HOME}"
+OUT="$DEST/singularity-$VERSION"
+TAR="$DEST/rnaseq-flow-$VERSION-singularity.tar"
 
 # The seven Conda-only processes, and the local image name each gets.
 CONDA_PROCS="DESEQ2:deseq2 DIFFSPLICE:diffsplice DOWNLOAD_GMT:download-gmt \
@@ -72,7 +76,7 @@ for pair in $CONDA_PROCS; do
     # DOWNLOAD:DOWNLOAD_GMT, not RNASEQ:DOWNLOAD_GMT, and a tagged task carries
     # a trailing " (sample)".
     run=$(grep -lsE "^### name: '[^']*:${proc}[ ']" "$WORK"/*/*/.command.run 2>/dev/null \
-          | xargs -r ls -t 2>/dev/null | head -1)
+          | xargs -r ls -t 2>/dev/null | head -1 || true)
     if [ -z "$run" ]; then
         missing="$missing $proc"
         continue
