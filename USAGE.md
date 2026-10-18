@@ -952,7 +952,7 @@ A prepared bundle of every container the pipeline uses is published on Zenodo:
 > A concept DOI: it resolves to the most recent bundle, which is the v1.7.0
 > one.
 
-It holds 27 Singularity images (~7 GB), the `nf-prov` plugin, a `tre.config`
+It holds 26 Singularity images (~7 GB), the `nf-prov` plugin, a `tre.config`
 profile, and a README.
 Download it outside the TRE, transfer it in by whatever route your environment
 allows, then:
