@@ -80,10 +80,33 @@ for pair in $CONDA_PROCS; do
         continue
     fi
     img="$OUT/rnaseq-flow-$name-$VERSION.img"
+
+    # A Wave URL is per-run and does not stay pullable, so the one recorded in
+    # .command.run is often already gone. The tag survives: its trailing hash
+    # identifies the image contents, and every run that needed the same
+    # environment pulled an image carrying it under a different URL. So if the
+    # exact URL is not in the local Docker store, take any local image with the
+    # same tag.
+    tag="${uri##*:}"
+    src=""
+    if docker image inspect "$uri" >/dev/null 2>&1; then
+        src="docker-daemon://$uri"
+    else
+        local_match=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+                      | grep -F ":$tag" | head -1 || true)
+        if [ -n "$local_match" ]; then
+            src="docker-daemon://$local_match"
+        else
+            src="docker://$uri"      # last resort: the URL may still resolve
+        fi
+    fi
+
     echo "  $proc -> $(basename "$img")"
-    singularity build --force "$img" "docker-daemon://$uri" >/dev/null 2>&1 \
-      || singularity build --force "$img" "docker://$uri" >/dev/null 2>&1 \
-      || { echo "    FAILED to convert $uri" >&2; exit 1; }
+    singularity build --force "$img" "$src" >/dev/null 2>&1 \
+      || { echo "    FAILED to convert $src" >&2
+           echo "    no local image carries tag $tag, and the Wave URL has expired." >&2
+           echo "    Re-run the pipeline so $proc executes, then retry." >&2
+           exit 1; }
 done
 
 if [ -n "$missing" ]; then
