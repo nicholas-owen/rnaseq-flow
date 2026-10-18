@@ -1653,18 +1653,24 @@ nextflow run main.nf \
     <tbody>
       <tr><td><span class="route r-star"></span>STAR</td><td>5579</td><td>852</td><td>152</td><td>700</td></tr>
       <tr><td><span class="route r-hisat2"></span>HISAT2</td><td>5773</td><td>833</td><td>132</td><td>701</td></tr>
-      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5509</td><td>778</td><td>130</td><td>648</td></tr>
-      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5961</td><td>865</td><td>146</td><td>719</td></tr>
+      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5510</td><td>778</td><td>130</td><td>648</td></tr>
+      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5961</td><td>866</td><td>146</td><td>720</td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>667 genes were called significant by all four, every pairwise overlap was at
+  <p>668 genes were called significant by all four, every pairwise overlap was at
      least 83 percent of the smaller set, and all four reproduced the same strong
      down-regulation bias. The overlaps do not split cleanly along the
      genome-aligner and pseudo-aligner line: STAR agreed more closely with Salmon
      than with HISAT2 here. That is not in itself a fault, since the routes differ
      in multimapper handling and length correction.</p>
+
+  <p>Those are the DESeq2 calls. edgeR on the same data is consistently a little
+     more generous, having gained power in version 4.x: 924, 951, 893 and 964
+     significant for STAR, HISAT2, Salmon and Kallisto, 722 called by all four,
+     every pairwise overlap at or above 84 percent. The direction of the bias is
+     the same.</p>
 
   <div class="box note">
     <span class="t">A shape to match, not targets to hit</span>
