@@ -78,9 +78,14 @@ geneinfo <- geneinfo[!duplicated(geneinfo$gene_id), ]
 # Without it the call fails with "'dtuScaledTPM' requires 'tx2gene' input".
 # scaledTPM, which diffsplice_edger.R uses, scales by library size and needs no
 # such map, which is why only this script is affected.
+# dropInfReps: neither this script nor diffsplice_edger.R reads the inferential
+# replicates, only txi$counts, and importing them drags in a format-specific
+# dependency that differs per quantifier. Salmon stores them as JSON and needs
+# jsonlite; kallisto stores them in abundance.h5 and needs rhdf5. Skipping the
+# import avoids both and is faster.
 txi <- tximport(files, type = aligner, txOut = TRUE,
                 countsFromAbundance = "dtuScaledTPM", tx2gene = tx2gene,
-                ignoreTxVersion = TRUE)
+                dropInfReps = TRUE, ignoreTxVersion = TRUE)
 cts <- txi$counts
 rownames(cts) <- strip(rownames(cts))
 cts <- cts[rowSums(cts) > 0, , drop = FALSE]
