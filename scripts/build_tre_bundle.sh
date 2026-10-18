@@ -95,25 +95,39 @@ for pair in $CONDA_PROCS; do
     # exact URL is not in the local Docker store, take any local image with the
     # same tag.
     tag="${uri##*:}"
-    src=""
     if docker image inspect "$uri" >/dev/null 2>&1; then
-        src="docker-daemon://$uri"
+        local_img="$uri"
     else
-        local_match=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
-                      | grep -F ":$tag" | head -1 || true)
-        if [ -n "$local_match" ]; then
-            src="docker-daemon://$local_match"
-        else
-            src="docker://$uri"      # last resort: the URL may still resolve
-        fi
+        local_img=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -F ":$tag" | head -1 || true)
     fi
 
     echo "  $proc -> $(basename "$img")"
-    singularity build --force "$img" "$src" >/dev/null 2>&1 \
-      || { echo "    FAILED to convert $src" >&2
-           echo "    no local image carries tag $tag, and the Wave URL has expired." >&2
-           echo "    Re-run the pipeline so $proc executes, then retry." >&2
-           exit 1; }
+    if [ -n "$local_img" ]; then
+        # Via docker save, not docker-daemon://. Singularity cannot read the
+        # layers of some Wave images straight from the daemon and dies on a
+        # blob it cannot find, while the same image runs fine under Docker. An
+        # archive sidesteps that and worked for every image here.
+        tmptar=$(mktemp "${TMPDIR:-/tmp}/rnaseq-flow-bundle.XXXXXX")
+        if ! docker save -o "$tmptar" "$local_img" 2>/dev/null; then
+            rm -f "$tmptar"; echo "    FAILED: could not export $local_img" >&2; exit 1
+        fi
+        if ! singularity build --force "$img" "docker-archive://$tmptar" >/dev/null 2>&1; then
+            rm -f "$tmptar"
+            echo "    FAILED to convert $local_img" >&2
+            echo "    To see why, run it with the output shown:" >&2
+            echo "      docker save -o /tmp/x.tar '"'"'$local_img'"'"'" >&2
+            echo "      singularity build /tmp/x.img docker-archive:///tmp/x.tar" >&2
+            exit 1
+        fi
+        rm -f "$tmptar"
+    else
+        # Nothing local carries this content, and a Wave URL is per-run, so
+        # this rarely succeeds.
+        singularity build --force "$img" "docker://$uri" >/dev/null 2>&1           || { echo "    FAILED: no local image carries tag $tag, and the" >&2
+               echo "    Wave URL no longer resolves. Re-run the pipeline so" >&2
+               echo "    $proc executes, then retry." >&2
+               exit 1; }
+    fi
 done
 
 if [ -n "$missing" ]; then
