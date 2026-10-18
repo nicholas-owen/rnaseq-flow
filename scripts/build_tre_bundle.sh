@@ -68,7 +68,10 @@ for pair in $CONDA_PROCS; do
     proc="${pair%%:*}"; name="${pair##*:}"
     # Newest task directory for this process wins, so a rerun after a spec
     # change supersedes the image built before it.
-    run=$(grep -ls "RNASEQ:$proc\b" "$WORK"/*/*/.command.run 2>/dev/null \
+    # Match the process under any workflow prefix: DOWNLOAD_GMT runs as
+    # DOWNLOAD:DOWNLOAD_GMT, not RNASEQ:DOWNLOAD_GMT, and a tagged task carries
+    # a trailing " (sample)".
+    run=$(grep -lsE "^### name: '[^']*:${proc}[ ']" "$WORK"/*/*/.command.run 2>/dev/null \
           | xargs -r ls -t 2>/dev/null | head -1)
     if [ -z "$run" ]; then
         missing="$missing $proc"
