@@ -1,7 +1,7 @@
 process SALMON_QUANT {
     tag "$meta.id"
     label 'process_medium'
-    container 'quay.io/biocontainers/salmon:1.10.0--h7e5ed60_0'
+    container 'quay.io/biocontainers/salmon:1.10.1--h7e5ed60_0'
 
     input:
     tuple val(meta), path(reads)

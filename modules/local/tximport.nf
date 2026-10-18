@@ -1,7 +1,7 @@
 process TXIMPORT {
     label 'process_medium'
     // tximport summarises Salmon/Kallisto transcript quantification to gene level.
-    container 'quay.io/biocontainers/bioconductor-tximport:1.28.0--r43hdfd78af_0'
+    container 'quay.io/biocontainers/bioconductor-tximport:1.38.2--r45hdfd78af_0'
 
     input:
     path samplesheet

@@ -3,7 +3,7 @@ process ISOFORM_SWITCH {
     // IsoformSwitchAnalyzeR container
     // 2.0.0 was never published as a biocontainer; 2.0.1 is the nearest real
     // build (a patch release of the same version).
-    container 'quay.io/biocontainers/bioconductor-isoformswitchanalyzer:2.0.1--r43ha9d7317_0'
+    container 'quay.io/biocontainers/bioconductor-isoformswitchanalyzer:2.10.0--r45h01b2380_0'
 
     input:
     path samplesheet

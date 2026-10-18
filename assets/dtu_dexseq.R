@@ -73,8 +73,19 @@ geneinfo <- data.frame(gene_id = g_id, gene_name = g_nm, gene_biotype = g_bt,
 geneinfo <- geneinfo[!duplicated(geneinfo$gene_id), ]
 
 # ---- import transcript-level counts (DTU-scaled) --------------------------
+# tx2gene is required here, not optional: dtuScaledTPM scales each transcript
+# against the others in its own gene, so tximport has to know the grouping.
+# Without it the call fails with "'dtuScaledTPM' requires 'tx2gene' input".
+# scaledTPM, which diffsplice_edger.R uses, scales by library size and needs no
+# such map, which is why only this script is affected.
+# dropInfReps: neither this script nor diffsplice_edger.R reads the inferential
+# replicates, only txi$counts, and importing them drags in a format-specific
+# dependency that differs per quantifier. Salmon stores them as JSON and needs
+# jsonlite; kallisto stores them in abundance.h5 and needs rhdf5. Skipping the
+# import avoids both and is faster.
 txi <- tximport(files, type = aligner, txOut = TRUE,
-                countsFromAbundance = "dtuScaledTPM", ignoreTxVersion = TRUE)
+                countsFromAbundance = "dtuScaledTPM", tx2gene = tx2gene,
+                dropInfReps = TRUE, ignoreTxVersion = TRUE)
 cts <- txi$counts
 rownames(cts) <- strip(rownames(cts))
 cts <- cts[rowSums(cts) > 0, , drop = FALSE]

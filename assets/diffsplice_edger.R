@@ -124,8 +124,12 @@ if (level == "exon") {
     stop("Quantification files missing for: ",
          paste(samples$sample[!file.exists(files)], collapse = ", "))
   }
+  # dropInfReps: only txi$counts is used below, and importing the inferential
+  # replicates needs jsonlite for Salmon or rhdf5 for kallisto. See the note in
+  # dtu_dexseq.R.
   txi <- tximport(files, type = aligner, txOut = TRUE,
-                  countsFromAbundance = "scaledTPM", ignoreTxVersion = TRUE)
+                  countsFromAbundance = "scaledTPM",
+                  dropInfReps = TRUE, ignoreTxVersion = TRUE)
   counts <- txi$counts
   rownames(counts) <- strip(rownames(counts))
   geneid <- tx2gene$GENEID[match(rownames(counts), tx2gene$TXNAME)]

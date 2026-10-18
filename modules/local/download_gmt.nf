@@ -19,7 +19,7 @@ process DOWNLOAD_GMT {
     // From msigdbr 24.1.0 the gene sets are fetched over the network on first
     // use rather than shipped inside the package, so this process needs outbound
     // HTTPS -- see the note at the top of assets/download_gmt.R.
-    conda 'conda-forge::r-msigdbr=26.1.0'
+    conda 'conda-forge::r-base=4.5.3 conda-forge::r-msigdbr=26.1.0'
 
     input:
     val organism

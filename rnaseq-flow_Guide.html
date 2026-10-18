@@ -318,7 +318,7 @@
          configuring a run, to reading every file the pipeline writes. One page,
          no external dependencies, works offline.</p>
       <div class="hero-meta">
-        <span>Pipeline 1.6.0</span>
+        <span>Pipeline 1.7.0</span>
         <span>Nextflow &ge; 25.10.0</span>
         <span>DSL2</span>
         <span>GPL-3.0</span>
@@ -934,13 +934,13 @@ process.queue    = <span class="str">'normal'</span></code></pre></div>
   <p>A prepared bundle of every container is published on Zenodo at
      <a href="https://doi.org/10.5281/zenodo.21880328" target="_blank" rel="noopener">doi.org/10.5281/zenodo.21880328</a>,
      a concept DOI resolving to the most recent bundle.
-     It holds 27 Singularity images (about 7 GB), a <code>tre.config</code>
+     It holds 26 Singularity images (about 7 GB), a <code>tre.config</code>
      profile and a README. Download it outside the TRE, verify it, transfer it in,
      then:</p>
 
-  <div class="codeblock"><pre><code>sha256sum -c rnaseq-flow-1.5.1-singularity.tar.sha256
-tar -xf rnaseq-flow-1.5.1-singularity.tar
-export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.5.1
+  <div class="codeblock"><pre><code>sha256sum -c rnaseq-flow-1.7.0-singularity.tar.sha256
+tar -xf rnaseq-flow-1.7.0-singularity.tar
+export NXF_SINGULARITY_CACHEDIR=$PWD/singularity-1.7.0
 
 nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
     -profile tre,sge \
@@ -954,10 +954,19 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
      Combine it with whichever executor profile you need.</p>
 
   <ul>
-    <li>The bundle is pinned to a release. The 1.5.1 bundle also covers 1.6.0,
-        since no container reference changed between them. A genuine mismatch
-        surfaces as a process failing to find its image, not as a clear version
-        error.</li>
+    <li>The bundle is pinned to a release, and v1.7.0 is the current one.
+        Earlier bundles do not work with this release: v1.7.0 moved every
+        Bioconductor package to release 3.22, so both the container references
+        and the Conda specs changed. A mismatch surfaces as a process failing
+        to find its image, not as a clear version error.</li>
+    <li>It also carries the <code>nf-prov</code> plugin, which the RO-Crate
+        needs. Copy it into place and set offline mode, or the run fails with
+        no network to fetch it:
+        <div class="codeblock"><pre><code>cp -r $NXF_SINGULARITY_CACHEDIR/plugins/nf-prov-1.7.0 ~/.nextflow/plugins/
+export NXF_OFFLINE=true</code></pre></div>
+        It has to be <code>~/.nextflow/plugins</code>. Pointing
+        <code>NXF_PLUGINS_DIR</code> at the bundle makes Nextflow report "No
+        plugins" and carry on, so the crate goes silently missing.</li>
     <li>References and gene sets are separate. The bundle carries software, not
         data. Run <code>--download_refs</code> and <code>--download_gmt</code>
         outside the TRE and transfer the reference directory in, keeping
@@ -1644,18 +1653,24 @@ nextflow run main.nf \
     <tbody>
       <tr><td><span class="route r-star"></span>STAR</td><td>5579</td><td>852</td><td>152</td><td>700</td></tr>
       <tr><td><span class="route r-hisat2"></span>HISAT2</td><td>5773</td><td>833</td><td>132</td><td>701</td></tr>
-      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5509</td><td>778</td><td>130</td><td>648</td></tr>
-      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5961</td><td>865</td><td>146</td><td>719</td></tr>
+      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5510</td><td>778</td><td>130</td><td>648</td></tr>
+      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5961</td><td>866</td><td>146</td><td>720</td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>667 genes were called significant by all four, every pairwise overlap was at
+  <p>668 genes were called significant by all four, every pairwise overlap was at
      least 83 percent of the smaller set, and all four reproduced the same strong
      down-regulation bias. The overlaps do not split cleanly along the
      genome-aligner and pseudo-aligner line: STAR agreed more closely with Salmon
      than with HISAT2 here. That is not in itself a fault, since the routes differ
      in multimapper handling and length correction.</p>
+
+  <p>Those are the DESeq2 calls. edgeR on the same data is consistently a little
+     more generous, having gained power in version 4.x: 924, 951, 893 and 964
+     significant for STAR, HISAT2, Salmon and Kallisto, 722 called by all four,
+     every pairwise overlap at or above 84 percent. The direction of the bias is
+     the same.</p>
 
   <div class="box note">
     <span class="t">A shape to match, not targets to hit</span>
@@ -2123,7 +2138,7 @@ OUTPUT_PREFIX &lt;- <span class="str">"repro_"</span></code></pre></div>
 </section>
 
     <footer class="page">
-      rnaseq-flow 1.6.0 &middot; released under the GNU General Public License v3.0 &middot;
+      rnaseq-flow 1.7.0 &middot; released under the GNU General Public License v3.0 &middot;
       <a href="https://github.com/nicholas-owen/rnaseq-flow" target="_blank" rel="noopener">github.com/nicholas-owen/rnaseq-flow</a>
     </footer>
 

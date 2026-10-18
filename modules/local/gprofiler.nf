@@ -7,7 +7,7 @@ process GPROFILER {
     // repository does not exist (zero tags), so the image previously named here
     // could never be pulled and this process could never run. gprofiler2 is a
     // CRAN package, hence conda-forge.
-    conda 'conda-forge::r-gprofiler2=0.2.3 conda-forge::r-ggplot2=4.0.3'
+    conda 'conda-forge::r-base=4.5.3 conda-forge::r-gprofiler2=0.2.3 conda-forge::r-ggplot2=4.0.3'
 
     input:
     val organism
