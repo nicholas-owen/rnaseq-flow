@@ -7,8 +7,54 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-18
+
+Provenance, credit and a Bioconductor upgrade. Three bug fixes in code paths
+that had never been run.
+
+### Breaking
+
+- **Earlier offline bundles no longer work.** Every Bioconductor package moved
+  to release 3.22, changing both the container references and the Conda specs,
+  so the seven Wave-built images and three biocontainers in the v1.5.1 and
+  v1.6.0 bundles are stale. Use the v1.7.0 bundle.
+- **edgeR results change.** edgeR crosses 3.42.4 to 4.8.2, a major version that
+  altered the default quasi-likelihood pipeline. On the yeast example it calls
+  more genes significant on every route (871 to 924 for STAR, and similarly for
+  the other three), with the same direction of effect and a minimum pairwise
+  overlap of 84%. DESeq2 is essentially unchanged.
+
+### Added
+
+- **Every run records who did the analysis, with CRediT roles.**
+  `pipeline_info/run_manifest.json` gains an `attribution` block holding the
+  licence, the Zenodo DOI, the pipeline's authors and a `contributors` list.
+  Set `params.run_contributors` once in `$HOME/.nextflow/config`, or pass
+  `--run_by` and `--run_by_orcid`. Role tokens are validated against the
+  fourteen CRediT roles (ANSI/NISO Z39.104-2022) at launch and stored as
+  resolvable URIs. See [USAGE.md section 4.8](USAGE.md).
+- **A `project` block for the research activity**, via `params.project`: a RAiD,
+  the funder as a ROR, the grant, the rights holder and display names for both.
+  Every identifier is validated and normalised at launch.
+- **A Workflow Run RO-Crate beside the results**, written on every run unless
+  `--ro_crate false`. The nf-prov plugin writes the execution graph and
+  `lib/CrateEnricher.groovy` completes it with SHA-256, size and modification
+  time for every published file, the contents of the result folders, the
+  contributors with their CRediT roles, and the project. No separate step.
+- **`CITATION.cff` and `.zenodo.json`**, so the repository is machine-readable
+  to GitHub's citation panel and to reference managers.
+- The analysis report's Run overview gains Project and Attribution groups, and
+  the command line moves to the top of that table.
+
 ### Changed
 
+- **Bioconductor 3.22 throughout.** DESeq2 1.38.0 to 1.50.2, apeglm 1.20.0 to
+  1.32.0, fgsea 1.28.0 to 1.36.2, edgeR 3.42.4 to 4.8.2, tximport 1.28.0 to
+  1.38.2, IsoformSwitchAnalyzeR 2.0.1 to 2.10.0. DEXSeq 1.56.0 was already
+  current. R moves 4.3 to 4.5.
+- **Every package in the seven Conda specs is pinned**, 21 of 28 previously
+  floated, R itself included. Two runs a year apart now resolve the same
+  environment.
 - **The yeast example moved from `assets/test/` to `example/`.** It is the
   first thing to run, and `assets/` holds files the pipeline stages into
   tasks, so nobody looked there. `example/README.md` and
@@ -17,6 +63,34 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   guard rather than part of the example, moved to `tests/` with its own
   README. Anything scripted against `assets/test/fetch_yeast_test_data.sh` or
   `assets/test/check_report.py` breaks; the `test_yeast` profile is unchanged.
+- The documentation now cites the Zenodo concept DOI, which resolves to every
+  version, rather than the version DOI of one container bundle.
+
+### Fixed
+
+- **`--diffsplice` never worked on Salmon or Kallisto.** tximport imports
+  inferential replicates by default, which needs `jsonlite` for Salmon and
+  `rhdf5` for Kallisto, and neither was present. Neither script uses those
+  replicates, so both now pass `dropInfReps = TRUE`.
+- **`--dtu` never worked on Salmon or Kallisto.** The script built a
+  transcript-to-gene map and never passed it to tximport, which
+  `countsFromAbundance = "dtuScaledTPM"` requires.
+- Both of the above shipped broken because `--dtu` and `--diffsplice` had only
+  ever been exercised with a genome aligner, where the exon-level path does not
+  go through tximport.
+- An em dash in a MultiQC section name reached the report heading as raw bytes.
+  `tests/check_report.py` now checks the report's prose and
+  `assets/multiqc_config.yml`, not just the code it emits.
+- The recorded command line in the report rendered `--input` as an en dash,
+  because Pandoc's smart punctuation reaches `asis` chunk output, so it could
+  not be copied and run.
+- `manifest.author` was a placeholder and appeared in every execution report.
+
+### Known
+
+- DTU cannot be validated on the yeast example: the Ensembl R64-1-1 annotation
+  has 7127 genes and 7127 transcripts, so no gene is testable and the step
+  writes empty files by design.
 
 ## [1.6.0] - 2026-09-02
 
