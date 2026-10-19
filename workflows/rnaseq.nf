@@ -667,6 +667,26 @@ workflow RNASEQ {
     // list is complete by the time buildRunManifest() reads it.
     def notices = []
 
+    // Credit is recorded, never inferred, so a run with nothing declared is
+    // attributed to whichever login happened to start it. That is not a claim
+    // anyone made, and it is the one piece of provenance that cannot be
+    // corrected afterwards without re-running, because it is written into the
+    // manifest and the RO-Crate as the run happens. Say so once per run rather
+    // than letting it pass in silence.
+    //
+    // The condition mirrors `declared` in resolveContributors(). Checked here
+    // rather than there because that function runs inside buildRunManifest(),
+    // after this list is read.
+    if (!((params.containsKey('run_contributors') && params.run_contributors) ||
+          (params.containsKey('run_by') && params.run_by))) {
+        def msg = "No analyst credit was declared, so this run is attributed to the login " +
+                  "'${workflow.userName}' with no CRediT roles. Set params.run_contributors in " +
+                  "\$HOME/.nextflow/config, or pass --run_by, to claim it. " +
+                  "See USAGE.md section 4.8."
+        log.warn msg
+        notices.add(msg)
+    }
+
     // Result directories fed to the Quarto analysis report. Each defaults to an
     // empty list and is reassigned to the real channel if that stage runs, so
     // the report renders whichever sections have data.

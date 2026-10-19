@@ -51,6 +51,14 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **A run with no analyst credit declared now says so.** The warning names the
+  login the run will be attributed to, and points at USAGE.md section 4.8. It
+  is recorded in `pipeline_info/run_manifest.json` alongside the other notices,
+  so the report carries it too. Credit is still never inferred: the fallback
+  behaviour is unchanged, and nothing is claimed on anyone's behalf. The gap was
+  that it happened in silence, and attribution is the one piece of provenance
+  that cannot be corrected afterwards without re-running, because it is written
+  as the run happens.
 - **`isoform_switch_output/reproduce/`.** It carries `switch_plot.R`, a
   `switchAnalyzeRlist` cut to the plotted genes and then to the slots
   `switchPlot` reads, and gzipped copies of the tables. Unlike the earlier four
