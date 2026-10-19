@@ -34,11 +34,14 @@ library(DT)
 # The QUARTO_REPORT process stages the upstream result directories next to this
 # .qmd, so each is found by its plain name. Any that were not produced (e.g. no
 # differential expression was run) are simply absent.
-deseq2_dir    <- "deseq2_output"
-edger_dir     <- "edger_output"
-gsea_dir      <- "gsea_output"
-gprofiler_dir <- "gprofiler_output"
-rmats_dir     <- "rmats_output"
+deseq2_dir     <- "deseq2_output"
+edger_dir      <- "edger_output"
+gsea_dir       <- "gsea_output"
+gprofiler_dir  <- "gprofiler_output"
+rmats_dir      <- "rmats_output"
+dtu_dir        <- "dtu_output"
+diffsplice_dir <- "diffsplice_output"
+isoform_dir    <- "isoform_switch_output"
 
 list_csvs <- function(d, pat) {
   if (dir.exists(d)) list.files(d, pattern = pat, full.names = TRUE) else character(0)
@@ -81,6 +84,38 @@ rmats_ok       <- FALSE
 rmats_sig_ok   <- FALSE
 rmats_psi_ok   <- FALSE
 rmats_conc_ok  <- FALSE
+
+# The three optional isoform-level analyses. Presence is the directory itself
+# rather than a file list: each script creates its output directory whatever
+# happens, because the directory is a declared Nextflow output, so a staged
+# directory means the stage ran and an absent one means it did not.
+have_dtu        <- dir.exists(dtu_dir)
+have_diffsplice <- dir.exists(diffsplice_dir)
+have_isoform    <- dir.exists(isoform_dir)
+# Set in the matching load chunk. All three can run, succeed and produce no
+# rows, which is why presence and content are tracked separately here. DTU and
+# isoform switching are only defined for a gene with two or more annotated
+# isoforms, and an annotation can have none at all: Ensembl R64-1-1, the yeast
+# annotation the examples/yeast/ dataset uses, has 7127 genes and 7127 transcripts, so
+# the scripts write header-only CSVs and exit 0 (OUTPUTS.md section 14). That is
+# a result, and each section says so rather than showing an empty table.
+dtu_ok          <- FALSE
+dtu_tx_ok       <- FALSE
+dtu_tx_sig_ok   <- FALSE
+dtu_sig_ok      <- FALSE
+dtu_plot_ok     <- FALSE
+diffsplice_ok   <- FALSE
+ds_feature_ok   <- FALSE
+isoform_ok      <- FALSE
+# Initialised here as well as set in the load chunks, because knitr evaluates a
+# chunk's `eval` expression whether or not the chunk runs, and the figure
+# galleries below are gated on these.
+ds_figs         <- character(0)
+dtu_figs        <- character(0)
+isoform_figs    <- character(0)
+# Exon on the STAR and HISAT2 route, transcript on the Salmon and Kallisto one.
+# Read off which result file diffsplice_edger.R wrote, in the load chunk.
+ds_level        <- "feature"
 
 mqc_hits <- list.files(pattern = "multiqc_data.json", recursive = TRUE,
                        full.names = TRUE)
@@ -216,6 +251,17 @@ PSI_FDR_CUT    <- 0.05   # rMATS FDR cutoff
 DPSI_CUT       <- 0.1    # |IncLevelDifference|, a 10 percentage-point PSI shift
 MAX_PSI_EVENTS <- 16     # events shown in the per-replicate PSI figure
 
+# Per-gene figures embedded from one result directory. The cap is there because
+# `embed-resources: true` inlines every image as base64: dtu_output/,
+# diffsplice_output/ and isoform_switch_output/ publish ten figures each per
+# comparison, and a full gallery of all three would add tens of MB to a document
+# whose whole point is that it can be emailed on. The rest stay in the result
+# directory, and each gallery says how many it left out.
+MAX_SECTION_FIGURES <- 6
+# Genes shown in the interactive isoform-usage figure, which needs one facet
+# each.
+MAX_DTU_GENES       <- 6
+
 # ---- Helpers ---------------------------------------------------------------
 # Read every per-contrast DE CSV into one long data frame; the contrast label
 # is recovered from the file name (DE scripts name files <prefix><contrast>.csv).
@@ -257,6 +303,74 @@ repro_csv <- function(dir, name) {
     }
   }
   NULL
+}
+
+# Read a published result table that the producing script may have written
+# empty, returning NULL for anything with no rows to show.
+#
+# dtu_dexseq.R, diffsplice_edger.R and isoform_switch.R all write their result
+# CSVs with write.csv(data.frame(), ...) when nothing was testable. That puts a
+# single pair of quotes in the file and no columns at all, and read.csv() does
+# not return a zero-row frame for it: it stops with "first five rows are empty:
+# giving up". So the empty case has to be caught here rather than tested for
+# after the read.
+read_result_csv <- function(path) {
+  if (!length(path) || !file.exists(path[1])) return(NULL)
+  d <- tryCatch(read.csv(path[1], stringsAsFactors = FALSE),
+                error = function(e) NULL)
+  if (is.null(d) || !nrow(d)) return(NULL)
+  d
+}
+
+# Coerce the named columns to numeric. The result tables are read with
+# stringsAsFactors = FALSE and a column of all-NA values comes back character,
+# which breaks every comparison it is used in.
+as_num <- function(df, cols) {
+  for (cn in intersect(cols, names(df))) {
+    df[[cn]] <- suppressWarnings(as.numeric(df[[cn]]))
+  }
+  df
+}
+
+# Ensembl gene ids carry a version suffix in some result tables and not in
+# others: IsoformSwitchAnalyzeR keeps it, the tables built from the GTF drop it,
+# and rMATS passes through whatever the GTF had. Strip it on both sides before
+# matching, or the join silently finds nothing.
+strip_ver <- function(x) sub("\\.[0-9]+$", "", x)
+
+# Every per-gene figure a module published, SVG preferred and PNG accepted where
+# only it exists. dtu_output/ keeps them flat and the other two use one
+# subdirectory per comparison, so the search is recursive, and sorted: for these
+# names that is rank order within a comparison, so the head of the list is the
+# most significant.
+#
+# reproduce/ is excluded. That folder is for running rather than reading, and
+# once a reader has run one of its scripts it holds their own redrawn copy of a
+# figure under that script's OUTPUT_PREFIX. The GSE151251 results carry exactly
+# that: isoform_switch_output/reproduce/repro_TGFb_vs_REF_01_switch_plot_*.svg
+# beside the published ten. Embedding it would present someone's own output as a
+# published figure, and counting it makes the gallery caption wrong.
+gallery <- function(dir) {
+  if (!dir.exists(dir)) return(character(0))
+  figs <- list.files(dir, "\\.(svg|png)$", recursive = TRUE, full.names = TRUE)
+  figs <- figs[!grepl("/reproduce/", figs, fixed = TRUE)]
+  svgs <- figs[grepl("\\.svg$", figs)]
+  pngs <- figs[grepl("\\.png$", figs)]
+  sort(c(svgs, pngs[!sub("\\.png$", "", pngs) %in% sub("\\.svg$", "", svgs)]))
+}
+
+# The subset of a gallery that gets embedded, spread across the comparison
+# folders rather than taken off the front: with two contrasts of ten figures
+# each, the first six are all one contrast and none of the other.
+gallery_head <- function(figs, n) {
+  if (length(figs) <= n) return(figs)
+  by_dir <- split(figs, dirname(figs))
+  per    <- max(1, n %/% length(by_dir))
+  out    <- unlist(lapply(by_dir, function(f) head(f, per)), use.names = FALSE)
+  # Slack left by an uneven division goes to the folders that sort first, which
+  # are the ones holding the lowest ranks.
+  if (length(out) < n) out <- c(out, head(setdiff(figs, out), n - length(out)))
+  sort(head(out, n))
 }
 
 # ---- rMATS helpers ---------------------------------------------------------
@@ -333,6 +447,22 @@ read_rmats <- function(files) {
     d$contrast   <- basename(dirname(files[i]))
     d
   }))
+}
+
+# ---- diffSplice helper -----------------------------------------------------
+# diffsplice_edger.R writes the condition name into the `comparison` column and
+# the full contrast, <condition>_vs_<baseline>, into the figure folder name.
+# The folder is the only place in that directory where the baseline is written
+# down, so where one exists the full contrast is used and where it does not the
+# condition name stands on its own. Mapped over the unique values rather than
+# every row: the feature table runs to tens of thousands of rows.
+ds_contrast <- function(comparison, dirs) {
+  u    <- unique(comparison)
+  full <- vapply(u, function(cmp) {
+    hit <- dirs[startsWith(dirs, paste0(cmp, "_vs_"))]
+    if (length(hit)) hit[1] else cmp
+  }, character(1), USE.NAMES = FALSE)
+  full[match(comparison, u)]
 }
 
 # An interactive table with consistent defaults.
@@ -638,11 +768,15 @@ sortable. Use the code-folding toggle to reveal how any panel was built.
 
 ```{r overview-note, results="asis"}
 present <- c(
-  if (have_mqc)       "quality-control metrics",
-  if (have_deseq2)    "DESeq2 differential expression",
-  if (have_edger)     "edgeR differential expression",
-  if (have_gsea)      "GSEA enrichment",
-  if (have_gprofiler) "gProfiler over-representation"
+  if (have_mqc)        "quality-control metrics",
+  if (have_deseq2)     "DESeq2 differential expression",
+  if (have_edger)      "edgeR differential expression",
+  if (have_gsea)       "GSEA enrichment",
+  if (have_gprofiler)  "gProfiler over-representation",
+  if (have_rmats)      "rMATS alternative splicing",
+  if (have_diffsplice) "edgeR diffSplice differential splicing",
+  if (have_dtu)        "DEXSeq transcript usage",
+  if (have_isoform)    "IsoformSwitchAnalyzeR isoform switching"
 )
 if (length(present)) {
   cat("\n**This run produced:** ", paste(present, collapse = ", "), ".\n", sep = "")
@@ -673,10 +807,18 @@ if (have_deseq2 || have_edger) {
   callers <- c(if (have_deseq2) "DESeq2", if (have_edger) "edgeR")
   level <- c(level, paste0("Differential expression (", paste(callers, collapse = ", "), ")"))
 }
-if (have_rmats)     level <- c(level, "Alternative splicing (rMATS)")
-if (have_gsea)      level <- c(level, "GSEA")
-if (have_gprofiler) level <- c(level, "gProfiler")
+if (have_rmats)      level <- c(level, "Alternative splicing (rMATS)")
+if (have_diffsplice) level <- c(level, "Differential splicing (edgeR diffSplice)")
+if (have_dtu)        level <- c(level, "Differential transcript usage (DEXSeq)")
+if (have_isoform)    level <- c(level, "Isoform switching (IsoformSwitchAnalyzeR)")
+if (have_gsea)       level <- c(level, "GSEA")
+if (have_gprofiler)  level <- c(level, "gProfiler")
+# Fusion calling is the one optional analysis whose output is not staged into
+# this report, so it is the only one still taken from the manifest. The other
+# three used to be read from here as well, which reported them as done whenever
+# they were asked for, including on the routes where they cannot run.
 opt <- unlist(manifest$analysis$optional)
+opt <- opt[grepl("fusion", opt)]
 if (length(opt)) level <- c(level, opt)
 if (!length(level)) level <- "Quality control only"
 
@@ -2064,8 +2206,8 @@ spl <- rmats_jc %>%
   distinct(contrast, gene_id = GeneID)
 
 # rMATS quotes gene ids from the GTF, which for Ensembl carry a version suffix
-# the count matrix may not have. Strip it on both sides before matching.
-strip_ver <- function(x) sub("\\.[0-9]+$", "", x)
+# the count matrix may not have. Strip it on both sides before matching
+# (strip_ver is shared with the transcript-usage sections below).
 spl$gene_id    <- strip_ver(spl$gene_id)
 de_ref$gene_id <- strip_ver(de_ref$gene_id)
 
@@ -2085,6 +2227,735 @@ knitr::kable(tbl, caption = sprintf(paste(
   "change: they are regulated at isoform level and appear nowhere else in this",
   "report. 'Not in the DE table' means the gene identifier did not match, which",
   "is a filtering or annotation difference rather than a result."), de_name))
+```
+
+# Differential splicing
+
+edgeR's `diffSpliceDGE` asks a narrower question than rMATS. For every feature
+of a gene it tests whether that feature's log2 fold change departs from the
+gene's own overall log2 fold change, which is differential usage. A gene that
+doubled in every exon gives a flat result. A gene whose exons moved apart from
+each other does not. The feature is an exon on the STAR and HISAT2 route and a
+transcript on the Salmon and Kallisto route, so one flag tests exon usage or
+transcript usage depending on how the run was quantified.
+
+```{r diffsplice-note, results="asis"}
+if (!have_diffsplice) {
+  cat("\n*No differential-splicing results were produced. `--diffsplice` needs",
+      "a CSV samplesheet and `--gtf` at analysis level 3 or above, so it is",
+      "skipped by `--stop_at preQC/postQC` and by a `--counts` run.*\n")
+}
+```
+
+```{r diffsplice-load, eval=have_diffsplice, include=FALSE}
+# Which of the two feature files was written is how this section learns whether
+# the run tested exons or transcripts. diffsplice_edger.R takes that from the
+# aligner, so the manifest would answer it too, but the file that exists is the
+# direct evidence.
+ds_feature_file <- list.files(diffsplice_dir,
+                              "^diffsplice_(exon|transcript)_results\\.csv$",
+                              full.names = TRUE)
+if (length(ds_feature_file)) {
+  ds_level <- sub("^diffsplice_(.*)_results\\.csv$", "\\1",
+                  basename(ds_feature_file[1]))
+}
+
+ds_gene    <- read_result_csv(file.path(diffsplice_dir,
+                                        "diffsplice_gene_results.csv"))
+ds_feature <- read_result_csv(ds_feature_file)
+ds_figs    <- gallery(diffsplice_dir)
+ds_shown   <- gallery_head(ds_figs, MAX_SECTION_FIGURES)
+
+ds_dirs <- list.dirs(diffsplice_dir, full.names = FALSE, recursive = FALSE)
+ds_dirs <- ds_dirs[grepl("_vs_", ds_dirs)]
+
+# The gene-level table is the entry point into this directory (OUTPUTS.md
+# section 15), so the section renders on that and the feature table is checked
+# separately. The feature-level statistic is deliberately not required: its
+# column name comes from topSpliceDGE and follows how the model was fitted, and
+# nothing here reads it. P.Value and FDR are stable across both tests.
+diffsplice_ok <- !is.null(ds_gene) &&
+  all(c("GeneID", "FDR", "comparison") %in% names(ds_gene))
+if (diffsplice_ok) {
+  ds_gene <- as_num(ds_gene, c("P.Value", "FDR", "NExons"))
+  for (cn in c("P.Value", "NExons")) {
+    if (!cn %in% names(ds_gene)) ds_gene[[cn]] <- NA_real_
+  }
+  ds_gene$significant <- !is.na(ds_gene$FDR) & ds_gene$FDR < PADJ_CUT
+  ds_gene$contrast    <- ds_contrast(ds_gene$comparison, ds_dirs)
+  ds_gene$gene        <- if ("gene_name" %in% names(ds_gene)) {
+    ifelse(is.na(ds_gene$gene_name) | !nzchar(ds_gene$gene_name),
+           ds_gene$GeneID, ds_gene$gene_name)
+  } else {
+    ds_gene$GeneID
+  }
+}
+
+ds_feature_ok <- diffsplice_ok && !is.null(ds_feature) &&
+  all(c("GeneID", "logFC", "P.Value", "FDR", "comparison") %in% names(ds_feature))
+if (ds_feature_ok) {
+  ds_feature <- as_num(ds_feature, c("logFC", "P.Value", "FDR"))
+  ds_feature$significant <- !is.na(ds_feature$FDR) & ds_feature$FDR < PADJ_CUT
+  ds_feature$contrast    <- ds_contrast(ds_feature$comparison, ds_dirs)
+  ds_feature$feature     <- if ("FeatureID" %in% names(ds_feature)) {
+    as.character(ds_feature$FeatureID)
+  } else {
+    ds_feature$GeneID
+  }
+  ds_feature$gene <- if ("gene_name" %in% names(ds_feature)) {
+    ifelse(is.na(ds_feature$gene_name) | !nzchar(ds_feature$gene_name),
+           ds_feature$GeneID, ds_feature$gene_name)
+  } else {
+    ds_feature$GeneID
+  }
+  # A table of rows whose statistics are all missing plots nothing.
+  ds_feature_ok <- any(!is.na(ds_feature$logFC) & !is.na(ds_feature$P.Value))
+}
+```
+
+```{r diffsplice-empty, eval=(have_diffsplice && !diffsplice_ok), results="asis"}
+# Why the empty case gets a paragraph rather than an empty table: on the
+# transcript route it is the routine outcome for an annotation with one
+# transcript per gene, and the example dataset is exactly that.
+why <- if (identical(ds_level, "transcript")) {
+  paste("an annotation with one transcript per gene leaves nothing to test at",
+        "all: Ensembl R64-1-1, the yeast annotation the `examples/yeast/` dataset",
+        "uses, has 7127 genes and 7127 transcripts, one each")
+} else if (identical(ds_level, "exon")) {
+  paste("a genome of mostly single-exon genes leaves very little to test,",
+        "which is the case for the yeast annotation the `examples/yeast/` dataset",
+        "uses")
+} else {
+  # Neither result file was written, so the level is unknown and nothing more
+  # specific than this can be said about why.
+  "this annotation carries too few of them"
+}
+# Assembled as one string rather than passed to cat() as several, because cat()
+# separates its arguments with a space and the sentence has punctuation in it.
+cat(paste0("\n*The diffSplice step ran and wrote its result files, and they ",
+           "hold no rows. The test needs a gene with two or more counted ",
+           ds_level, "s, and ", why, ". Empty files here are the correct ",
+           "result rather than a failure.*\n"))
+```
+
+```{r diffsplice-h-counts, eval=(have_diffsplice && diffsplice_ok), results="asis"}
+# Subsection headings are emitted from gated chunks for the same reason the
+# rMATS ones are (see rmats-h-counts): the section is absent from most runs,
+# and plain markdown headings would leave those reports with numbered
+# subsections and nothing under any of them.
+#
+# Gated on the results having rows, not just on the step having run. A run that
+# tested nothing is the empty paragraph above and then the end of the section.
+cat("\n## Genes and features per contrast\n")
+```
+
+```{r diffsplice-summary, eval=(have_diffsplice && diffsplice_ok)}
+ds_counts <- ds_gene %>%
+  group_by(Contrast = contrast) %>%
+  summarise(`Genes tested`      = n(),
+            `Significant genes` = sum(significant, na.rm = TRUE),
+            .groups = "drop")
+
+if (ds_feature_ok) {
+  ds_counts <- left_join(
+    ds_counts,
+    ds_feature %>%
+      group_by(Contrast = contrast) %>%
+      summarise(`Features tested`      = n(),
+                `Significant features` = sum(significant, na.rm = TRUE),
+                .groups = "drop"),
+    by = "Contrast")
+}
+
+knitr::kable(ds_counts, caption = sprintf(paste(
+  "Genes and %ss tested by diffSpliceDGE. A gene is significant at Simes FDR",
+  "&lt; %.2f across its %ss, a %s on its own FDR. Each contrast is that",
+  "condition against the run's baseline. A name of the form",
+  "condition_vs_baseline was read back from the figure folder; a bare condition",
+  "name means this run published no figures for it."),
+  ds_level, PADJ_CUT, ds_level, ds_level))
+```
+
+```{r diffsplice-h-volcano, eval=(have_diffsplice && diffsplice_ok), results="asis"}
+cat("\n## Feature-level view\n")
+```
+
+```{r diffsplice-volcano-note, eval=(have_diffsplice && ds_feature_ok), results="asis"}
+cat("\nEach point is one", paste0(ds_level, "."), "The x axis is its log2 fold",
+    "change relative to its own gene's, so zero means it moved exactly as the",
+    "gene did, and distance from zero is the usage change the test is about.",
+    "The published per-gene figures below show the same quantity one gene at a",
+    "time, which is where a within-gene pattern is readable. This is the",
+    "run-wide view.\n")
+```
+
+```{r diffsplice-volcano-empty, eval=(have_diffsplice && diffsplice_ok && !ds_feature_ok), results="asis"}
+cat("\n*The per-feature table is absent or carries no usable statistics, so",
+    "there is nothing to plot here. The gene-level results below are",
+    "unaffected.*\n")
+```
+
+```{r diffsplice-volcano, eval=(have_diffsplice && ds_feature_ok), fig.width=9, fig.height=6}
+# Written out in words rather than as "FDR < 0.05": this label reaches a plotly
+# legend, which renders a less-than sign as the start of a tag and an HTML
+# entity literally, so neither form survives.
+lab_sig <- sprintf("FDR below %.2f", PADJ_CUT)
+
+vd  <- ds_feature %>% filter(!is.na(logFC), !is.na(P.Value))
+ns  <- vd %>% filter(!significant)
+sig <- vd %>% filter(significant)
+# Keep every significant feature; thin the dense rest so the embedded widget
+# stays light, as the DE and rMATS volcanoes do.
+if (nrow(ns) > MAX_NS_POINTS) ns <- ns[sample(nrow(ns), MAX_NS_POINTS), ]
+vd  <- bind_rows(sig, ns)
+
+vd$status <- ifelse(vd$significant, lab_sig, "Not significant")
+# Built as a column rather than inside aes(): the hover is assembled from
+# optional columns, and a conditional inside aes() is evaluated against the
+# layer data rather than the frame.
+vd$hover  <- paste0(vd$gene, "<br>", vd$feature,
+                    "<br>relative log2 fold change: ", round(vd$logFC, 3),
+                    "<br>FDR: ", signif(vd$FDR, 3))
+
+p <- ggplot(vd, aes(logFC, -log10(P.Value), colour = status, text = hover)) +
+  geom_point(size = 0.9, alpha = 0.7) +
+  facet_wrap(~ contrast, ncol = 2) +
+  geom_vline(xintercept = 0, colour = "#868e96", linewidth = 0.3) +
+  scale_colour_manual(values = setNames(c("#c2255c", "#adb5bd"),
+                                        c(lab_sig, "Not significant"))) +
+  labs(x = "log2 fold change relative to the gene", y = "-log10 p-value",
+       colour = NULL) +
+  theme_bw(base_size = 11)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r diffsplice-h-table, eval=(have_diffsplice && diffsplice_ok), results="asis"}
+cat("\n## Results table\n")
+```
+
+```{r diffsplice-table, eval=(have_diffsplice && diffsplice_ok)}
+# Gene level, because that is where this test is read from: find the gene, then
+# follow it into the per-feature CSV or onto its figure. The feature table is
+# tens of thousands of rows and the volcano above already shows all of it.
+tbl <- ds_gene %>%
+  arrange(FDR) %>%
+  transmute(Contrast = contrast, Gene = gene, `Gene ID` = GeneID,
+            Features = NExons, PValue = P.Value, FDR)
+
+nsig      <- sum(ds_gene$significant, na.rm = TRUE)
+ngene     <- nrow(tbl)
+truncated <- ngene > MAX_TABLE_ROWS
+if (truncated) tbl <- head(tbl, MAX_TABLE_ROWS)
+
+cap <- sprintf(paste("Gene-level diffSplice results, lowest FDR first. %d of %d",
+                     "genes are significant at FDR &lt; %.2f.%s Features is the",
+                     "number of %ss the gene was tested on."),
+               nsig, ngene, PADJ_CUT,
+               if (truncated) sprintf(" The top %d are shown.", MAX_TABLE_ROWS) else "",
+               ds_level)
+
+dt <- DT::datatable(tbl, rownames = FALSE, filter = "top", caption = cap,
+                    options = list(pageLength = 10, scrollX = TRUE))
+DT::formatSignif(dt, c("PValue", "FDR"), digits = 3)
+```
+
+```{r diffsplice-h-figs, eval=(have_diffsplice && length(ds_figs) > 0), results="asis"}
+cat("\n## Per-gene figures\n")
+```
+
+```{r diffsplice-figs, eval=(have_diffsplice && length(ds_figs) > 0), out.width="90%"}
+knitr::include_graphics(ds_shown)
+```
+
+```{r diffsplice-figs-caption, eval=(have_diffsplice && length(ds_figs) > 0), results="asis"}
+cat("<p class='rf-note'><code>plotSpliceDGE</code> for one gene: every",
+    "feature's log2 fold change against the gene's own, with the features that",
+    "pass FDR marked in red. A flat line at zero means the gene changed as a",
+    "whole and nothing within it shifted. Showing", length(ds_shown),
+    "of", length(ds_figs), "published figures, ranked by gene-level FDR within",
+    "each contrast; the rest are in <code>diffsplice_output/</code>, with",
+    "<code>reproduce/splice_plot.R</code> to redraw any gene.</p>\n")
+```
+
+# Differential transcript usage
+
+DEXSeq tests whether the proportions of a gene's transcript isoforms shift
+between conditions. The quantity is the isoform fraction, each transcript's
+share of its own gene's expression, so a gene can hold its total expression
+flat and still be significant here. Only genes annotated with two or more
+isoforms are testable.
+
+The design is `~ sample + exon + condition:exon`, which tests one interaction
+across every condition at once and returns a single q-value per gene. There is
+no contrast dimension. Unlike every other result in this report, a DTU q-value
+is not oriented against the baseline, and it does not say which condition the
+usage moved in: the figures answer that.
+
+```{r dtu-note, results="asis"}
+if (!have_dtu) {
+  cat("\n*No transcript-usage results were produced. `--dtu` needs a",
+      "pseudo-aligner (`--aligner salmon` or `--aligner kallisto`) with",
+      "`--gtf`, a CSV samplesheet and analysis level 3 or above.*\n")
+}
+```
+
+```{r dtu-load, eval=have_dtu, include=FALSE}
+dtu_gene <- read_result_csv(file.path(dtu_dir, "dtu_gene_qvalues.csv"))
+dtu_tx   <- read_result_csv(file.path(dtu_dir, "dtu_transcript_results.csv"))
+dtu_figs  <- gallery(dtu_dir)
+dtu_shown <- gallery_head(dtu_figs, MAX_SECTION_FIGURES)
+
+dtu_ok <- !is.null(dtu_gene) && all(c("gene", "gene_qvalue") %in% names(dtu_gene))
+if (dtu_ok) {
+  dtu_gene <- as_num(dtu_gene, "gene_qvalue")
+  dtu_gene$significant <- !is.na(dtu_gene$gene_qvalue) &
+                          dtu_gene$gene_qvalue < PADJ_CUT
+  dtu_gene$label <- if ("gene_name" %in% names(dtu_gene)) {
+    ifelse(is.na(dtu_gene$gene_name) | !nzchar(dtu_gene$gene_name),
+           dtu_gene$gene, dtu_gene$gene_name)
+  } else {
+    dtu_gene$gene
+  }
+  dtu_gene   <- dtu_gene[order(dtu_gene$gene_qvalue), ]
+  dtu_sig_ok <- any(dtu_gene$significant, na.rm = TRUE)
+}
+
+dtu_tx_ok <- dtu_ok && !is.null(dtu_tx) &&
+  all(c("groupID", "featureID", "padj") %in% names(dtu_tx))
+if (dtu_tx_ok) {
+  dtu_tx <- as_num(dtu_tx, c("exonBaseMean", "stat", "pvalue", "padj"))
+  dtu_tx$significant <- !is.na(dtu_tx$padj) & dtu_tx$padj < PADJ_CUT
+  dtu_tx_sig_ok      <- any(dtu_tx$significant, na.rm = TRUE)
+}
+
+# reproduce/dtu_plot_data.csv.gz holds the counts behind the published figures:
+# one row per transcript per sample, for the plotted genes only, written in the
+# order they were ranked. Enough to redraw the usage panel here with the sample
+# identities in the hover, which a published PNG cannot carry.
+dtu_plot_df <- repro_csv(dtu_dir, "dtu_plot_data")
+dtu_plot_ok <- !is.null(dtu_plot_df) && nrow(dtu_plot_df) > 0 &&
+  all(c("gene_id", "feature_id", "sample", "condition", "count") %in%
+      names(dtu_plot_df))
+```
+
+```{r dtu-empty, eval=(have_dtu && !dtu_ok), results="asis"}
+cat("\n*DEXSeq ran and wrote its result files, and they hold no rows.",
+    "Transcript usage is only defined for a gene annotated with two or more",
+    "isoforms, and some annotations have none at all: Ensembl R64-1-1, the",
+    "yeast annotation the `examples/yeast/` dataset uses, has 7127 genes and 7127",
+    "transcripts, one each, so nothing is testable and the step writes empty",
+    "files and exits cleanly. The task log says 'No multi-transcript genes",
+    "passed filtering'. Check the transcripts-per-gene distribution of the",
+    "annotation before reading this as a failure.*\n")
+```
+
+```{r dtu-h-counts, eval=(have_dtu && dtu_ok), results="asis"}
+cat("\n## Genes with a usage change\n")
+```
+
+```{r dtu-summary, eval=(have_dtu && dtu_ok)}
+rows <- data.frame(
+  Measure = c("Genes tested", "Genes with a usage change"),
+  Count   = c(nrow(dtu_gene), sum(dtu_gene$significant, na.rm = TRUE)),
+  stringsAsFactors = FALSE)
+
+if (dtu_tx_ok) {
+  rows <- rbind(rows, data.frame(
+    Measure = c("Transcripts tested", "Transcripts with a usage change"),
+    Count   = c(nrow(dtu_tx), sum(dtu_tx$significant, na.rm = TRUE)),
+    stringsAsFactors = FALSE))
+}
+
+knitr::kable(rows, caption = sprintf(paste(
+  "Genes are called on <code>perGeneQValue</code>, which aggregates a gene's",
+  "transcripts, at q &lt; %.2f; transcripts on their own adjusted p-value. One",
+  "table rather than one row per contrast, because the DEXSeq design tests",
+  "every condition at once."), PADJ_CUT))
+```
+
+```{r dtu-h-usage, eval=(have_dtu && dtu_ok), results="asis"}
+cat("\n## Isoform usage for the top genes\n")
+```
+
+```{r dtu-usage-note, eval=(have_dtu && dtu_ok && !dtu_plot_ok), results="asis"}
+# The figures are only pointed at where there are figures to point at: a run
+# with no plottable gene publishes none, and a dead cross-reference is worse
+# than a shorter sentence. Assembled with paste0 rather than passed to cat() as
+# separate arguments, because cat() would put a space before the closing
+# emphasis marker and markdown then never closes the italics.
+cat(paste0("\n*An interactive usage panel needs ",
+           "`dtu_output/reproduce/dtu_plot_data.csv.gz`, which this results ",
+           "directory does not carry.",
+           if (length(dtu_figs)) {
+             " The published figures below show the same data."
+           } else {
+             ""
+           },
+           "*\n"))
+```
+
+```{r dtu-usage, eval=(have_dtu && dtu_plot_ok), fig.width=9, fig.height=7}
+# One facet per gene in the order dtu_dexseq.R ranked them, so the first facet
+# is the lowest q-value. Fractions are recomputed from the counts rather than
+# read: the fraction is the one step worth seeing, a transcript's share of its
+# own gene within one sample.
+genes <- head(unique(dtu_plot_df$gene_id), MAX_DTU_GENES)
+
+d <- dtu_plot_df %>%
+  filter(gene_id %in% genes) %>%
+  group_by(gene_id, sample) %>%
+  mutate(fraction = count / sum(count)) %>%
+  ungroup()
+
+# The row order is the samplesheet's condition order, baseline first, which is
+# the order every other figure in this report uses.
+d$condition <- factor(d$condition, levels = unique(d$condition))
+
+# Facet labels carry the symbol where the annotation gave one, and the facets
+# stay in rank order rather than going alphabetical.
+lab_of <- vapply(genes, function(g) {
+  nm <- if ("gene_name" %in% names(d)) d$gene_name[d$gene_id == g][1] else NA
+  if (!is.na(nm) && nzchar(nm) && nm != g) paste0(nm, " (", g, ")") else g
+}, character(1), USE.NAMES = FALSE)
+d$gene_label <- factor(lab_of[match(d$gene_id, genes)], levels = lab_of)
+
+# Transcripts ordered by mean usage, so the dominant isoform is on the left of
+# every panel. A transcript belongs to one gene, so one global ordering is
+# enough and free_x drops the levels a facet does not use.
+ord <- d %>%
+  group_by(feature_id) %>%
+  summarise(m = mean(fraction, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(m))
+d$feature_id <- factor(d$feature_id, levels = ord$feature_id)
+
+d$hover <- paste0(d$feature_id, "<br>", d$sample, " (", d$condition, ")",
+                  "<br>isoform fraction: ", round(d$fraction, 3),
+                  "<br>count: ", d$count)
+if ("padj" %in% names(d)) {
+  d$hover <- paste0(d$hover, "<br>padj: ", signif(d$padj, 3))
+}
+
+p <- ggplot(d, aes(feature_id, fraction, colour = condition, text = hover)) +
+  geom_point(size = 1.8, alpha = 0.85,
+             position = position_dodge(width = 0.6)) +
+  facet_wrap(~ gene_label, scales = "free_x", ncol = 2) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(x = NULL, y = "isoform fraction", colour = NULL) +
+  theme_bw(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7))
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r dtu-usage-caption, eval=(have_dtu && dtu_plot_ok), results="asis"}
+cat("<p class='rf-note'>Each point is one sample, so replicate spread is",
+    "visible rather than implied. The adjusted p-value of each transcript is in",
+    "the hover. These are the", length(genes), "genes with the lowest",
+    "q-values, the same ones the published figures cover.</p>\n")
+```
+
+```{r dtu-h-tables, eval=(have_dtu && dtu_ok), results="asis"}
+cat("\n## Results tables\n")
+```
+
+```{r dtu-gene-table, eval=(have_dtu && dtu_ok)}
+tbl <- dtu_gene %>%
+  transmute(Gene = label, `Gene ID` = gene,
+            Biotype = if ("gene_biotype" %in% names(dtu_gene)) gene_biotype else NA_character_,
+            `q-value` = gene_qvalue)
+truncated <- nrow(tbl) > MAX_TABLE_ROWS
+if (truncated) tbl <- head(tbl, MAX_TABLE_ROWS)
+
+dt <- DT::datatable(tbl, rownames = FALSE, filter = "top",
+        caption = sprintf(paste("Per-gene DEXSeq q-values, lowest first.%s",
+                                "Use this to find the genes, then",
+                                "dtu_transcript_results.csv or that gene's",
+                                "figure to see which isoforms drive them."),
+                          if (truncated) sprintf(" The top %d of %d are shown.",
+                                                 MAX_TABLE_ROWS, nrow(dtu_gene))
+                          else ""),
+        options = list(pageLength = 10, scrollX = TRUE))
+DT::formatSignif(dt, "q-value", digits = 3)
+```
+
+```{r dtu-tx-none, eval=(have_dtu && dtu_tx_ok && !dtu_tx_sig_ok), results="asis"}
+cat("\n*No individual transcript passed its own adjusted p-value cutoff. A",
+    "gene can still be significant above: `perGeneQValue` aggregates the",
+    "evidence across all of a gene's transcripts.*\n")
+```
+
+```{r dtu-tx-table, eval=(have_dtu && dtu_tx_sig_ok)}
+tbl <- dtu_tx %>%
+  filter(significant) %>%
+  arrange(padj) %>%
+  transmute(`Gene ID` = groupID,
+            Gene = if ("gene_name" %in% names(dtu_tx)) gene_name else groupID,
+            Transcript = featureID,
+            `Mean count` = if ("exonBaseMean" %in% names(dtu_tx)) round(exonBaseMean, 1) else NA_real_,
+            padj)
+nshown    <- nrow(tbl)
+truncated <- nshown > MAX_TABLE_ROWS
+if (truncated) tbl <- head(tbl, MAX_TABLE_ROWS)
+
+dt <- DT::datatable(tbl, rownames = FALSE, filter = "top",
+        caption = sprintf(paste("The %d transcripts with an adjusted p-value",
+                                "below %.2f, lowest first.%s"),
+                          nshown, PADJ_CUT,
+                          if (truncated) sprintf(" The top %d are shown.",
+                                                 MAX_TABLE_ROWS) else ""),
+        options = list(pageLength = 10, scrollX = TRUE))
+DT::formatSignif(dt, "padj", digits = 3)
+```
+
+```{r dtu-h-overlap, eval=(have_dtu && dtu_ok), results="asis"}
+cat("\n## Usage change without expression change\n")
+```
+
+```{r dtu-overlap-none, eval=(have_dtu && dtu_ok && !(have_deseq2 || have_edger)), results="asis"}
+cat("\n*This comparison needs gene-level differential expression results.*\n")
+```
+
+```{r dtu-overlap-empty, eval=(have_dtu && dtu_ok && !dtu_sig_ok && (have_deseq2 || have_edger)), results="asis"}
+cat("\n*No gene passed the usage-change cutoff, so there is nothing to compare",
+    "with the expression calls.*\n")
+```
+
+```{r dtu-overlap, eval=(have_dtu && dtu_sig_ok && (have_deseq2 || have_edger))}
+# The reason this test is worth running at all. A gene whose isoform
+# proportions moved while its total expression held still is invisible
+# everywhere else in this report: the DE tables miss it by construction and the
+# enrichment sections read from the DESeq2 ranked list, so it never reaches
+# those either.
+de_ref <- if (have_deseq2) {
+  deseq2 %>% transmute(contrast, gene_id, de_sig = significant)
+} else {
+  edger %>% transmute(contrast, gene_id, de_sig = significant)
+}
+de_name        <- if (have_deseq2) "DESeq2" else "edgeR"
+de_ref$gene_id <- strip_ver(de_ref$gene_id)
+
+usage <- data.frame(gene_id = strip_ver(dtu_gene$gene[dtu_gene$significant]),
+                    stringsAsFactors = FALSE)
+
+# DEXSeq returns one q-value per gene across every condition at once, so the
+# same gene list is compared with each DE contrast in turn rather than joined
+# on a contrast both sides share.
+j <- bind_rows(lapply(unique(de_ref$contrast), function(cn) {
+  usage %>%
+    mutate(contrast = cn) %>%
+    left_join(de_ref[de_ref$contrast == cn, c("gene_id", "de_sig")],
+              by = "gene_id")
+}))
+
+tbl <- j %>%
+  group_by(Contrast = contrast) %>%
+  summarise(`Genes with a usage change`     = n(),
+            `Also differentially expressed` = sum(de_sig %in% TRUE),
+            `Usage only`                    = sum(!(de_sig %in% TRUE) & !is.na(de_sig)),
+            `Not in the DE table`           = sum(is.na(de_sig)),
+            .groups = "drop")
+
+knitr::kable(tbl, caption = sprintf(paste(
+  "Genes with a significant usage change, against the %s calls for each",
+  "contrast. The first column repeats because DEXSeq has no contrast dimension.",
+  "'Usage only' genes were tested for expression and did not change, which is",
+  "the case this test exists to find. 'Not in the DE table' means the gene",
+  "identifier did not match, a filtering or annotation difference rather than a",
+  "result."), de_name))
+```
+
+```{r dtu-h-figs, eval=(have_dtu && length(dtu_figs) > 0), results="asis"}
+cat("\n## Per-gene figures\n")
+```
+
+```{r dtu-figs, eval=(have_dtu && length(dtu_figs) > 0), out.width="90%"}
+knitr::include_graphics(dtu_shown)
+```
+
+```{r dtu-figs-caption, eval=(have_dtu && length(dtu_figs) > 0), results="asis"}
+cat("<p class='rf-note'>A bar per condition per transcript at that condition's",
+    "mean isoform fraction, every sample drawn as a point on top, and",
+    "transcripts at padj &lt; 0.05 starred in red. A gene with more than twelve",
+    "expressed transcripts shows the twelve largest plus every significant one",
+    "and sums the remainder into one <code>other (n)</code> bar, so the bars",
+    "still add to one. Showing", length(dtu_shown),
+    "of", length(dtu_figs), "published figures, ranked by q-value; the rest are",
+    "in <code>dtu_output/</code>, with <code>reproduce/dtu_plot.R</code> to",
+    "redraw any gene.</p>\n")
+```
+
+# Isoform switching
+
+IsoformSwitchAnalyzeR looks for genes where the dominant isoform changes between
+two conditions, which gene-level differential expression cannot see: the gene's
+total can be flat while one isoform replaces another. The published table is
+gene level, one row per gene per condition pair with a switch q-value. Which
+transcript took over, and by how much, is in the per-gene figures and in
+`isoform_switch_output/switchList_analyzed.rds`.
+
+The effect size behind those figures is `dIF`, the change in isoform fraction,
+computed as IF(`condition_2`) minus IF(`condition_1`). The pipeline puts the
+baseline in `condition_1`, so a positive `dIF` means the isoform takes a larger
+share of its gene's expression in the test condition: the same orientation as a
+positive log2 fold change above, and as a positive `IncLevelDifference`. It is a
+difference of proportions, bounded at plus or minus one, and cannot be read as a
+fold change.
+
+```{r isoform-note, results="asis"}
+if (!have_isoform) {
+  cat("\n*No isoform-switching results were produced. `--isoform_switch` runs",
+      "on Salmon only, needs `--transcript_fasta`, and is skipped below",
+      "analysis level 4 and by a `--counts` run.*\n")
+}
+```
+
+```{r isoform-load, eval=have_isoform, include=FALSE}
+isoform_tbl  <- read_result_csv(file.path(isoform_dir, "isoform_switches.csv"))
+isoform_figs  <- gallery(isoform_dir)
+isoform_shown <- gallery_head(isoform_figs, MAX_SECTION_FIGURES)
+
+# extractTopSwitches' own cutoffs, which isoform_switch.R passes and does not
+# vary, and the cap it applies. Named here because the counts below are a floor
+# rather than a total and the caption has to say so.
+SWITCH_ALPHA <- 0.05
+SWITCH_DIF   <- 0.1
+SWITCH_CAP   <- 50
+
+isoform_ok <- !is.null(isoform_tbl) &&
+  all(c("gene_id", "gene_switch_q_value", "condition_1", "condition_2") %in%
+      names(isoform_tbl))
+if (isoform_ok) {
+  isoform_tbl <- as_num(isoform_tbl, "gene_switch_q_value")
+  # condition_2 first, because dIF measures the change in condition_2 and the
+  # figure folders are named the same way round.
+  isoform_tbl$comparison <- paste0(isoform_tbl$condition_2, "_vs_",
+                                   isoform_tbl$condition_1)
+  # Falls back to the identifier where the annotation gave no symbol, the way
+  # the rMATS and DE tables label their genes.
+  isoform_tbl$gene <- if ("gene_name" %in% names(isoform_tbl)) {
+    ifelse(is.na(isoform_tbl$gene_name) | !nzchar(isoform_tbl$gene_name),
+           isoform_tbl$gene_id, isoform_tbl$gene_name)
+  } else {
+    isoform_tbl$gene_id
+  }
+  isoform_tbl <- isoform_tbl[order(isoform_tbl$gene_switch_q_value), ]
+}
+```
+
+```{r isoform-empty, eval=(have_isoform && !isoform_ok), results="asis"}
+# The cutoffs are read from the constants above rather than written out again,
+# so the sentence cannot drift from what the script applied.
+cat(paste0("\n*IsoformSwitchAnalyzeR ran and wrote its result file, and it ",
+           "holds no rows. Two things produce that, and the task log says ",
+           "which: no gene has two or more isoforms to compare, which is what ",
+           "an annotation with one transcript per gene gives (Ensembl R64-1-1, ",
+           "the yeast annotation the `examples/yeast/` dataset uses, has 7127 genes ",
+           "and 7127 transcripts); or genes were tested and none cleared the ",
+           "cutoffs, q &lt; ", SWITCH_ALPHA, " with |dIF| &gt; ", SWITCH_DIF,
+           ".*\n"))
+```
+
+```{r isoform-h-counts, eval=(have_isoform && isoform_ok), results="asis"}
+cat("\n## Switching genes per comparison\n")
+```
+
+```{r isoform-summary, eval=(have_isoform && isoform_ok)}
+isoform_tbl %>%
+  group_by(Comparison = comparison) %>%
+  summarise(`Switching genes` = n(),
+            `Lowest q-value`  = ifelse(all(is.na(gene_switch_q_value)), NA_real_,
+                                       signif(min(gene_switch_q_value,
+                                                  na.rm = TRUE), 3)),
+            .groups = "drop") %>%
+  knitr::kable(caption = sprintf(paste(
+    "Genes whose dominant isoform changed, at q &lt; %g and |dIF| &gt; %g.",
+    "The published table is capped at the top %d genes across all comparisons,",
+    "so these counts are a floor rather than the number of switching genes;",
+    "<code>switchList_analyzed.rds</code> carries every gene that was tested."),
+    SWITCH_ALPHA, SWITCH_DIF, SWITCH_CAP))
+```
+
+```{r isoform-h-table, eval=(have_isoform && isoform_ok), results="asis"}
+cat("\n## Results table\n")
+```
+
+```{r isoform-table, eval=(have_isoform && isoform_ok)}
+tbl <- isoform_tbl %>%
+  select(any_of(c(Comparison      = "comparison",
+                  Gene            = "gene",
+                  `Gene ID`       = "gene_id",
+                  Baseline        = "condition_1",
+                  Condition       = "condition_2",
+                  `Switch q-value` = "gene_switch_q_value")))
+
+dt <- DT::datatable(tbl, rownames = FALSE, filter = "top",
+        caption = paste("One row per gene per condition pair. A gene that",
+                        "switched in several pairs appears once for each, so",
+                        "the same Gene ID can repeat with different Baseline",
+                        "and Condition values."),
+        options = list(pageLength = 10, scrollX = TRUE))
+DT::formatSignif(dt, "Switch q-value", digits = 3)
+```
+
+```{r isoform-h-agree, eval=(have_isoform && isoform_ok), results="asis"}
+cat("\n## Agreement with the DEXSeq usage test\n")
+```
+
+```{r isoform-agree-none, eval=(have_isoform && isoform_ok && !dtu_ok), results="asis"}
+cat("\n*This comparison needs `--dtu` results from the same run.*\n")
+```
+
+```{r isoform-agree, eval=(have_isoform && isoform_ok && dtu_ok)}
+# The two tests ask the same question from opposite ends, so a gene in both is
+# the strongest statement this report can make about transcript usage.
+dtu_called <- data.frame(gene_id = strip_ver(dtu_gene$gene),
+                         dtu_sig = dtu_gene$significant,
+                         stringsAsFactors = FALSE)
+# One row per gene before the join, keeping the called copy where a stripped
+# identifier collapses two rows into one. A duplicate here would inflate every
+# count below rather than fail.
+dtu_called <- dtu_called[order(!dtu_called$dtu_sig), ]
+dtu_called <- dtu_called[!duplicated(dtu_called$gene_id), ]
+
+sw <- isoform_tbl %>%
+  transmute(comparison, gene_id = strip_ver(gene_id)) %>%
+  distinct()
+
+tbl <- sw %>%
+  left_join(dtu_called, by = "gene_id") %>%
+  group_by(Comparison = comparison) %>%
+  summarise(`Switching genes`               = n(),
+            `Also called by DEXSeq`         = sum(dtu_sig %in% TRUE),
+            `Tested by DEXSeq, not called`  = sum(!(dtu_sig %in% TRUE) & !is.na(dtu_sig)),
+            `Not in the DEXSeq table`       = sum(is.na(dtu_sig)),
+            .groups = "drop")
+
+knitr::kable(tbl, caption = paste(
+  "Switching genes against the DEXSeq usage test on the same run. DEXSeq is the",
+  "formal test of transcript proportions and returns one q-value per gene;",
+  "IsoformSwitchAnalyzeR reports per condition pair and names the isoform that",
+  "took over. Gene identifiers are matched with any version suffix removed,",
+  "because the two tables carry them differently. 'Not in the DEXSeq table'",
+  "means the gene was never tested there: the two steps filter on expression",
+  "independently."))
+```
+
+```{r isoform-h-figs, eval=(have_isoform && length(isoform_figs) > 0), results="asis"}
+cat("\n## Switch plots\n")
+```
+
+```{r isoform-figs, eval=(have_isoform && length(isoform_figs) > 0), out.width="90%"}
+knitr::include_graphics(isoform_shown)
+```
+
+```{r isoform-figs-caption, eval=(have_isoform && length(isoform_figs) > 0), results="asis"}
+cat("<p class='rf-note'>Four panels per gene: the transcript structures, gene",
+    "expression, isoform expression and isoform usage. Showing",
+    length(isoform_shown), "of",
+    length(isoform_figs), "published figures, ranked by switch q-value within",
+    "each comparison; the rest are in <code>isoform_switch_output/</code>, with",
+    "<code>reproduce/switch_plot.R</code> to redraw any gene.</p>\n")
 ```
 
 # Functional enrichment
@@ -2276,13 +3147,15 @@ cat("Where this run wrote everything, relative to its results directory.",
 
 ```{r files-table, results="asis"}
 # An index of where this run wrote its outputs, built from the route the run
-# actually took: a pseudo-aligner has no BAMs to index or coverage to plot, a
-# --counts run has no reads to QC, and optional analyses appear only when they
-# were requested.
+# actually took: a pseudo-aligner has no BAMs to index or coverage to plot and a
+# --counts run has no reads to QC.
 #
-# These are locations, not a presence check. The report is given only its own
-# inputs, so it cannot see most of these directories -- listing a path is
-# useful regardless, and a directory that is missing is informative in itself.
+# Most of these are locations rather than a presence check. The report is given
+# only its own inputs, so it cannot see the alignment or QC directories at all,
+# and listing a path is useful regardless: a directory that is missing is
+# informative in itself. The rows that are staged into this report (the result
+# directories the sections above read) are an exception and are listed from
+# their own presence, so those rows do state what the run produced.
 aligner   <- mf("analysis", "aligner")
 bam_route <- !is.na(aligner) && aligner %in% c("star", "hisat2")
 tx_route  <- !is.na(aligner) && aligner %in% c("salmon", "kallisto")
@@ -2346,13 +3219,32 @@ if (bam_route) {
       "BigWig tracks for a genome browser", "bam_to_bigwig/")
 }
 
-for (o in optional) {
-  d <- if (grepl("splicing", o))        "diffsplice_output/"
-       else if (grepl("transcript usage", o)) "dtu_output/"
-       else if (grepl("isoform", o))    "isoform_switch_output/"
-       else if (grepl("fusion", o))     "star_fusion/"
-       else NA_character_
-  if (!is.na(d)) add("Optional analyses", o, "Requested for this run", d)
+# Fusion calling is the one optional analysis whose output is not staged into
+# this report, so the manifest is still the only evidence it was asked for. The
+# other three are staged, so they are listed from their directories below
+# instead: read from the manifest they appeared as "requested for this run"
+# even on the routes where they cannot run at all, which is the kind of row
+# that reads as a result.
+for (o in optional[grepl("fusion", optional)]) {
+  add("Optional analyses", o, "Requested for this run", "star_fusion/")
+}
+if (have_diffsplice) {
+  add("Optional analyses", "edgeR diffSplice",
+      paste0("Per-", ds_level, " usage against each gene's own fold change, ",
+             "the per-gene figures, and a reproduce/ folder"),
+      "diffsplice_output/")
+}
+if (have_dtu) {
+  add("Optional analyses", "DEXSeq transcript usage",
+      paste("Per-gene q-values, the per-transcript test, the usage figures,",
+            "and a reproduce/ folder"),
+      "dtu_output/")
+}
+if (have_isoform) {
+  add("Optional analyses", "IsoformSwitchAnalyzeR",
+      paste("Switching genes, the switch plots, the whole analysis object as",
+            "switchList_analyzed.rds, and a reproduce/ folder"),
+      "isoform_switch_output/")
 }
 if (have_rmats) {
   # No longer hedged with "when the run included it": rmats_output/ is staged

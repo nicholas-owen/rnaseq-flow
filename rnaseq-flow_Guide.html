@@ -1483,7 +1483,7 @@ treat_2,treatment</code></pre></div>
 
   <h3 id="yeast">Yeast in an afternoon <a class="anchor" href="#yeast">#</a></h3>
 
-  <p>The example in <code>example/</code> uses BioProject
+  <p>The example in <code>examples/yeast/</code> uses BioProject
      <a href="https://www.ebi.ac.uk/ena/browser/view/PRJDB13901" target="_blank" rel="noopener">PRJDB13901</a>:
      BY4741 yeast carrying an empty vector, grown in YPD or in NaCl. Two
      conditions, three replicates each.</p>
@@ -1502,8 +1502,8 @@ treat_2,treatment</code></pre></div>
      the whole pipeline runs on a laptop or a memory-limited WSL instance. A
      splice-aware HISAT2 index for human needs roughly 204 GB.</p>
 
-  <div class="codeblock"><pre><code>example/fetch_yeast_test_data.sh                    <span class="cmt"># test_data/, 1M read pairs</span>
-example/fetch_yeast_test_data.sh test_data 250000   <span class="cmt"># smaller and faster</span></code></pre></div>
+  <div class="codeblock"><pre><code>examples/yeast/fetch_yeast_test_data.sh                    <span class="cmt"># test_data/, 1M read pairs</span>
+examples/yeast/fetch_yeast_test_data.sh test_data 250000   <span class="cmt"># smaller and faster</span></code></pre></div>
 
   <p>The script resolves FASTQ URLs from the ENA API rather than hard-coding
      them, uses <code>seqtk</code> for a seeded random subsample where it is
@@ -1724,9 +1724,12 @@ nextflow run main.nf \
 │   └── reproduce/
 ├── rmats_output/       Alternative splicing events, one subdirectory per contrast
 ├── star_fusion/        Gene-fusion predictions
-├── isoform_switch/     Isoform-switching analysis
+├── isoform_switch_output/  Isoform switching, figures per contrast subdirectory
+│   └── reproduce/
 ├── dtu_output/         Differential transcript usage (DEXSeq)
-├── diffsplice_output/  Differential splicing (edgeR diffSpliceDGE)
+│   └── reproduce/
+├── diffsplice_output/  Differential splicing (edgeR diffSpliceDGE), figures per contrast
+│   └── reproduce/
 ├── multiqc/            Aggregated MultiQC report
 ├── quarto_report/      Interactive Quarto analysis report
 ├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
@@ -1969,11 +1972,52 @@ nextflow run main.nf \
      <code>diffsplice_gene_results.csv</code> with <code>FDR &lt; 0.05</code>,
      then the per-feature table.</p>
 
-  <h4><code>isoform_switch/</code></h4>
+  <p>Both draw their ten most significant genes as PNG and SVG, and both carry a
+     <code>reproduce/</code> folder. DTU writes them beside its tables as
+     <code>&lt;rank&gt;_dtu_plot_&lt;gene&gt;_aka_&lt;gene_name&gt;</code>: a bar
+     per condition per transcript at that condition's mean isoform fraction, every
+     sample drawn as a point on top, and transcripts at
+     <code>padj &lt; 0.05</code> starred in red. diffSplice puts its
+     <code>plotSpliceDGE</code> figures in a
+     <code>&lt;condition&gt;_vs_REF/</code> subdirectory per contrast, each
+     showing every feature's log fold change against the gene's own, with
+     features at <code>FDR &lt; 0.05</code> marked in red and sized by how far
+     below.</p>
+
+  <h4><code>isoform_switch_output/</code></h4>
   <p>A switch is a gene where the dominant transcript isoform changes between
      conditions even if total gene expression does not: biologically important and
      invisible to gene-level DE. Sort <code>isoform_switches.csv</code> by
-     q-value.</p>
+     <code>gene_switch_q_value</code>; it holds the top 50.
+     <code>switchList_analyzed.rds</code> holds the whole
+     <code>switchAnalyzeRlist</code>, for consequence prediction, ORF analysis or
+     plotting other genes.</p>
+
+  <p>Figures go in one <code>&lt;condition&gt;_vs_REF/</code> subdirectory per
+     condition pair, ten per pair as PNG and SVG, ranked from 1 and zero-padded so
+     the folder sorts by significance:
+     <code>01_switch_plot_ENSG00000168710_aka_AHCYL1.svg</code> and so on. Each
+     shows isoform usage, isoform expression, gene expression and transcript
+     structure for one gene. A <code>reproduce/</code> folder redraws any of
+     them.</p>
+
+  <p>The effect size is <code>dIF</code>, the change in isoform fraction,
+     computed as IF(<code>condition_2</code>) minus IF(<code>condition_1</code>).
+     The baseline goes in <code>condition_1</code>, so in
+     <code>TGFb_vs_REF</code> a positive <code>dIF</code> means that isoform takes
+     a larger share of its gene's expression in TGFb: the same direction a positive
+     <code>log2FoldChange</code> means in the DE tables beside it.</p>
+
+  <div class="box warn">
+    <span class="t">The three tables do not join on <code>gene_id</code></span>
+    <p><code>isoform_switches.csv</code> carries versioned gene IDs
+       (<code>ENSG00000168710.20</code>), because IsoformSwitchAnalyzeR keeps the
+       Ensembl version on <code>gene_id</code> while <code>dtu_output/</code> and
+       <code>diffsplice_output/</code> read it bare from the GTF. Joining the
+       three on <code>gene_id</code> matches nothing. The figure names and
+       <code>reproduce/switch_plot_genes.csv.gz</code> use the bare form, and that
+       table carries both.</p>
+  </div>
 
   <div class="box note">
     <span class="t">Three independent views of splicing</span>
@@ -2022,6 +2066,16 @@ nextflow run main.nf \
      whose splicing changed while their total expression did not, which the DE
      tables miss by construction.</p>
 
+  <p>Three further sections render when their analysis ran: Differential
+     transcript usage for <code>--dtu</code>, Differential splicing for
+     <code>--diffsplice</code> at whichever level the aligner produced, and
+     Isoform switching for <code>--isoform_switch</code>. Each gives the
+     significant genes, a searchable table and that analysis's per-gene figures
+     embedded inline. All three can run, succeed and legitimately produce nothing,
+     so each says so in words rather than showing an empty table. The yeast
+     example does exactly that: Ensembl R64-1-1 has 7127 genes and 7127
+     transcripts, so no gene has the two or more isoforms these tests need.</p>
+
   <h3 id="out-meta">Execution metadata <a class="anchor" href="#out-meta">#</a></h3>
 
   <div class="tablewrap">
@@ -2045,10 +2099,12 @@ nextflow run main.nf \
   <p>Every figure can be redrawn, and adapted, from the results directory alone:
      no rerunning, no access to the original compute, no digging through
      <code>work/</code>. Each of <code>deseq2_output/</code>,
-     <code>edger_output/</code>, <code>gsea_output/</code> and
-     <code>gprofiler_output/</code> carries a <code>reproduce/</code> subfolder
-     with a standalone R script per figure type, gzipped copies of the tables
-     behind each figure, and only the R objects a plot genuinely needs.</p>
+     <code>edger_output/</code>, <code>gsea_output/</code>,
+     <code>gprofiler_output/</code>, <code>isoform_switch_output/</code>,
+     <code>dtu_output/</code> and <code>diffsplice_output/</code> carries a
+     <code>reproduce/</code> subfolder with a standalone R script per figure type,
+     gzipped copies of the tables behind each figure, and only the R objects a
+     plot genuinely needs.</p>
 
   <p>The split is that the parent folder is for reading and
      <code>reproduce/</code> is for running. Parent CSVs stay uncompressed so they
@@ -2074,9 +2130,9 @@ OUTPUT_PREFIX &lt;- <span class="str">"repro_"</span></code></pre></div>
      <code>.info.txt</code> recording the settings used, the environment that
      produced them and where they came from, so a regenerated figure is never
      mistaken for the pipeline's own once it leaves the folder.
-     <code>isoform_switch/</code> is outside these conventions:
-     IsoformSwitchAnalyzeR writes its own figures, so they are PNG-only with no
-     <code>reproduce/</code> folder.</p>
+     <code>rmats_output/</code> and <code>star_fusion/</code> have no
+     <code>reproduce/</code> folder, because neither step produces a figure: rMATS
+     and STAR-Fusion emit tables only.</p>
 
   <h3 id="checklist">Interpretation checklist <a class="anchor" href="#checklist">#</a></h3>
 
@@ -2103,7 +2159,9 @@ OUTPUT_PREFIX &lt;- <span class="str">"repro_"</span></code></pre></div>
       <tr><td><a href="README.md">README.md</a></td><td>Overview, feature table, parameter reference</td></tr>
       <tr><td><a href="USAGE.md">USAGE.md</a></td><td>Detailed run instructions, worked scenarios, cluster notes, troubleshooting</td></tr>
       <tr><td><a href="OUTPUTS.md">OUTPUTS.md</a></td><td>Every output directory and how to interpret each file</td></tr>
-      <tr><td><a href="example/README.md">example/README.md</a></td><td>The runnable yeast example for all four aligners</td></tr>
+      <tr><td><a href="examples/README.md">examples/README.md</a></td><td>Index of the worked examples: which one answers which question</td></tr>
+      <tr><td><a href="examples/yeast/README.md">examples/yeast/README.md</a></td><td>The runnable yeast example for all four aligners</td></tr>
+      <tr><td><a href="examples/human/README.md">examples/human/README.md</a></td><td>Human isoform-level example: --dtu, --diffsplice and --isoform_switch against a published splicing signature</td></tr>
       <tr><td><a href="rnaseq-flow_Example_Analysis.md">rnaseq-flow_Example_Analysis.md</a></td><td>End-to-end worked example on GSE151251 with an expected signature</td></tr>
       <tr><td><a href="rnaseq-flow_User_Guide.docx">rnaseq-flow_User_Guide.docx</a></td><td>The whole guide as a formatted Word document</td></tr>
       <tr><td><a href="overview.html">overview.html</a></td><td>Interactive workflow diagram: DAG and metro-map views</td></tr>

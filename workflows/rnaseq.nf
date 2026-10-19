@@ -670,11 +670,14 @@ workflow RNASEQ {
     // Result directories fed to the Quarto analysis report. Each defaults to an
     // empty list and is reassigned to the real channel if that stage runs, so
     // the report renders whichever sections have data.
-    ch_quarto_deseq2    = channel.value([])
-    ch_quarto_edger     = channel.value([])
-    ch_quarto_gsea      = channel.value([])
-    ch_quarto_gprofiler = channel.value([])
-    ch_quarto_rmats     = channel.value([])
+    ch_quarto_deseq2     = channel.value([])
+    ch_quarto_edger      = channel.value([])
+    ch_quarto_gsea       = channel.value([])
+    ch_quarto_gprofiler  = channel.value([])
+    ch_quarto_rmats      = channel.value([])
+    ch_quarto_dtu        = channel.value([])
+    ch_quarto_diffsplice = channel.value([])
+    ch_quarto_isoform    = channel.value([])
 
     // Count-matrix entry: when --counts is set the pipeline skips QC and
     // alignment entirely and enters at differential expression (Level 3),
@@ -762,6 +765,7 @@ workflow RNASEQ {
                     file("${projectDir}/assets/isoform_switch.R")
                 )
                 ch_versions = ch_versions.mix(ISOFORM_SWITCH.out.versions)
+                ch_quarto_isoform = ISOFORM_SWITCH.out.results
             }
         }
         else if (params.aligner == 'kallisto') {
@@ -916,6 +920,11 @@ workflow RNASEQ {
                         file("${projectDir}/assets/diffsplice_edger.R")
                     )
                     ch_versions = ch_versions.mix(DIFFSPLICE.out.versions)
+                    // Assigned in both DIFFSPLICE branches. They are mutually
+                    // exclusive at run time (a run has one aligner), so only
+                    // one ever executes, but leaving either out would drop the
+                    // section from the report on that route.
+                    ch_quarto_diffsplice = DIFFSPLICE.out.results
                 } else {
                     def msg = "--diffsplice needs --gtf for exon-level counting; skipping."
                     log.warn msg
@@ -946,6 +955,7 @@ workflow RNASEQ {
                         file("${projectDir}/assets/dtu_dexseq.R")
                     )
                     ch_versions = ch_versions.mix(DTU.out.versions)
+                    ch_quarto_dtu = DTU.out.results
                 }
 
                 // Optional: edgeR diffSplice transcript-usage test.
@@ -959,6 +969,7 @@ workflow RNASEQ {
                         file("${projectDir}/assets/diffsplice_edger.R")
                     )
                     ch_versions = ch_versions.mix(DIFFSPLICE.out.versions)
+                    ch_quarto_diffsplice = DIFFSPLICE.out.results
                 }
             } else {
                 def msg = "Differential expression for --aligner ${params.aligner} needs --gtf " +
@@ -1081,7 +1092,10 @@ workflow RNASEQ {
         ch_quarto_edger,
         ch_quarto_gsea,
         ch_quarto_gprofiler,
-        ch_quarto_rmats
+        ch_quarto_rmats,
+        ch_quarto_dtu,
+        ch_quarto_diffsplice,
+        ch_quarto_isoform
     )
     // Single unnamed emit (the strict parser wants the name omitted when there
     // is only one): the accumulated version channel, plus the reporting steps'.

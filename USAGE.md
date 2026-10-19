@@ -395,6 +395,14 @@ nextflow run main.nf \
 > diffSplice are skipped (no transcript-to-gene map can be built). Every
 > DE / DTU / diffSplice result table carries `gene_name` and `gene_biotype`
 > columns parsed from the GTF, so the outputs are readable at a glance.
+>
+> All three get their own section in `quarto_report/analysis_report.html`, with
+> the counts, a searchable table, the per-gene figures and a cross-reference
+> against the gene-level DE calls, so nothing here is findable only by opening
+> the CSVs. Each test needs a gene with two or more
+> features of the kind the run quantified, and where the annotation has none
+> they write empty files: the report says so rather than showing a blank table.
+> See [OUTPUTS.md §16](OUTPUTS.md) for what each section holds.
 
 **Scenario C: standard HISAT2 run:**
 
