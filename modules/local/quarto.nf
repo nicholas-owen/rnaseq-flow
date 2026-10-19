@@ -49,6 +49,19 @@ process QUARTO_REPORT {
     // a `path` input takes the directory as it stands, and the .qmd selects
     // what it needs by name.
     path rmats_dir
+    // The three optional isoform-level analyses, each [] when it did not run.
+    // Staged whole like rmats_output/: each holds result CSVs, per-gene figures
+    // and a reproduce/ folder, and the .qmd reads what it needs by name.
+    //
+    // All three can run and legitimately produce nothing. DTU needs a gene with
+    // two or more annotated isoforms, and an annotation that has none at all
+    // (Ensembl R64-1-1 yeast: 7127 genes, 7127 transcripts) makes the scripts
+    // write header-only CSVs and exit 0. So an empty directory here is a
+    // result, not a failure, and the report says so rather than showing a blank
+    // table.
+    path dtu_dir          // dtu_output/
+    path diffsplice_dir   // diffsplice_output/
+    path isoform_dir      // isoform_switch_output/
 
     output:
     path "analysis_report.html", emit: html
@@ -80,8 +93,9 @@ process QUARTO_REPORT {
     export XDG_CACHE_HOME="\$PWD/.cache"
 
     # Render the analysis report. The .qmd discovers multiqc_data.json and the
-    # deseq2/edger/gsea/gprofiler/rmats result directories staged alongside it,
-    # and renders whichever sections it finds data for.
+    # deseq2/edger/gsea/gprofiler/rmats/dtu/diffsplice/isoform_switch result
+    # directories staged alongside it, and renders whichever sections it finds
+    # data for.
     quarto render ${qmd_template} --output analysis_report.html
 
     cat <<-END_VERSIONS > versions.yml

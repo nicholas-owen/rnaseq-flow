@@ -40,9 +40,12 @@ results/
 │   └── reproduce/
 ├── rmats_output/       Alternative splicing events, one subdirectory per contrast
 ├── star_fusion/        Gene-fusion predictions
-├── isoform_switch/     Isoform-switching analysis
+├── isoform_switch_output/  Isoform switching, one subdirectory per contrast
+│   └── reproduce/
 ├── dtu_output/         Differential transcript usage (DEXSeq)
+│   └── reproduce/
 ├── diffsplice_output/  Differential splicing (edgeR diffSpliceDGE)
+│   └── reproduce/
 ├── multiqc/            Aggregated MultiQC report (rnaseq-flow_multiqc_report.html)
 ├── quarto_report/      Interactive Quarto analysis report
 ├── pipeline_info/      Run manifest, software versions, run summary, Nextflow trace
@@ -433,17 +436,59 @@ and, ideally, orthogonal evidence.
 
 ---
 
-## 13. Isoform switching: `isoform_switch/`
+## 13. Isoform switching: `isoform_switch_output/`
+
+Produced when `--isoform_switch` is set (Salmon only, and it needs
+`--transcript_fasta`). A switch is a gene where the *dominant* transcript
+isoform changes between conditions even if total gene expression does not:
+biologically important and invisible to gene-level DE.
 
 | File | Contents |
 |---|---|
-| `isoform_switches.csv` | Top genes with significant isoform switches |
-| `switch_plot_<gene>.png` | Per-gene isoform usage across conditions |
-| `switchList_analyzed.rds` | The full R object for custom downstream analysis |
+| `isoform_switches.csv` | The top 50 switching genes: `gene_ref`, `gene_id`, `gene_name`, `condition_1`, `condition_2`, `gene_switch_q_value`, `Rank` |
+| `<condition>_vs_REF/` | One subdirectory per condition pair, holding that pair's figures |
+| `<condition>_vs_REF/<rank>_switch_plot_<gene_id>_aka_<gene_name>.png` and `.svg` | Isoform usage, isoform expression, gene expression and transcript structure for one gene, e.g. `01_switch_plot_ENSG00000168710_aka_AHCYL1.svg`. The ten lowest q-values in that pair, ranked from 1 and zero-padded so the folder sorts by significance. `_aka_<gene_name>` is dropped where the annotation gives no symbol |
+| `switchList_analyzed.rds` | The whole `switchAnalyzeRlist`, for consequence prediction, ORF analysis or plotting other genes |
+| `reproduce/` | Redraws any published figure (§18) |
 
-A switch is a gene where the *dominant* transcript isoform changes between
-conditions even if total gene expression does not: biologically important and
-invisible to gene-level DE. Sort `isoform_switches.csv` by q-value.
+Sort `isoform_switches.csv` by `gene_switch_q_value`. A gene appears once per
+condition pair it switched in, so with three or more conditions the same
+`gene_id` can appear several times with different `condition_1`/`condition_2`.
+
+> **`isoform_switches.csv` carries versioned gene IDs** (`ENSG00000168710.20`),
+> because IsoformSwitchAnalyzeR keeps the Ensembl version on `gene_id` while
+> `dtu_output/` and `diffsplice_output/` read it bare from the GTF. Joining the
+> three tables on `gene_id` therefore matches nothing. The figure names and
+> `reproduce/switch_plot_genes.csv.gz` use the bare form for exactly that
+> reason, and that table carries both: `gene_id` bare, `gene_id_versioned` as
+> the analysis holds it.
+
+**Reading the direction.** The effect size is `dIF`, the change in isoform
+fraction, and IsoformSwitchAnalyzeR computes it as IF(`condition_2`) −
+IF(`condition_1`). The pipeline puts the baseline in `condition_1`, so in
+`TGFb_vs_REF` a positive `dIF` means that isoform takes a **larger share of its
+gene's expression in TGFb** than in REF: the same direction a positive
+`log2FoldChange` means in `deseq2_output/deseq2_results_TGFb_vs_REF.csv`, and
+the same direction as a positive `IncLevelDifference` in
+`rmats_output/TGFb_vs_REF/`. `dIF` is a difference of proportions, bounded at
+±1, and is not a fold change.
+
+The baseline is `--reference_level` (default `REF`). Pairs that do not involve
+it are oriented the same way `rmats_output/` orients them, so `A_vs_B` means
+the same thing in both directories.
+
+> **New after v1.7.0, and one caveat.** No released version of the pipeline
+> ever wrote a switch plot: the plotting call named an argument `switchPlot()`
+> does not take, so it threw on every gene and left the directory empty. If you
+> have figures in `REF_vs_<condition>` folders, they came from a development
+> build between that fix and this one, which let IsoformSwitchAnalyzeR name the
+> folders and so put `condition_1` first. `dIF` was correct there too. Only the
+> folder name was backwards, which is the awkward case: it read as though a
+> positive `dIF` meant higher usage in `REF`, when it never did. File names
+> inside the folder are unchanged, so renaming the folder is the whole fix.
+
+A gene that fails to draw is named in the task log and leaves no file behind,
+so every figure present is complete.
 
 ---
 
@@ -455,7 +500,7 @@ can be significant here even when its total expression (gene-level DE) is flat.
 
 > **Both files can legitimately come back empty.** DTU is only defined for genes
 > annotated with two or more transcripts, and some annotations have none at all:
-> the Ensembl R64-1-1 yeast GTF used by the `example/` dataset has 7127 genes and
+> the Ensembl R64-1-1 yeast GTF used by the `examples/yeast/` dataset has 7127 genes and
 > 7127 transcripts, one each, so nothing is testable and the step writes empty
 > files and exits cleanly. The process log says "No multi-transcript genes passed
 > filtering". Check the transcripts-per-gene distribution of your annotation
@@ -465,10 +510,30 @@ can be significant here even when its total expression (gene-level DE) is flat.
 |---|---|
 | `dtu_transcript_results.csv` | Per-transcript test: `groupID` (gene), `gene_name`, `gene_biotype`, `featureID` (transcript), `exonBaseMean`, `dispersion`, `stat`, `pvalue`, `padj` |
 | `dtu_gene_qvalues.csv` | Per-gene q-value: `gene`, `gene_name`, `gene_biotype`, `gene_qvalue` (`perGeneQValue`, aggregating the gene's transcripts) |
+| `<rank>_dtu_plot_<gene>_aka_<gene_name>.png` and `.svg` | Isoform usage for one gene: a bar per condition per transcript at that condition's mean isoform fraction, every sample drawn as a point on top, and transcripts at `padj < 0.05` starred in red. The ten lowest `gene_qvalue` |
+| `reproduce/` | Redraws any published figure (§18) |
 
 Use `dtu_gene_qvalues.csv` (`gene_qvalue < 0.05`) to call genes with significant
 usage changes, then `dtu_transcript_results.csv` to see which transcripts of
-that gene drive the switch. Only multi-transcript, expressed genes are tested.
+that gene drive the switch, or read the same thing off that gene's figure. Only
+multi-transcript, expressed genes are tested.
+
+**Reading the figure.** The y-axis is isoform fraction, each transcript's share
+of its own gene within one sample, which is the quantity this test is about: a
+gene can hold its total expression flat while these proportions move. Bars are
+condition means and the points are individual samples, so replicate spread is
+visible rather than implied. Transcripts are ordered by usage, baseline
+condition on the left of each group. A gene with more than twelve expressed
+transcripts shows the twelve largest plus every significant one, and sums the
+remainder into a single `other (n)` bar, so the bars still add to one.
+
+> **The figures are not drawn by `plotDEXSeq`.** DEXSeq's own plot is built for
+> exon bins laid out on genomic coordinates and draws a gene model keyed to
+> them. This test re-purposes DEXSeq by treating each whole transcript as a
+> feature, and transcript spans overlap into a single block with no left-to-
+> right order, so that panel carries no information here. It also plots fitted
+> counts on a log axis rather than proportions. The figure above shows the
+> proportions directly instead.
 
 > Complementary to §13: IsoformSwitchAnalyzeR highlights *which* switch and its
 > functional consequence; DEXSeq DTU is the formal statistical test of
@@ -487,12 +552,24 @@ gene's overall log-fold-change, i.e. differential *usage*. The feature is an
 |---|---|
 | `diffsplice_exon_results.csv` *or* `diffsplice_transcript_results.csv` | Per-feature test: `GeneID`, `gene_name`, `gene_biotype`, `FeatureID`, `logFC`, an exon-level statistic, `P.Value`, `FDR`, `comparison` |
 | `diffsplice_gene_results.csv` | Per-gene test (Simes' method across a gene's features): `GeneID`, `gene_name`, `gene_biotype`, `NExons`, `P.Value`, `FDR`, `comparison` |
+| `<condition>_vs_REF/<rank>_splice_plot_<GeneID>_aka_<gene_name>.png` and `.svg` | `plotSpliceDGE` for one gene: every feature's log-fold-change against the gene's own, features at `FDR < 0.05` marked in red and sized by how far below. The ten lowest gene-level FDRs in that contrast |
+| `reproduce/` | Redraws any published figure (§18) |
 
 Use `diffsplice_gene_results.csv` (`FDR < 0.05`) to find genes with a splicing
-change, then the per-feature table to see which exon/transcript drives it. The
-`comparison` column names the condition contrast. Only multi-feature genes are
-tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
+change, then the per-feature table to see which exon/transcript drives it, or
+read the same thing off that gene's figure. The `comparison` column holds the
+condition name, and the contrast is always that condition against the baseline,
+which is the figure folder's full name. Only multi-feature genes are tested.
+For STAR/HISAT2, the per-exon counts feeding this test are also kept in
 `featurecounts_exon/<sample>.exon.featureCounts.txt` (`featureCounts -f`).
+
+**Reading the figure.** The y-axis is each feature's log-fold-change *relative
+to its gene's overall log-fold-change*, so a flat line at zero means the gene
+changed as a whole and nothing within it shifted. A feature pulled away from
+zero is one whose usage moved, which is what the test calls differential
+splicing. Features are plotted in gene order along the x-axis, labelled by
+`FeatureID`: exon coordinates for STAR/HISAT2, transcript IDs for
+Salmon/Kallisto.
 
 > Complementary to §11 (rMATS) and §14 (DEXSeq DTU): rMATS classifies splicing
 > *events*, DEXSeq DTU tests transcript proportions, and edgeR diffSplice tests
@@ -538,6 +615,29 @@ tested. For STAR/HISAT2, the per-exon counts feeding this test are also kept in
   not show are stated above the results: rMATS runs without `--libType`, so a
   stranded run is flagged, and a design with fewer than three replicates per
   group is flagged as well.
+
+  Three more sections follow it, one per optional isoform-level analysis, each
+  reading its own result directory the same way. **Differential splicing** (§15)
+  gives genes and features tested per contrast, a feature-level volcano of every
+  tested feature's log-fold-change relative to its gene, a searchable gene-level
+  table, and the `plotSpliceDGE` figures. **Differential transcript usage** (§14)
+  gives the gene and transcript counts, an interactive isoform-usage panel drawn
+  from `dtu_output/reproduce/dtu_plot_data.csv.gz` with every sample as a point,
+  both result tables, the usage figures, and a count of the genes whose isoform
+  proportions moved while their total expression did not. **Isoform switching**
+  (§13) gives switching genes per comparison, the switch table, the switch
+  plots, and how far the switches agree with the DEXSeq usage test on the same
+  run. Each gallery embeds at most six figures, spread across the contrasts
+  rather than taken off the front of one, and names the directory holding the
+  rest: `embed-resources` inlines every image, so a full gallery of all three
+  would add tens of MB.
+
+  All three can run, succeed and produce nothing, and the report says which
+  happened rather than showing an empty table. On the `examples/yeast/` dataset
+  DTU and isoform switching legitimately write empty files, for the reason given
+  in §14: Ensembl R64-1-1 has 7127 genes and 7127 transcripts, so no gene has
+  the two or more isoforms either test needs. The same applies to diffSplice on
+  a pseudo-aligner route, where the feature is the transcript.
 
 ---
 
@@ -623,10 +723,10 @@ the references.
 Every figure the pipeline publishes can be redrawn, and adapted, from the
 results directory alone: no rerunning, no access to the original compute, no
 digging through `work/`. Each of `deseq2_output/`, `edger_output/`,
-`gsea_output/` and `gprofiler_output/` carries a `reproduce/` subfolder holding
-a standalone R script per figure type, gzipped copies of the tables behind each
-figure, and the R objects a plot genuinely needs, always the smallest that will
-do.
+`gsea_output/`, `gprofiler_output/`, `isoform_switch_output/`, `dtu_output/`
+and `diffsplice_output/` carries a `reproduce/` subfolder holding a standalone
+R script per figure type, gzipped copies of the tables behind each figure, and
+the R objects a plot genuinely needs, always the smallest that will do.
 
 The split is that the parent folder is for reading and `reproduce/` is for
 running. Parent CSVs stay uncompressed so they open by double-click; the
@@ -667,14 +767,71 @@ gprofiler_output/reproduce/
 ├── gprofiler_DOWN_<A>_vs_<B>.csv.gz
 ├── gprofiler_UP_<A>_vs_<B>.rds             the full gost result objects, which gostplot needs
 └── gprofiler_DOWN_<A>_vs_<B>.rds
+
+isoform_switch_output/reproduce/
+├── switch_plot.R                           redraws one gene's switch plot from the .rds
+├── switch_plots.rds                        the plotted genes, cut to the slots switchPlot reads
+├── switch_plot_genes.csv.gz                one row per published figure: gene (bare and versioned), comparison, rank, file name
+└── isoform_switches.csv.gz                 the results table, gzipped
+
+diffsplice_output/reproduce/
+├── splice_plot.R                           redraws one gene's splice plot from the .rds
+├── diffsplice_<A>_vs_<B>.rds               the diffSpliceDGE result, which plotSpliceDGE walks
+├── splice_plot_genes.csv.gz                one row per published figure: gene, comparison, rank, file name
+├── diffsplice_<exon|transcript>_results.csv.gz   the two results tables, gzipped
+└── diffsplice_gene_results.csv.gz
+
+dtu_output/reproduce/
+├── dtu_plot.R                              redraws one gene's usage plot; needs no package at all
+├── dtu_plot_data.csv.gz                    per-transcript, per-sample counts and padj, plotted genes only
+├── dtu_plot_genes.csv.gz                   one row per published figure: gene, rank, q-value, file name
+├── dtu_transcript_results.csv.gz           the two results tables, gzipped
+└── dtu_gene_qvalues.csv.gz
 ```
+
+`dtu_output/reproduce/` is the only one with no `.rds`. Everything behind a DTU
+figure is a count or a p-value, so the gzipped tables carry all of it: ten genes
+of a few transcripts across a handful of samples is a few hundred rows.
+`dtu_plot.R` attaches no library either, because the figure is base graphics.
 
 One script per figure type, one gzipped CSV per published table, and an
 `.rds` only where a plot cannot be rebuilt from a CSV: the MDS object rather
 than the whole `DGEList`, which is 28 times larger even at 2,000 genes; the
 fgsea plot object, because `plotGseaTable` needs gene-set membership from the
-GMT, a pipeline input never published with the results; and the gost result,
-because `gostplot` takes the object rather than the table.
+GMT, a pipeline input never published with the results; the gost result,
+because `gostplot` takes the object rather than the table; a cut-down
+`switchAnalyzeRlist`, because `switchPlot` draws exon structures and the
+per-condition values together and no table carries both; and the
+`diffSpliceDGE` result, which `plotSpliceDGE` walks feature by feature in gene
+order, an order the published tables sort away. That last one is kept whole,
+because `diffSpliceDGE` returns coefficients and p-values and keeps no count
+matrix, so it is small to begin with.
+
+`switch_plots.rds` is cut twice over: to the plotted genes, and then to the
+slots `switchPlot` actually reads. The sequence slots, the replicate matrices
+and the per-isoform test detail are dropped, which is the difference between a
+file of tens of megabytes and one of a few hundred kilobytes. Anything beyond
+redrawing these figures, including consequence or ORF analysis, wants
+`switchList_analyzed.rds` in the parent directory, which is the whole object
+and is correspondingly large.
+
+`switch_plot.R`, `splice_plot.R` and `dtu_plot.R` are selected by gene rather
+than by contrast, since their figures are per gene. `GENE` takes the gene ID or
+the symbol, with or without a version suffix. `COMPARISON` picks the condition
+pair for the first two, and only does any work on a design with more than two
+conditions; `dtu_plot.R` has no `COMPARISON`, because DEXSeq tests one
+interaction across every condition at once. All four of these find the same
+figure:
+
+```r
+GENE       <- "ENSG00000168710.20"
+GENE       <- "ENSG00000168710"
+GENE       <- "AHCYL1"
+COMPARISON <- "TGFb_vs_REF"
+```
+
+It lists the genes available in the folder in its own header, and again in the
+error if you ask for one that is not there.
 
 The scripts are written to be changed, not merely run. Contrast, cutoffs,
 colours and figure dimensions are named constants in the first lines, so
@@ -703,8 +860,9 @@ matching `.info.txt` recording the settings used, the environment that produced
 them and where they came from, so a regenerated figure is never mistaken for
 the pipeline's own once it leaves the folder.
 
-> `isoform_switch/` is outside these conventions. IsoformSwitchAnalyzeR writes
-> its own figures, so they are PNG-only and have no `reproduce/` folder.
+> Every analysis directory the pipeline publishes now carries a `reproduce/`
+> folder. `rmats_output/` and `star_fusion/` do not, because neither step
+> produces a figure: rMATS and STAR-Fusion emit tables only.
 
 ---
 

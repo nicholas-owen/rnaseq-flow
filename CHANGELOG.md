@@ -7,6 +7,92 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **`example/` is now `examples/`, with one folder per organism.**
+  `examples/README.md` is a one-screen index, the yeast walkthrough and its
+  fetch script moved to `examples/yeast/`, and a new `examples/human/` holds
+  the human isoform-level example and its fetch script. Anything scripted
+  against `example/fetch_yeast_test_data.sh` breaks and should use
+  `examples/yeast/fetch_yeast_test_data.sh`. The `test_yeast` profile is
+  unchanged, as are the commands inside the walkthrough itself.
+
+  `rnaseq-flow_Example_Analysis.md` stays at the repository root, where the
+  guide and the README already point at it, so the two human examples are in
+  different places. They are two documents rather than one because they prepare
+  the data differently: the expression example subsamples the reads, while
+  splicing and transcript usage need full depth, since junction and isoform
+  evidence is a small fraction of gene-level counts.
+
+  This is the second time these files have moved, after `assets/test/` to
+  `example/` in 1.7.0. The singular folder never fitted more than one example,
+  and adding the human one was the point at which that showed.
+- **Isoform switch directories are named `<condition>_vs_REF`.** Letting
+  IsoformSwitchAnalyzeR name them gave `REF_vs_<condition>`, the convention the
+  pipeline dropped after v1.5.1 and renamed out of `rmats_output/`. `dIF` was
+  already correct: it is IF2 − IF1 with the baseline as condition 1, so a
+  positive value has always meant higher isoform usage in the test condition,
+  the same direction as a positive `log2FoldChange`. Only the directory name
+  said otherwise. No released version wrote these figures at all, so this
+  affects only results from a development build; file names inside a directory
+  are unchanged, and renaming the folder is the whole fix. Condition pairs that
+  do not involve the baseline are now oriented the way `rmats_output/` orients
+  them, so `A_vs_B` means the same thing in both.
+- **Isoform switch figures are written as SVG and PNG**, at the 300 dpi the
+  rest of the pipeline uses, instead of the PNG that IsoformSwitchAnalyzeR
+  wrote for itself. A gene that fails to draw is reported in the task log and
+  leaves no half-written image.
+- **Isoform switch figures are named with the bare gene ID.**
+  IsoformSwitchAnalyzeR keeps the Ensembl version on `gene_id`, so the figures
+  read `ENSG00000168710.20` while `dtu_output/` and `diffsplice_output/` named
+  the same gene `ENSG00000168710`. They now agree.
+  `isoform_switches.csv` still carries the versioned ID, since that is the
+  package's own output, and `reproduce/switch_plot_genes.csv.gz` carries both.
+
+### Added
+
+- **`isoform_switch_output/reproduce/`.** It carries `switch_plot.R`, a
+  `switchAnalyzeRlist` cut to the plotted genes and then to the slots
+  `switchPlot` reads, and gzipped copies of the tables. Unlike the earlier four
+  it is selected by `GENE` rather than by contrast, because the figures are per
+  gene, and `GENE` accepts a gene ID or a symbol. See
+  [OUTPUTS.md section 18](OUTPUTS.md).
+- **diffSplice now publishes figures**, in
+  `diffsplice_output/<condition>_vs_REF/`. edgeR's `plotSpliceDGE` draws the
+  ten genes with the lowest Simes FDR in each contrast: every feature's
+  log-fold-change against its gene's own, with the features below `FDR < 0.05`
+  marked. SVG and PNG, with a `reproduce/` folder alongside holding the
+  `diffSpliceDGE` object and `splice_plot.R`.
+- **DTU now publishes figures too**, flat in `dtu_output/`, for the ten genes
+  with the lowest `gene_qvalue`. Each shows every transcript's share of its
+  gene, a bar per condition at the mean isoform fraction with the individual
+  samples as points, and transcripts at `padj < 0.05` starred. A gene with more
+  than twelve expressed transcripts sums the remainder into one `other (n)` bar
+  so the bars still add to one. Its `reproduce/` folder is the only one with no
+  `.rds` and no library call: everything behind the figure is a count or a
+  p-value, so the gzipped tables carry all of it and `dtu_plot.R` is base
+  graphics. DEXSeq's own `plotDEXSeq` is deliberately not used, and
+  [OUTPUTS.md section 14](OUTPUTS.md) says why.
+- **The analysis report now renders DTU, diffSplice and isoform switching.**
+  All three wrote their results under `--outdir` and reached the report in no
+  form at all: the workflow mixed each process's `versions` into the version
+  channel and dropped its `results`, so there was no channel to pass to
+  `QUARTO_REPORT`. `dtu_output/`, `diffsplice_output/` and
+  `isoform_switch_output/` are now staged into the rendering task and get a
+  section each, with the counts, a volcano or usage panel, a searchable table,
+  the per-gene figures and a cross-reference against the gene-level DE calls.
+  Each gallery embeds at most six figures, spread across the contrasts rather
+  than taken off the front of one, and names the directory holding the rest. An
+  analysis that ran and produced no rows is described in a sentence rather than
+  rendered as a blank table, which is the normal outcome for DTU and isoform
+  switching on the `example/` yeast dataset.
+- **The report's Analysis line and its Files and locations table now report
+  these three from the staged directories** rather than from the optional
+  analyses recorded in `run_manifest.json`. The manifest records what was asked
+  for, so a run that passed `--dtu` with `--aligner star` previously listed DTU
+  as though it had happened. Fusion calling is still read from the manifest,
+  because `star_fusion/` is not staged into the report.
+
 ## [1.7.0] - 2026-10-18
 
 Provenance, credit and a Bioconductor upgrade. Three bug fixes in code paths

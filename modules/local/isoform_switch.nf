@@ -1,9 +1,23 @@
 process ISOFORM_SWITCH {
     label 'process_high'
-    // IsoformSwitchAnalyzeR container
-    // 2.0.0 was never published as a biocontainer; 2.0.1 is the nearest real
-    // build (a patch release of the same version).
-    container 'quay.io/biocontainers/bioconductor-isoformswitchanalyzer:2.10.0--r45h01b2380_0'
+    // No fixed container image: the environment is provisioned on the fly by
+    // Nextflow Wave from the Conda packages below, as DESEQ2, DTU, DIFFSPLICE
+    // and the other R processes already are.
+    //
+    // This used to pin quay.io/biocontainers/bioconductor-isoformswitchanalyzer
+    // 2.10.0--r45h01b2380_0. That image has no MASS: bioconda's r-base omits
+    // R's recommended packages, and importRdata needs MASS to batch-correct
+    // once it detects a covariate, so --isoform_switch died at step 6 of 10
+    // with "MASS package required but is not installed".
+    //
+    // Declaring conda alongside the container would not have fixed it. Wave's
+    // default strategy resolves 'container' before 'conda', so the spec would
+    // have been ignored and the image used unchanged.
+    //
+    // The solve returns the same IsoformSwitchAnalyzeR build the biocontainer
+    // carried, r45h01b2380_0, so this changes how the environment is assembled
+    // rather than which software runs.
+    conda 'conda-forge::r-base=4.5.3 bioconda::bioconductor-isoformswitchanalyzer=2.10.0 conda-forge::r-mass=7.3_66'
 
     input:
     path samplesheet

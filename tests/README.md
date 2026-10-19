@@ -1,7 +1,7 @@
 # Developer checks
 
 Static checks that run without containers or data. The runnable yeast example
-for users is in [example/](../example/README.md).
+for users is in [examples/yeast/](../examples/yeast/README.md).
 
 ## Static checks (`check_report.py`)
 

@@ -41,8 +41,8 @@ and the run small.
 ## Fetch it
 
 ```bash
-example/fetch_yeast_test_data.sh                    # test_data/, 1M reads
-example/fetch_yeast_test_data.sh test_data 250000   # smaller/faster
+examples/yeast/fetch_yeast_test_data.sh                    # test_data/, 1M reads
+examples/yeast/fetch_yeast_test_data.sh test_data 250000   # smaller/faster
 ```
 
 Uses `seqtk` for a proper random subsample if it is installed; otherwise it takes
