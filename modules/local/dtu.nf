@@ -17,7 +17,7 @@ process DTU {
 
     script:
     """
-    Rscript ${r_script} ${samplesheet} ${gtf} ${aligner} . ${task.cpus}
+    Rscript ${r_script} ${samplesheet} ${gtf} ${aligner} . ${task.cpus} ${task.memory.toGiga()}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

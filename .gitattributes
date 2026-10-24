@@ -1,0 +1,26 @@
+# LF everywhere, on every platform.
+#
+# This repository is edited on Windows and run on Linux: the working copy is
+# rsynced to WSL or to a cluster, so a CRLF checkout is copied verbatim to a
+# filesystem that cannot use it. Shell scripts fail outright, with
+# "$'\r': command not found" and then "set: pipefail: invalid option name",
+# and `bash -n` does not catch it because `set -euo pipefail\r` is only invalid
+# when it runs.
+#
+# Git already stores LF; the conversion happens on checkout under
+# core.autocrlf=true, which is the Windows default. These rules override it for
+# anyone who clones, so nobody has to know to set core.autocrlf themselves.
+#
+# text=auto lets Git detect text and leave binaries alone; eol=lf pins the
+# checkout. The explicit binary lines below are belt and braces for the formats
+# actually in this repository, so a heuristic never has the chance to mangle
+# the Word guide or an image.
+* text=auto eol=lf
+
+*.docx binary
+*.png  binary
+*.jpg  binary
+*.gz   binary
+*.rds  binary
+*.img  binary
+*.tar  binary

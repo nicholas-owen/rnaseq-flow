@@ -169,13 +169,16 @@ nextflow run main.nf \
     -profile test_yeast,docker
 ```
 
-**Salmon**: the index needs the cDNA FASTA *and* the genome, the latter only to
-build the decoy set.
+**Salmon**: the transcriptome is cut from the genome with `gffread` using the
+GTF, so the index and the annotation describe the same transcripts. The genome
+is needed twice over, for that and for the decoy set. It also writes
+`idx/yeast_salmon/transcripts.fa.gz`, which is the file to pass to
+`--transcript_fasta` on any later run that needs one.
 
 ```bash
 nextflow run main.nf --build_indices --aligner salmon \
-    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
-    --genome_fasta     refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
     --outdir idx/yeast_salmon \
     -profile test_yeast,docker
 
@@ -190,11 +193,13 @@ nextflow run main.nf \
     -profile test_yeast,docker
 ```
 
-**Kallisto**: transcripts only, no decoys.
+**Kallisto**: transcripts only, no decoys, but the genome is still needed to
+cut the transcriptome from.
 
 ```bash
 nextflow run main.nf --build_indices --aligner kallisto \
-    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
     --outdir idx/yeast_kallisto \
     -profile test_yeast,docker
 

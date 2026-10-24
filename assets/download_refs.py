@@ -313,14 +313,31 @@ def download_ensembl(species, outdir, log_file, release):
     annotation_version = ann_m.group("ver") if ann_m else None
 
     # ---- transcriptome (cDNA) FASTA ----------------------------------------
-    # Needed by --build_indices for Salmon and Kallisto, and by
-    # IsoformSwitchAnalyzeR. '.cdna.all.fa.gz' is the full transcriptome;
+    # NOT what the Salmon and Kallisto indexes are built from, since 2026-10-23.
+    # --build_indices cuts the transcriptome from the genome with gffread using
+    # the GTF, because this file and the GTF disagree in both directions.
+    #
+    # It carries transcripts the GTF does not: patch and haplotype scaffolds,
+    # 14,212 of them on GRCh38 release 116. And it omits far more than that,
+    # being cDNA only: 465,769 transcripts against the GTF's 646,577, the
+    # missing ~198,000 almost all lncRNA, which is the ncrna.fa the NOTE below
+    # used to say you would have to index separately. Deriving from the GTF
+    # covers both, so that caveat no longer applies.
+    #
+    # Fetched anyway, because it is small, it completes the reference record,
+    # and comparing against Ensembl's own transcriptome is a reasonable thing
+    # to want. Pass the published transcripts.fa.gz to --transcript_fasta, not
+    # this file.
+    #
+    # '.cdna.all.fa.gz' is the full transcriptome;
     # '.cdna.abinitio.fa.gz' is an ab-initio prediction set and must not be used.
     # Matched on the same assembly, for the same reason as the GTF.
     #
-    # NOTE: this is cDNA only. A total-RNA / rRNA-depleted library should also
-    # index the ncRNA FASTA (fasta/<species>/ncrna/), or lncRNAs go unquantified
-    # and their reads get misassigned.
+    # This is cDNA only, so on its own it leaves lncRNAs unquantified and their
+    # reads misassigned. That used to mean a total-RNA or rRNA-depleted library
+    # also needed the ncRNA FASTA (fasta/<species>/ncrna/) indexed alongside
+    # it. Deriving the transcriptome from the GTF covers every biotype, so
+    # neither this file nor ncrna.fa is on that path any more.
     log(log_file, "Finding transcriptome (cDNA) FASTA...")
     cdna_text = listing(cdna_url)
     cdna_pat = rf'href="({sp}\.{asm}\.cdna\.all\.fa\.gz)"'

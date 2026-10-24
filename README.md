@@ -319,7 +319,7 @@ silently ignored.
 | `--hisat2_index` | Yes* | - | HISAT2 index directory (if `--aligner hisat2`) |
 | `--salmon_index` | Yes* | - | Salmon index directory (if `--aligner salmon`) |
 | `--kallisto_index` | Yes* | - | Kallisto index file (if `--aligner kallisto`) |
-| `--transcript_fasta` | Yes* | - | Transcript FASTA (isoform switching) |
+| `--transcript_fasta` | Yes* | - | Transcript FASTA. Derived from `--genome_fasta` and `--gtf` at index build; pass the published `transcripts.fa.gz` for isoform switching |
 
 ### Analysis options
 

@@ -74,24 +74,43 @@ ls refs/human/v116/
 ## 3. Salmon index
 
 ```bash
-nextflow run main.nf --build_indices --aligner salmon --transcript_fasta refs/human/v116/Homo_sapiens.GRCh38.cdna.all.fa.gz --genome_fasta refs/human/v116/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz --outdir idx/human_salmon --max_cpus 10 --max_memory 22.GB -profile docker
+nextflow run main.nf --build_indices --aligner salmon --genome_fasta refs/human/v116/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz --gtf refs/human/v116/Homo_sapiens.GRCh38.116.gtf.gz --outdir idx/human_salmon --max_cpus 10 --max_memory 22.GB -profile docker
 ```
 
-A decoy-aware index, so it needs the genome as well as the transcriptome. It
-lands at `idx/human_salmon/salmon_index`.
+Two things come out of this: `idx/human_salmon/salmon_index`, and
+`idx/human_salmon/transcripts.fa.gz`, the transcriptome `gffread` cut from the
+genome using the GTF.
+
+The transcriptome is derived rather than downloaded because Ensembl's own files
+disagree with the GTF both ways. `cdna.all.fa.gz` carries 14,212 patch and
+haplotype transcripts the primary-assembly GTF omits, whose copies take reads
+from their primary counterparts. It also holds only 465,769 transcripts against
+the GTF's 646,577, because it is cDNA only: the roughly 198,000 missing are
+almost all lncRNA, shipped separately in Ensembl's `ncrna.fa`. Most lncRNAs are
+poly-adenylated and so are captured by this library. Deriving the transcriptome
+makes the index and the annotation describe the same transcripts by
+construction, and includes the lncRNAs. The genome is still needed here because
+it also supplies Salmon's decoys.
+
+> **This changes results against an index built from `cdna.all.fa.gz`**, which
+> quantified roughly 40% fewer features. The numbers in section 5 come from the
+> derived transcriptome. Against the old one the counts were lower and ACTN1,
+> one of the five signature genes, did not reach significance at all. Do not
+> compare transcript-level results either side of this change.
 
 ## 4. Run
 
 ```bash
-nextflow run main.nf --input hsc_data/samplesheet_hsc.csv --aligner salmon --salmon_index idx/human_salmon/salmon_index --gtf refs/human/v116/Homo_sapiens.GRCh38.116.gtf.gz --transcript_fasta refs/human/v116/Homo_sapiens.GRCh38.cdna.all.fa.gz --gmt refs/human/gmt/c5_go_bp.gmt --outdir results_hsc_salmon --dtu --diffsplice --isoform_switch --max_cpus 10 --max_memory 22.GB -profile docker
+nextflow run main.nf --input hsc_data/samplesheet_hsc.csv --aligner salmon --salmon_index idx/human_salmon/salmon_index --gtf refs/human/v116/Homo_sapiens.GRCh38.116.gtf.gz --transcript_fasta idx/human_salmon/transcripts.fa.gz --gmt refs/human/gmt/c5_go_bp.gmt --outdir results_hsc_salmon --dtu --diffsplice --isoform_switch --max_cpus 10 --max_memory 22.GB -profile docker
 ```
 
 No `--strandedness` flag. Salmon is invoked with `--libType A` and detects the
 library type per sample, so the parameter never reaches it. The yeast example
 passes `--strandedness unstranded` because its genome-aligner routes need it.
 
-`--transcript_fasta` is required twice over: once to build the index, and again
-at run time because `--isoform_switch` is skipped without it.
+`--transcript_fasta` points at the derived `transcripts.fa.gz` from step 3, not
+at the downloaded cDNA. `--isoform_switch` is skipped without it, and it has to
+be the file the index was built from or the mismatch comes straight back.
 
 ## 5. What you should see
 
@@ -100,21 +119,19 @@ named genes are the durable part.
 
 | Analysis | Result |
 |---|---|
-| DTU | 2131 transcripts at `padj < 0.05` |
-| Isoform switching | 490 genes, 734 switches across 596 isoforms; DEXSeq puts genes with DTU at 313 to 522 |
-| diffSplice | Per-gene results for every multi-transcript gene tested |
+| DTU | 2287 transcripts at `padj < 0.05`, from 112,752 transcripts across 12,892 multi-transcript genes |
+| Isoform switching | 538 genes, 773 switches across 643 isoforms; DEXSeq puts genes with DTU at 494 to 824 |
+| diffSplice | 1027 genes at `FDR < 0.05` |
 
 The ten highest-ranked switching genes by q-value:
 
 ```
-AHCYL1  MYLK  COL3A1  NR1H2  TXN  ZBTB38  DIDO1  PLEKHA8  SRI  C3
+AHCYL1  MYLK  TXN  NR1H2  FLNB  ZBTB38  SRI  PARP1  C3  GPSM3
 ```
 
-Two of those are worth recognising. COL3A1 is one of the five fibrosis markers
-in this dataset's own published expression signature, now moving at the level
-of isoform usage as well as abundance. MYLK is myosin light chain kinase,
-central to the contractile apparatus that defines an activated stellate cell.
-Neither was looked for.
+MYLK at rank 2 is the one worth recognising: myosin light chain kinase, central
+to the contractile apparatus that defines an activated stellate cell, and not
+something this analysis was looking for.
 
 ## 6. The published expectation
 
@@ -124,14 +141,15 @@ and AS-PCR, and recovered it in independent public RNA-seq of lung and skin
 fibroblasts. The five are ACTN1 19A/19B, COL5A1 64A/64B, COL6A3 exon 4, FLNA
 exon 30 and TPM1 6a/6b.
 
-Three of the five carry significant transcript usage changes here, in hepatic
+Four of the five carry significant transcript usage changes here, in hepatic
 stellate cells rather than fibroblasts:
 
 | Gene | Isoforms at `padj < 0.05` | Best `padj` |
 |---|---|---|
-| FLNA | 2 | 3.9e-05 |
-| COL6A3 | 3 | 3.1e-04 |
-| TPM1 | 3 | 1.1e-03 |
+| ACTN1 | 1 | 1.5e-16 |
+| TPM1 | 4 | 2.6e-06 |
+| FLNA | 2 | 3.7e-05 |
+| COL6A3 | 3 | 3.3e-04 |
 
 Check them with:
 
@@ -139,11 +157,17 @@ Check them with:
 grep -iE '"(ACTN1|COL5A1|COL6A3|FLNA|TPM1)"' results_hsc_salmon/dtu_output/dtu_transcript_results.csv | awk -F, '$NF!="NA" && $NF+0<0.05' | cut -d, -f2,4,9
 ```
 
-ACTN1 and COL5A1 do not reach significance. They were tested rather than
-filtered out, so this is a real negative, but a weak one for ACTN1: its best
-isoform reaches `padj` 0.139 across 35 tested isoforms, and usage divided 35
-ways leaves DEXSeq very little power per isoform. A two-exon swap need not shift
-transcript proportions enough to register.
+ACTN1 is the strongest of the four, and it is also the clearest demonstration
+of why the transcriptome is derived from the GTF rather than downloaded. The
+same transcript, `ENST00001044660`, was tested against an index built from
+Ensembl's `cdna.all.fa.gz` and reached only `padj` 0.25. Isoform usage is a
+proportion over a gene's transcripts, so when some of ACTN1's were missing from
+the index, reads from the absent ones were forced onto the present ones and
+blurred the proportions. With the full transcript set the 19A/19B usage shift
+is unambiguous.
+
+COL5A1 does not reach significance. It was tested rather than filtered out, so
+that is a real negative rather than a gap in the data.
 
 **What this is not.** The published signature is event-level, naming particular
 exons. DTU is transcript-level. A gene can change isoform usage without the

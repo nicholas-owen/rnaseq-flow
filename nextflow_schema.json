@@ -80,7 +80,7 @@
         "transcript_fasta": {
           "type": "string",
           "format": "file-path",
-          "description": "Transcript FASTA - used for Salmon/Kallisto index building and IsoformSwitchAnalyzeR."
+          "description": "Transcript FASTA. Optional when building a Salmon/Kallisto index, which otherwise derives one from --genome_fasta and --gtf with gffread and publishes it as transcripts.fa.gz beside the index; supplying one overrides that, with a warning, since nothing can check it matches the GTF. Required at run time by IsoformSwitchAnalyzeR, where it should be the transcripts.fa.gz the index was built from."
         },
         "star_index": {
           "type": "string",

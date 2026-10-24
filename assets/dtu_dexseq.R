@@ -8,11 +8,11 @@
 # This complements gene-level differential expression: a gene can show a
 # significant isoform-usage switch even when its total expression is unchanged.
 #
-# Usage: dtu_dexseq.R <samplesheet.csv> <gtf> <salmon|kallisto> <quant_dir> [cpus]
+# Usage: dtu_dexseq.R <samplesheet.csv> <gtf> <salmon|kallisto> <quant_dir> [cpus] [memory_gb]
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 4) {
-  stop("Usage: dtu_dexseq.R <samplesheet.csv> <gtf> <salmon|kallisto> <quant_dir> [cpus]")
+  stop("Usage: dtu_dexseq.R <samplesheet.csv> <gtf> <salmon|kallisto> <quant_dir> [cpus] [memory_gb]")
 }
 samplesheet <- args[1]
 gtf_file    <- args[2]
@@ -20,6 +20,7 @@ aligner     <- tolower(args[3])
 quant_dir   <- args[4]
 cpus        <- if (length(args) >= 5) suppressWarnings(as.integer(args[5])) else 1L
 if (is.na(cpus) || cpus < 1L) cpus <- 1L
+mem_gb      <- if (length(args) >= 6) suppressWarnings(as.integer(args[6])) else NA_integer_
 
 suppressPackageStartupMessages({
   library(tximport)
@@ -29,7 +30,32 @@ suppressPackageStartupMessages({
 
 outdir <- "dtu_output"
 dir.create(outdir, showWarnings = FALSE)
-bpp <- MulticoreParam(workers = cpus)
+# Workers are limited by memory, not only by cores. MulticoreParam forks, and
+# estimateDispersions gives each fork a working copy, so peak memory scales
+# with the worker count rather than being shared. A box with many cores and
+# modest memory will otherwise kill one of its own workers, which surfaces as
+#   Error in reducer$value.cache[[as.character(idx)]] <- values :
+#     wrong args for environment subassignment
+# preceded by "1 parallel job did not deliver a result". That names neither
+# memory nor the process that died.
+#
+# GB_PER_WORKER is a heuristic from two data points on GRCh38.116, 112752
+# transcripts across 12892 genes: 10 workers in 22 GB (2.2 GB each) failed,
+# 4 workers in 22 GB (5.5 GB each) succeeded. 5 reproduces the working case
+# exactly at that size. It is not a measurement, and the real requirement
+# scales with the transcript count, so a much larger annotation may still need
+# fewer: set `process { withName: DTU { cpus = N } }` to force it down, since
+# the worker count is the lower of the two bounds.
+GB_PER_WORKER <- 5
+workers <- cpus
+if (!is.na(mem_gb) && mem_gb >= 1L) {
+  workers <- max(1L, min(cpus, mem_gb %/% GB_PER_WORKER))
+}
+if (workers < cpus) {
+  message(sprintf("DTU: %d of %d cores used, limited by %d GB at %d GB per worker.",
+                  workers, cpus, mem_gb, GB_PER_WORKER))
+}
+bpp <- MulticoreParam(workers = workers)
 
 # ---------------------------------------------------------------------------
 # Write one figure as both PNG and SVG.

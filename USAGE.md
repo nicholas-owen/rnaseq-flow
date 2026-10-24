@@ -186,7 +186,7 @@ references/human/
 ├── v102/                                             # pinned Ensembl release 102
 │   ├── Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz   # genome FASTA
 │   ├── Homo_sapiens.GRCh38.102.gtf.gz                   # annotation (note the .102.)
-│   ├── Homo_sapiens.GRCh38.cdna.all.fa.gz               # transcriptome (--transcript_fasta)
+│   ├── Homo_sapiens.GRCh38.cdna.all.fa.gz               # Ensembl transcriptome, not what the indexes are built from
 │   ├── download_log.txt                                 # provenance log (human-readable)
 │   └── reference_metadata.json                          # provenance record (machine-readable)
 └── gmt/                                              # if --download_gmt
@@ -243,15 +243,16 @@ nextflow run main.nf --build_indices --aligner hisat2 \
     --gtf         references/human/annotation.gtf.gz \
     --outdir indices/human -profile docker
 
-# Salmon (decoy-aware: needs transcript FASTA + genome FASTA)
+# Salmon (decoy-aware: the genome supplies the decoys)
 nextflow run main.nf --build_indices --aligner salmon \
-    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
-    --genome_fasta     references/human/genome.fa.gz \
+    --genome_fasta references/human/genome.fa.gz \
+    --gtf          references/human/genes.gtf.gz \
     --outdir indices/human -profile docker
 
-# Kallisto (transcript FASTA only)
+# Kallisto
 nextflow run main.nf --build_indices --aligner kallisto \
-    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
+    --genome_fasta references/human/genome.fa.gz \
+    --gtf          references/human/genes.gtf.gz \
     --outdir indices/human -profile docker
 ```
 
@@ -259,11 +260,51 @@ nextflow run main.nf --build_indices --aligner kallisto \
 |---|---|---|
 | `star` | `--genome_fasta`, `--gtf` | `star_index/` |
 | `hisat2` | `--genome_fasta`, `--gtf` | `hisat2_index/` |
-| `salmon` | `--transcript_fasta`, `--genome_fasta` | `salmon_index/` |
-| `kallisto` | `--transcript_fasta` | `kallisto_index` |
+| `salmon` | `--genome_fasta`, `--gtf` | `salmon_index/`, `transcripts.fa.gz` |
+| `kallisto` | `--genome_fasta`, `--gtf` | `kallisto_index`, `transcripts.fa.gz` |
 | `all` | all of the above | all four |
 
 Indices are written under `--outdir`. FASTA/GTF inputs may be gzipped.
+
+#### The transcriptome is cut from the genome, not downloaded
+
+The pseudo-aligners need a transcript FASTA, and the pipeline derives it from
+`--genome_fasta` and `--gtf` with `gffread` rather than taking a downloaded
+one. The FASTA headers are then the GTF's own `transcript_id` values, so the
+transcriptome and the annotation describe the same transcripts by construction.
+
+That matters because Ensembl's own files disagree with the GTF in both
+directions.
+
+They carry transcripts the GTF does not. `cdna.all.fa.gz` includes patch and
+haplotype scaffolds the primary-assembly GTF omits, 14,212 of them on GRCh38
+release 116. Those copies take reads from their primary counterparts, and every
+transcript-level analysis has to reconcile the two sets before it can run.
+
+They also omit far more than they add, which is the larger effect.
+`cdna.all.fa.gz` is cDNA only: 465,769 transcripts against the GTF's 646,577.
+The roughly 198,000 missing are almost all lncRNA, which Ensembl ships
+separately in `ncrna.fa`. Most lncRNAs are Pol II products, capped and
+poly-adenylated, so a poly-A library captures them, and excluding them from the
+index pushes their reads onto whichever mRNA shares sequence with them.
+
+> **Results are not comparable across this change.** A GTF-derived
+> transcriptome quantifies roughly 40% more features than `cdna.all` did.
+> Gene-level counts shift where a gene overlaps an lncRNA, and transcript-level
+> tests carry a larger multiple-testing burden. Rebuild your Salmon and
+> Kallisto indexes, and do not compare transcript-level results produced either
+> side of it. The biotypes that a poly-A library genuinely will not capture,
+> miRNA, snoRNA and snRNA, come to about 4,800 of the 646,577.
+
+The derived FASTA is published as `transcripts.fa.gz` next to the index.
+**Pass that file to `--transcript_fasta` on runs using `--isoform_switch`**,
+not the downloaded cDNA, because the index was built from it and anything else
+reintroduces the mismatch.
+
+`--transcript_fasta` still overrides the derivation at build time, for a
+curated or non-Ensembl transcriptome. It warns when you do, because nothing can
+check that a supplied FASTA matches the GTF and a mismatch stays silent until a
+downstream tool refuses the pairing.
 
 ### HISAT2 index memory, and when it silently degrades
 
@@ -375,7 +416,7 @@ nextflow run main.nf \
     --aligner salmon \
     --salmon_index indices/human/salmon_index \
     --gtf references/human/Homo_sapiens.GRCh38.110.gtf.gz \
-    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
+    --transcript_fasta indices/human/transcripts.fa.gz \
     --isoform_switch \
     --dtu \
     --diffsplice \

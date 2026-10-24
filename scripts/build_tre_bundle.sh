@@ -19,14 +19,17 @@
 # Two kinds of image go in, and they are found two different ways.
 #
 # The containers declared in modules/local/*.nf are pulled straight from their
-# registry. The seven processes that declare a `conda` directive instead have
-# no registry image at all: Wave builds one per run from the Conda spec, under
-# an ephemeral URL. Those are taken from a completed run's task directories,
-# which record the image in `.command.run`, and rewritten to stable local names
-# that tre.config then points at.
+# registry, and are discovered by grepping those files, so a new module needs
+# nothing here. The eight processes that declare a `conda` directive instead
+# have no registry image at all: Wave builds one per run from the Conda spec,
+# under an ephemeral URL. Those are taken from a completed run's task
+# directories, which record the image in `.command.run`, and rewritten to
+# stable local names that tre.config then points at.
 #
-# So this needs a run that exercised all seven first. The script says which are
-# missing rather than producing a bundle with holes in it.
+# So this needs a run that exercised all eight first, and that run has to
+# include --isoform_switch on a Salmon route, which is the only way to reach
+# ISOFORM_SWITCH. The script says which are missing rather than producing a
+# bundle with holes in it, but only for processes listed in CONDA_PROCS below.
 
 set -euo pipefail
 
@@ -42,9 +45,17 @@ DEST="${3:-$HOME}"
 OUT="$DEST/singularity-$VERSION"
 TAR="$DEST/rnaseq-flow-$VERSION-singularity.tar"
 
-# The seven Conda-only processes, and the local image name each gets.
+# The eight Conda-only processes, and the local image name each gets.
+#
+# This list is the one part of the script that does not discover itself, and a
+# process missing from it is never looked for, so the bundle is short an image
+# with nothing reported. Keep it in step with:
+#     grep -l "^\s*conda '" modules/local/*.nf
+# ISOFORM_SWITCH joined on 2026-10-18, when it stopped pinning a biocontainer
+# that had no MASS in it.
 CONDA_PROCS="DESEQ2:deseq2 DIFFSPLICE:diffsplice DOWNLOAD_GMT:download-gmt \
-DTU:dtu GPROFILER:gprofiler GSEA:gsea QUARTO_REPORT:quarto-report"
+DTU:dtu GPROFILER:gprofiler GSEA:gsea ISOFORM_SWITCH:isoform-switch \
+QUARTO_REPORT:quarto-report"
 
 command -v singularity >/dev/null || { echo "singularity not found" >&2; exit 1; }
 

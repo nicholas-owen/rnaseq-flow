@@ -9,6 +9,55 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **The Salmon and Kallisto transcriptome is cut from the genome, not
+  downloaded.** `--build_indices` runs `gffread` over `--genome_fasta` and
+  `--gtf`, so the FASTA headers are the GTF's own `transcript_id` values and
+  the index and the annotation describe the same transcripts by construction.
+  The derived transcriptome is published as `transcripts.fa.gz` beside the
+  index, and that is the file to pass to `--transcript_fasta` for
+  `--isoform_switch`, not the downloaded cDNA.
+
+  Ensembl's files disagree with the GTF both ways. `cdna.all.fa.gz` carries
+  14,212 patch and haplotype transcripts the primary-assembly GTF omits, whose
+  copies take reads from their primary counterparts. More importantly it omits
+  far more than it adds, being cDNA only: 465,769 transcripts against the GTF's
+  646,577 on GRCh38 release 116. The roughly 198,000 missing are almost all
+  lncRNA, which Ensembl ships separately in `ncrna.fa`. Most lncRNAs are Pol II
+  products, capped and poly-adenylated, so a poly-A library captures them, and
+  leaving them out of the index pushes their reads onto whichever mRNA shares
+  sequence with them.
+
+  **Transcript-level results are not comparable across this change.** The index
+  now covers roughly 40% more features. Gene-level counts shift where a gene
+  overlaps an lncRNA, DTU and transcript-level diffSplice carry a larger
+  multiple-testing burden, and the GSE151251 figures in
+  `examples/human/README.md` were produced before it. Rebuild every Salmon and
+  Kallisto index. The biotypes a poly-A library genuinely will not capture,
+  miRNA, snoRNA and snRNA, come to about 4,800 of the 646,577.
+
+  This also closes a documented gap rather than only fixing a mismatch: a
+  total-RNA or rRNA-depleted library previously needed Ensembl's `ncrna.fa`
+  indexed separately or its lncRNAs went unquantified. Deriving from the GTF
+  covers every biotype.
+
+  `--build_indices --aligner salmon` and `--aligner kallisto` now take
+  `--genome_fasta` and `--gtf` rather than `--transcript_fasta`. Supplying
+  `--transcript_fasta` still overrides the derivation, for a curated or
+  non-Ensembl transcriptome, but warns: nothing can check that it matches the
+  GTF, and a mismatch stays silent until a transcript-level analysis refuses
+  the pairing. **Existing Salmon and Kallisto indexes should be rebuilt**, and
+  results from before this change are not comparable at transcript level.
+
+  `--download_refs` still fetches `cdna.all.fa.gz`. It is small, it completes
+  the reference record, and comparing against Ensembl's own transcriptome is
+  reasonable; it is simply no longer what the indexes are built from.
+- **The offline bundle gains `gffread` and loses the IsoformSwitchAnalyzeR
+  biocontainer**, which became a Wave-built environment when `MASS` was added,
+  taking it from 26 images to 27. `scripts/build_tre_bundle.sh` found the Wave
+  images from a hardcoded list of seven processes, so `ISOFORM_SWITCH` would
+  have been omitted with nothing reported: a process absent from that list is
+  never looked for, so it cannot be missing. Registry containers were already
+  discovered by grepping the modules, so `gffread` needed no change.
 - **`example/` is now `examples/`, with one folder per organism.**
   `examples/README.md` is a one-screen index, the yeast walkthrough and its
   fetch script moved to `examples/yeast/`, and a new `examples/human/` holds
@@ -48,6 +97,22 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the same gene `ENSG00000168710`. They now agree.
   `isoform_switches.csv` still carries the versioned ID, since that is the
   package's own output, and `reproduce/switch_plot_genes.csv.gz` carries both.
+
+### Fixed
+
+- **`--dtu` no longer forks more DEXSeq workers than memory allows.**
+  `MulticoreParam` took its worker count from `task.cpus` alone, and
+  `estimateDispersions` gives each fork a working copy, so peak memory scaled
+  with cores rather than being shared. Ten workers in 22 GB on GRCh38.116,
+  112,752 transcripts across 12,892 genes, killed one of its own and failed
+  with `wrong args for environment subassignment` after `1 parallel job did not
+  deliver a result`, naming neither memory nor the process that died. The
+  worker count is now the lower of the cores and the memory divided by 5 GB,
+  and the run says when memory is the binding constraint. Force it lower with
+  `process { withName: DTU { cpus = N } }`.
+
+  Latent before now: the GTF-derived transcriptome made this dataset large
+  enough to hit it, but any sufficiently large annotation would have.
 
 ### Added
 
