@@ -1,16 +1,44 @@
-#stuff
+# Grouped by what it is, because an incomplete rule here is expensive: these
+# directories hold tens of GB that `git clean` will remove without asking.
+# `results/` used to be the only output rule, which matched nothing, since real
+# run directories are named results_star, results_hsc_salmon and so on.
+
+# Nextflow state and run outputs
 .nextflow/
-docs/
-references/
+.nextflow.log*
 work/
 results/
-.nextflow.log*
+results*/
+trace*.txt
+timeline*.html
+report*.html
+
+# Reference data, indexes and downloaded reads. Large, re-fetchable, and never
+# belonging in the repository. Both spellings of each: the docs use refs/ and
+# idx/, older runs used references/ and indices/.
+refs/
+references/
+idx/
+indices/
+test_data/
+hsc_data/
+*_data/
+
+# Local run configs. conf/*.config is tracked; root-level ones are per-machine,
+# e.g. star_sparse.config for a low-memory STAR build.
+/*.config
+!/nextflow.config
+
+# Working notes, drafts and reviews. Not pipeline documentation.
+working_docs/
 future_improvements.md
+to-fix.md
+
+# Generated or tool-local
+docs/
+.claude/
+__pycache__/
 *.code-workspace
 *.pptx
 *.rar
 validate*.py
-to-fix.md
-working_docs/
-.claude/
-
