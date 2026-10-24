@@ -15,8 +15,8 @@ authors:
     given-names: Nicholas
     orcid: https://orcid.org/0000-0001-5598-6274
     affiliation: University College London
-version: 1.7.0
-date-released: 2026-10-18
+version: 1.8.0
+date-released: 2026-10-24
 license: GPL-3.0-only
 repository-code: https://github.com/nicholas-owen/rnaseq-flow
 url: https://github.com/nicholas-owen/rnaseq-flow

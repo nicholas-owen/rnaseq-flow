@@ -3,7 +3,7 @@
 # Check an offline bundle is complete and self-consistent before it is uploaded.
 #
 #   scripts/verify_tre_bundle.sh <bundle-dir> [tarball]
-#   scripts/verify_tre_bundle.sh ~/singularity-1.7.0 ~/rnaseq-flow-1.7.0-singularity.tar
+#   scripts/verify_tre_bundle.sh ~/singularity-1.8.0 ~/rnaseq-flow-1.8.0-singularity.tar
 #
 # Inside a TRE there is no way to fetch a missing image, so every gap has to be
 # found here. Checks that each container the modules declare has an image, that

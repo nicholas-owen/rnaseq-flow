@@ -5,7 +5,12 @@ All notable changes to **rnaseq-flow** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.8.0] - 2026-10-24
+
+Two optional analyses that had never produced usable output now do, and the
+transcriptome the pseudo-aligners quantify against is derived from the GTF
+rather than downloaded. Both change results: rebuild every Salmon and Kallisto
+index, and do not compare transcript-level results across this release.
 
 ### Changed
 

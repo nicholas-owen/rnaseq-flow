@@ -477,11 +477,11 @@ The baseline is `--reference_level` (default `REF`). Pairs that do not involve
 it are oriented the same way `rmats_output/` orients them, so `A_vs_B` means
 the same thing in both directories.
 
-> **New after v1.7.0, and one caveat.** No released version of the pipeline
-> ever wrote a switch plot: the plotting call named an argument `switchPlot()`
-> does not take, so it threw on every gene and left the directory empty. If you
-> have figures in `REF_vs_<condition>` folders, they came from a development
-> build between that fix and this one, which let IsoformSwitchAnalyzeR name the
+> **New in v1.8.0, and one caveat.** No version up to and including v1.7.0 ever
+> wrote a switch plot: the plotting call named an argument `switchPlot()` does
+> not take, so it threw on every gene and left the directory empty. If you have
+> figures in `REF_vs_<condition>` folders, they came from a development build
+> between that fix and this release, which let IsoformSwitchAnalyzeR name the
 > folders and so put `condition_1` first. `dIF` was correct there too. Only the
 > folder name was backwards, which is the awkward case: it read as though a
 > positive `dIF` meant higher usage in `REF`, when it never did. File names

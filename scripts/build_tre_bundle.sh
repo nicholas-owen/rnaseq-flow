@@ -3,7 +3,7 @@
 # Build the offline Singularity bundle for a TRE or air-gapped cluster.
 #
 #   scripts/build_tre_bundle.sh <version> [work-dir] [destination]
-#   scripts/build_tre_bundle.sh 1.7.0
+#   scripts/build_tre_bundle.sh 1.8.0
 #
 # Produces, in the destination directory (default $HOME):
 #
@@ -176,10 +176,46 @@ echo "  $(basename "$plugin")"
 } > "$OUT/tre.config"
 
 # ---- 5. README ------------------------------------------------------------
+# What the bundle was actually built from, recorded inside it.
+#
+# The images have to match the checkout that uses them, and the filename is a
+# label someone chose: it can disagree with the contents, and has. A bundle
+# built from a commit ahead of the tag it is named for will not satisfy that
+# tag, because the container set moves between releases. ISOFORM_SWITCH is the
+# worked example: it pinned a biocontainer up to 1.7.0 and takes a Wave-built
+# Conda image after it, so each bundle carries one and not the other.
+#
+# Recording the commit makes that checkable rather than a thing people have to
+# be told. `git describe` says whether the build sat on a tag or past one.
+GIT_COMMIT=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+GIT_DESCRIBE=$(git -C "$REPO" describe --tags --always --dirty 2>/dev/null || echo "unknown")
+GIT_BRANCH=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+MANIFEST_VERSION=$(sed -n "s/^[[:space:]]*version[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" \
+                   "$REPO/nextflow.config" | head -1)
+N_CONDA=$(printf '%s\n' $CONDA_PROCS | wc -l)
+
 cat > "$OUT/README.txt" <<EOF
-rnaseq-flow $VERSION, offline Singularity image bundle
+rnaseq-flow offline Singularity image bundle
+
+Built from:
+  commit            $GIT_COMMIT
+  git describe      $GIT_DESCRIBE
+  branch            $GIT_BRANCH
+  manifest version  ${MANIFEST_VERSION:-unknown}
+  bundle label      $VERSION
+  built             $(date -u '+%Y-%m-%d %H:%M UTC')
 
 $(ls "$OUT"/*.img | wc -l) images, for running without internet access (e.g. in a TRE).
+
+CHECK THIS FIRST. These images match the commit above and nothing else. If
+"git describe" does not name a plain release tag, this bundle was built from
+code ahead of that tag and will not satisfy a checkout of it. Compare against
+your checkout with:
+
+  git -C <your-rnaseq-flow> rev-parse --short HEAD
+
+A mismatch shows up as a process failing to find its image, not as a version
+error, so it is worth checking rather than discovering.
 
 Usage:
   tar -xf rnaseq-flow-$VERSION-singularity.tar
@@ -192,11 +228,13 @@ The plugin must go in ~/.nextflow/plugins. Pointing NXF_PLUGINS_DIR at this
 bundle does not work: Nextflow reports "No plugins", carries on, and the
 RO-Crate is silently missing. NXF_OFFLINE=true is required, not optional.
 
-tre.config disables Wave and pins the seven Conda-built processes to the image
+tre.config disables Wave and pins the $N_CONDA Conda-built processes to the image
 names in this bundle. Those names are local to it and resolve nowhere online.
 
-Must match pipeline release $VERSION: container references and Conda specs both
-changed in 1.7.0, so earlier bundles do not work with it.
+The bundle carries software, not data. Run --download_refs and --download_gmt
+outside the TRE and transfer the reference directory in alongside it, keeping
+reference_metadata.json with the files. Do not use -profile conda in a TRE: it
+resolves environments at run time and needs reachable channels.
 EOF
 
 # ---- 6. pack --------------------------------------------------------------
