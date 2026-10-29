@@ -667,6 +667,34 @@ workflow RNASEQ {
     // list is complete by the time buildRunManifest() reads it.
     def notices = []
 
+    // --organism against the species the references actually came from.
+    //
+    // It defaults to 'hsapiens', so mouse or zebrafish data run without setting
+    // it are enriched against human annotation: either nothing comes back, or,
+    // where symbols collide, something plausible and wrong. Nothing downstream
+    // notices, because gProfiler is perfectly happy to answer the question it
+    // was asked.
+    //
+    // Only checkable when --download_refs wrote reference_metadata.json, which
+    // records the Ensembl binomial. The gProfiler id is the genus initial plus
+    // the species epithet, so homo_sapiens -> hsapiens, mus_musculus ->
+    // mmusculus. Anything that does not split into exactly two parts is left
+    // alone rather than guessed at.
+    def ref_prov = resolveReferenceProvenance(params.gtf)
+    if (ref_prov.species) {
+        def parts = ref_prov.species.toString().toLowerCase().tokenize('_')
+        if (parts.size() == 2) {
+            def expected = parts[0][0] + parts[1]
+            if (params.organism?.toString()?.toLowerCase() != expected) {
+                error "--organism '${params.organism}' does not match the reference species. " +
+                      "reference_metadata.json beside --gtf records '${ref_prov.species}', " +
+                      "which is '${expected}' in gProfiler's notation. Enrichment and MSigDB " +
+                      "gene sets would be taken from the wrong organism. Set " +
+                      "--organism ${expected}, or point --gtf at the matching annotation."
+            }
+        }
+    }
+
     // Credit is recorded, never inferred, so a run with nothing declared is
     // attributed to whichever login happened to start it. That is not a claim
     // anyone made, and it is the one piece of provenance that cannot be
@@ -782,7 +810,8 @@ workflow RNASEQ {
                     file(params.transcript_fasta),
                     file(params.gtf),
                     SALMON_QUANT.out.results.collect { row -> row[1] },
-                    file("${projectDir}/assets/isoform_switch.R")
+                    file("${projectDir}/assets/isoform_switch.R"),
+                    params.reference_level
                 )
                 ch_versions = ch_versions.mix(ISOFORM_SWITCH.out.versions)
                 ch_quarto_isoform = ISOFORM_SWITCH.out.results
@@ -857,7 +886,7 @@ workflow RNASEQ {
                          def bais = rows.collect { row -> row[2] }
                          [ [ id:'all_samples', single_end: rows[0][3], ids: ids ], bams, bais ]
                     }
-                RMATS ( file(params.input), ch_rmats_input, file(params.gtf), file("${projectDir}/assets/run_rmats.py") )
+                RMATS ( file(params.input), ch_rmats_input, file(params.gtf), file("${projectDir}/assets/run_rmats.py"), params.reference_level )
                 ch_versions = ch_versions.mix(RMATS.out.versions)
                 ch_quarto_rmats = RMATS.out.results
              }
@@ -920,7 +949,18 @@ workflow RNASEQ {
         }
         else if (params.aligner == 'star' || params.aligner == 'hisat2') {
             ch_de_counts = ch_featurecounts_results
-            run_de = true
+            // featureCounts only runs inside `if (params.gtf)` above, so without
+            // a GTF this channel is empty and DESEQ2/EDGER are constructed but
+            // never execute. Setting run_de unconditionally made that a green
+            // run with no differential expression in it and nothing said. The
+            // pseudo-aligner branch below has always emitted a notice here.
+            run_de = params.gtf as boolean
+            if (!run_de) {
+                def msg = "Differential expression for --aligner ${params.aligner} needs --gtf " +
+                          "(featureCounts counts reads against it); skipping DESeq2/edgeR."
+                log.warn msg
+                notices.add(msg)
+            }
             if (params.dtu) {
                 def msg = "--dtu (differential transcript usage) needs a pseudo-aligner; " +
                           "it has no effect with --aligner ${params.aligner}."
@@ -937,7 +977,8 @@ workflow RNASEQ {
                         file(params.gtf),
                         'exon',
                         params.aligner,
-                        file("${projectDir}/assets/diffsplice_edger.R")
+                        file("${projectDir}/assets/diffsplice_edger.R"),
+                        params.reference_level
                     )
                     ch_versions = ch_versions.mix(DIFFSPLICE.out.versions)
                     // Assigned in both DIFFSPLICE branches. They are mutually
@@ -972,7 +1013,8 @@ workflow RNASEQ {
                         ch_tx_quant,
                         file(params.gtf),
                         params.aligner,
-                        file("${projectDir}/assets/dtu_dexseq.R")
+                        file("${projectDir}/assets/dtu_dexseq.R"),
+                        params.reference_level
                     )
                     ch_versions = ch_versions.mix(DTU.out.versions)
                     ch_quarto_dtu = DTU.out.results
@@ -986,7 +1028,8 @@ workflow RNASEQ {
                         file(params.gtf),
                         'transcript',
                         params.aligner,
-                        file("${projectDir}/assets/diffsplice_edger.R")
+                        file("${projectDir}/assets/diffsplice_edger.R"),
+                        params.reference_level
                     )
                     ch_versions = ch_versions.mix(DIFFSPLICE.out.versions)
                     ch_quarto_diffsplice = DIFFSPLICE.out.results
@@ -1003,11 +1046,11 @@ workflow RNASEQ {
             def de_design = resolveDesign(params.input)
             log.info "Differential-expression design: ${de_design}"
 
-            DESEQ2 ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/deseq2.R") )
+            DESEQ2 ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/deseq2.R"), params.reference_level )
             ch_versions = ch_versions.mix(DESEQ2.out.versions)
             ch_quarto_deseq2 = DESEQ2.out.results
 
-            EDGER ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/edger.R") )
+            EDGER ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/edger.R"), params.reference_level )
             ch_versions = ch_versions.mix(EDGER.out.versions)
             ch_quarto_edger = EDGER.out.results
 

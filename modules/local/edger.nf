@@ -12,6 +12,7 @@ process EDGER {
     path gene_info
     path counts_files
     path r_script
+    val  ref_level
 
     output:
     path "edger_output", emit: results
@@ -25,7 +26,10 @@ process EDGER {
     // That keeps the task hash stable, so a normal run still resumes (-resume)
     // across this change. edger.R strips the flag out wherever it appears.
     def args = task.ext.args ? "${task.ext.args} " : ''
+    // Baseline exported from a process input so it reaches the task hash. See
+    // modules/local/deseq2.nf and the note in nextflow.config.
     """
+    export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     Rscript ${r_script} ${samplesheet} '${design}' ${gene_info} ${args}${counts_files}
 
     cat <<-END_VERSIONS > versions.yml

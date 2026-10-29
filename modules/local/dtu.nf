@@ -10,13 +10,17 @@ process DTU {
     path gtf          // used to build the transcript-to-gene map
     val  aligner      // 'salmon' or 'kallisto'
     path r_script     // assets/dtu_dexseq.R
+    val  ref_level    // baseline condition; see nextflow.config
 
     output:
     path "dtu_output" , emit: results
     path "versions.yml", emit: versions
 
     script:
+    // Baseline exported from a process input so it reaches the task hash. See
+    // modules/local/deseq2.nf and the note in nextflow.config.
     """
+    export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     Rscript ${r_script} ${samplesheet} ${gtf} ${aligner} . ${task.cpus} ${task.memory.toGiga()}
 
     cat <<-END_VERSIONS > versions.yml

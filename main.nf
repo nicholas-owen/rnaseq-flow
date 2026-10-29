@@ -83,6 +83,30 @@ def checkParameters() {
         error "Please specify an input samplesheet or glob pattern with --input"
     }
 
+    // An execution engine has to be chosen. Each of -profile docker/singularity/
+    // conda enables exactly one and disables the others, but there is no default:
+    // with no profile, every container directive is ignored and each script runs
+    // against whatever happens to be on PATH. That is a silently uncontainerised
+    // run for a pipeline whose reproducibility rests on containers, so fail
+    // rather than produce results nobody can trace to a software version.
+    // workflow.containerEngine covers docker and singularity and is null when
+    // neither is on. Conda has no equivalent property, so it is read from the
+    // active profile list, which is why enabling conda through a bare -c file
+    // rather than -profile conda would still trip this. That is rare, and the
+    // message says which profiles to use.
+    //
+    // Skipped for -stub-run, which executes no command and so needs no engine.
+    // That also keeps the stub usable as a CI smoke test without pulling
+    // anything.
+    def engine_on = workflow.containerEngine ||
+                    (workflow.profile?.toString()?.tokenize(',')?.contains('conda') ?: false)
+    if (!workflow.stubRun && !engine_on) {
+        error "No execution engine selected. Add one of -profile docker, " +
+              "-profile singularity or -profile conda (combine with others using " +
+              "a comma, e.g. -profile test_yeast,docker). Without one, container " +
+              "directives are ignored and every tool is taken from PATH."
+    }
+
     // Count-matrix entry (--counts): starts at differential expression, so it
     // needs the samplesheet (for the design) and the GTF (for gene annotation),
     // and it is incompatible with the pre-DE stop points.
@@ -145,6 +169,33 @@ def checkParameters() {
  * The condition/replicate rules are hard errors when differential expression
  * will run (DESeq2/edgeR need them), and warnings otherwise (e.g. --stop_at preQC).
  */
+/*
+ * Is this string already a syntactically valid R name, i.e. does make.names()
+ * leave it alone?
+ *
+ * It matters because DESeq2 builds resultsNames() from make.names()-sanitised
+ * level names, and deseq2.R looks a coefficient up by constructing that name
+ * itself: paste0("condition_", condA, "_vs_", condB). A condition containing a
+ * hyphen, a space or a leading digit therefore produces a name DESeq2 does not
+ * have, and results(name=) errors out after alignment and quantification have
+ * already run.
+ *
+ * "TGF-beta", "6h" and "Ctrl 1" are all ordinary labels and all fail. The
+ * pipeline's own example uses "TGFb", which passes, so this has been luck
+ * rather than protection.
+ *
+ * R's rule: letters, digits, '.' and '_' only, starting with a letter or with
+ * a dot not followed by a digit, and not a reserved word. make.names() would
+ * rewrite anything else.
+ */
+def isValidRName(String s) {
+    if (!(s ==~ /^(?:[a-zA-Z]|\.(?![0-9]))[a-zA-Z0-9._]*$/)) return false
+    // Reserved words get a '.' appended by make.names(), so they fail too.
+    return !(s in ['if', 'else', 'repeat', 'while', 'function', 'for', 'next',
+                   'break', 'TRUE', 'FALSE', 'NULL', 'Inf', 'NaN', 'NA',
+                   'NA_integer_', 'NA_real_', 'NA_character_'])
+}
+
 def validateSamplesheet(samplesheet_path) {
     def sheet = file(samplesheet_path)
     if (!sheet.exists()) {
@@ -242,6 +293,27 @@ def validateSamplesheet(samplesheet_path) {
     if (ref_level && ref_level != 'REF' && !condition_counts.containsKey(ref_level)) {
         errors << "--reference_level '${ref_level}' is not a condition in the samplesheet. " +
                   "Found: ${condition_counts.keySet().sort().join(', ')}"
+    }
+
+    // Condition and batch values have to survive make.names() unchanged.
+    // See isValidRName() above for why: DESeq2 names its coefficients from the
+    // sanitised levels, and deseq2.R reconstructs that name by hand, so a
+    // mismatch fails only once alignment and quantification are done.
+    //
+    // Checked here rather than in the R scripts so it lands with every other
+    // samplesheet problem, before any container is pulled.
+    def bad_names = []
+    condition_counts.keySet().each { c ->
+        if (!isValidRName(c)) bad_names << "condition '${c}'"
+    }
+    batch_values.each { b ->
+        if (!isValidRName(b)) bad_names << "batch '${b}'"
+    }
+    if (bad_names) {
+        errors << "these values are not valid R names, which DESeq2 requires for " +
+                  "its model levels: ${bad_names.join(', ')}. Use letters, digits, " +
+                  "'.' and '_' only, starting with a letter. For example 'TGF-beta' " +
+                  "becomes 'TGFbeta' or 'TGF_beta', and '6h' becomes 'h6' or 'T6h'."
     }
 
     // Differential-expression design checks

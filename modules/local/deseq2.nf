@@ -20,6 +20,7 @@ process DESEQ2 {
     path gene_info
     path counts_files
     path r_script
+    val  ref_level
 
     output:
     path "deseq2_output", emit: results
@@ -33,7 +34,18 @@ process DESEQ2 {
     // That keeps the task hash stable, so a normal run still resumes (-resume)
     // across this change. deseq2.R strips the flag out wherever it appears.
     def args = task.ext.args ? "${task.ext.args} " : ''
+    // The baseline is exported here, from a process input, rather than set once
+    // in the env scope of nextflow.config. Nextflow does not hash that scope,
+    // so the old arrangement let a run with a different --reference_level
+    // resume from cache and republish the previous baseline unchanged. See the
+    // note where the env block used to be in nextflow.config. deseq2.R reads
+    // the same variable either way, so nothing changed in the R.
+    //
+    // This does change the rendered command, so caches from before it are
+    // invalidated once. That is the point: a different baseline is a different
+    // result and should not resume.
     """
+    export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     Rscript ${r_script} ${samplesheet} '${design}' ${gene_info} ${args}${counts_files}
 
     cat <<-END_VERSIONS > versions.yml

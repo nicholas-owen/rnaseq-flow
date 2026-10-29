@@ -7,6 +7,7 @@ process RMATS {
     tuple val(meta), path(bams), path(bais) // Collected list of all BAMs/BAIs
     path gtf
     path script
+    val  ref_level  // baseline condition; see nextflow.config
 
     output:
     path "rmats_output", emit: results
@@ -39,7 +40,11 @@ process RMATS {
     // fails on any normally-obtained annotation.
     def gtf_gz  = gtf.name.endsWith('.gz')
     def gtf_use = gtf_gz ? gtf.baseName : "${gtf}"
+    // Baseline exported from a process input so it reaches the task hash. See
+    // modules/local/deseq2.nf and the note in nextflow.config. run_rmats.py
+    // reads it to decide which condition is group 1 in the PSI difference.
     """
+    export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     ${ gtf_gz ? "gunzip -c ${gtf} > ${gtf_use}" : "" }
     python3 ${script} \\
         ${samplesheet} \\

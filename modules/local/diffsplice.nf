@@ -11,13 +11,17 @@ process DIFFSPLICE {
     val  level         // 'exon' or 'transcript'
     val  aligner       // star | hisat2 | salmon | kallisto
     path r_script      // assets/diffsplice_edger.R
+    val  ref_level     // baseline condition; see nextflow.config
 
     output:
     path "diffsplice_output", emit: results
     path "versions.yml"     , emit: versions
 
     script:
+    // Baseline exported from a process input so it reaches the task hash. See
+    // modules/local/deseq2.nf and the note in nextflow.config.
     """
+    export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     Rscript ${r_script} ${samplesheet} ${level} ${gtf} ${aligner} . ${task.cpus}
 
     cat <<-END_VERSIONS > versions.yml

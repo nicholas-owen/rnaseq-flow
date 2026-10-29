@@ -25,6 +25,7 @@ process ISOFORM_SWITCH {
     path gtf
     path salmon_results // Per-sample Salmon output directories (named after each sample)
     path r_script       // assets/isoform_switch.R, staged so it is visible inside the container
+    val  ref_level      // baseline condition; see nextflow.config
 
     output:
     path "isoform_switch_output", emit: results
@@ -37,7 +38,13 @@ process ISOFORM_SWITCH {
     // workflow always produces .gz.
     def gtf_gz  = gtf.name.endsWith('.gz')
     def gtf_use = gtf_gz ? gtf.baseName : "${gtf}"
+    //
+    // Baseline exported from a process input so it reaches the task hash. See
+    // modules/local/deseq2.nf and the note in nextflow.config. isoform_switch.R
+    // builds comparisonsToMake from it, which is the only thing fixing the
+    // comparison direction IsoformSwitchAnalyzeR would otherwise pick itself.
     """
+    export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     ${ gtf_gz ? "gunzip -c ${gtf} > ${gtf_use}" : "" }
     Rscript ${r_script} \\
         ${samplesheet} \\
