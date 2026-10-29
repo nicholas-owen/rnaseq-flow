@@ -360,7 +360,7 @@ workflow {
         //
         if (params.counts) {
             // Count-matrix entry: validate the (relaxed) samplesheet, but build
-            // no read channel — RNASEQ enters directly at differential
+            // no read channel: RNASEQ enters directly at differential
             // expression and consumes params.counts, not FASTQs.
             validateSamplesheet( params.input )
             channel.empty().set { ch_reads }
@@ -437,7 +437,7 @@ workflow {
      *
      * After every run (success or failure) this writes
      *   <outdir>/pipeline_info/run_summary.html
-     * — a self-contained page that links the MultiQC report and the key result
+     * A self-contained page that links the MultiQC report and the key result
      * directories, and tabulates job time, peak memory and CPU usage per process.
      * The per-process figures are aggregated from the Nextflow execution trace
      * (trace.raw = true, set in nextflow.config, keeps that file machine-readable).

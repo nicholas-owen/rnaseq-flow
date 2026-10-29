@@ -21,8 +21,8 @@ process EDGER {
     // task.ext.args carries '--matrix' when the run started from a pre-computed
     // count matrix (--counts), and is empty otherwise. It is appended with its
     // own trailing space (not a separate ${} slot) so that when the flag is
-    // absent the rendered command is byte-identical to the pre-feature version
-    // — that keeps the task hash stable, so a normal run still resumes (-resume)
+    // absent the rendered command is byte-identical to the pre-feature version.
+    // That keeps the task hash stable, so a normal run still resumes (-resume)
     // across this change. edger.R strips the flag out wherever it appears.
     def args = task.ext.args ? "${task.ext.args} " : ''
     """
