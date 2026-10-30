@@ -894,6 +894,36 @@ invocation <- if (!is.na(mf("pipeline", "command_line"))) {
   character(0)
 }
 
+# The HISAT2 index build mode, where the index carries the marker HISAT2_BUILD
+# writes into it. Only HISAT2 writes one, and an index built before the marker
+# existed has none, so this collapses to nothing rather than showing a blank
+# row (the same shape as `invocation` above).
+#
+# It earns a row because a splice-aware index and a reduced one are
+# indistinguishable on disk and both align perfectly happily. The reduced one is
+# simply less sensitive to novel junctions, which is a property of these results
+# that nothing else in this report would reveal. Before the marker, the only
+# record was a warning in a run log that has long scrolled away.
+index_build_mode <- mf("references", "index_build", "splice_aware")
+index_build_row <- if (is.na(index_build_mode)) {
+  character(0)
+} else if (identical(index_build_mode, "true")) {
+  row("Index build",
+      paste0("splice-aware, built with <code>--ss/--exon</code> extracted from ",
+             esc(mf("references", "index_build", "annotation"))))
+} else if (identical(index_build_mode, "false")) {
+  row("Index build",
+      paste0("<strong>not splice-aware</strong>: ",
+             esc(mf("references", "index_build", "memory_granted_gb")),
+             " GB granted against ~",
+             esc(mf("references", "index_build", "memory_estimated_gb")),
+             " GB estimated, so <code>--ss/--exon</code> were dropped. HISAT2 ",
+             "still aligns across junctions using its own model, with reduced ",
+             "sensitivity to novel ones."))
+} else {
+  row("Index build", esc(index_build_mode))
+}
+
 rows <- c(
   invocation,
   group("Execution"),
@@ -928,6 +958,7 @@ rows <- c(
   row("Annotation version", or_unrecorded(mf("references", "annotation", "annotation_version"))),
   row("Obtained",           or_unrecorded(mf("references", "annotation", "downloaded_at"))),
   row("Index",              paste0("<code>", or_unrecorded(mf("references", "index")), "</code>")),
+  index_build_row,
   row("Gene sets",
       if (!is.na(mf("gene_sets", "collection"))) {
         paste0(esc(mf("gene_sets", "collection")),
