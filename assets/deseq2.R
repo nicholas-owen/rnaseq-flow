@@ -133,9 +133,11 @@ FIG_RES <- 300   # px per inch for the raster copy. 300 is the usual journal min
 #
 # This was a hardcoded c(-2, 2) (m5). DESeq2 draws out-of-range genes as
 # triangles on the boundary rather than dropping them, so the clipping was
-# visible, but the clipped genes are exactly the ones worth looking at: on the
-# yeast NaCl contrast HSP12 shrinks to log2FC 8.1, four times the old limit, and
-# sat on the rim along with every other strong result.
+# visible, but the clipped genes are exactly the ones worth looking at. Measured
+# on the yeast NaCl contrast: the widest shrunken estimate is HSP12 at log2FC
+# 8.141, four times the old limit, and 294 genes of 5579 sat on the rim. The
+# axis is now c(-9, 9) on that contrast, and every one of those 294 is placed
+# where it belongs.
 #
 # The floor stops a weak contrast being stretched into a misleadingly dramatic
 # axis, so a run with nothing much happening looks the way it always did.

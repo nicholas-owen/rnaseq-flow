@@ -316,20 +316,27 @@ and down split that set by the sign of the same column. Stating the column
 matters: the two differ for genes sitting on the threshold, which is enough to
 move a count by one.
 
+Count these with a CSV reader that respects quoting, not by splitting on commas.
+The yeast annotation contains `ADE5,7`, whose gene name holds a comma, so a
+naive split shifts every column after it by one and reads `baseMean` where it
+wants `log2FoldChange`. That turns one strongly down-regulated gene into an
+up-regulated one, in three rows of 5579, and it is exactly how the first
+regeneration of this table got the up/down split wrong by one per route.
+
 | route | genes tested | significant | up | down |
 | --- | --- | --- | --- | --- |
-| STAR | 5579 | 852 | 153 | 699 |
-| HISAT2 | 5587 | 847 | 154 | 693 |
-| Salmon | 5508 | 778 | 131 | 647 |
-| Kallisto | 5532 | 854 | 153 | 701 |
+| STAR | 5579 | 852 | 152 | 700 |
+| HISAT2 | 5587 | 847 | 153 | 694 |
+| Salmon | 5508 | 778 | 130 | 648 |
+| Kallisto | 5532 | 854 | 152 | 702 |
 
 735 genes were called significant by all four, no pairwise overlap fell below
 95% of the smaller set, and all four reproduced the same strong down-regulation
 bias.
 
 These are the DESeq2 calls. edgeR on the same data is consistently a little more
-generous, having gained power in version 4.x: 923, 929, 894 and 943 significant
-for STAR, HISAT2, Salmon and Kallisto respectively, 813 called by all four, and
+generous, having gained power in version 4.x: 924, 930, 895 and 944 significant
+for STAR, HISAT2, Salmon and Kallisto respectively, 814 called by all four, and
 no pairwise overlap below 91%. Its columns are `FDR` and `logFC` rather than
 `padj` and `log2FoldChange`, at the same thresholds. The direction of the bias
 is the same, though less lopsided: edgeR calls roughly twice as many genes up.
@@ -340,6 +347,13 @@ is the same, though less lopsided: edgeR calls roughly twice as many genes up.
 > 2026-10-24 without the table being redone. Correcting both raised the genes
 > called by all four from 668 to 735 and the worst pairwise overlap from 83% to
 > 95%, which is the direction a real fix should move a concordance figure.
+>
+> STAR did not move. It was always on `auto`, which infers `reverse`, and it
+> uses no transcriptome, so its row reproduces the 2026-10-18 figures exactly:
+> 5579 tested, 852 significant, 152 up, 700 down, and 924 for edgeR. Salmon's
+> significant counts are unchanged too, because `--libType A` ignored the
+> strandedness flag; only its `tested` moved, by two genes, from the
+> transcriptome change. That is the control for everything else in the table.
 
 > **These numbers come from a subsample, so treat them as a shape to match, not
 > targets to hit.** They were produced from the fetch script's default output:
