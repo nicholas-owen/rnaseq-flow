@@ -259,11 +259,26 @@ def main():
     # would sit: the outer have_* is always defined in setup, the inner flag is
     # the one that gets forgotten. A chunk gated on an undefined variable does
     # not error, it silently never runs.
+    #
+    # An identifier immediately followed by '(' is a function call, not a gate
+    # variable. Taking every identifier reported `length` as undefined from
+    # eval=(have_dtu && length(dtu_figs) > 0), so this check failed on a
+    # correct document (M9). A check that always fails stops being read, which
+    # costs more than the check was worth.
+    #
+    # Done with finditer and a look at the next character rather than a
+    # negative lookahead: `[A-Za-z0-9_.]*(?!\s*\()` backtracks to a shorter
+    # match, so 'length(' yields the identifier 'lengt' instead of nothing.
     gates = set()
     for expr in gate_exprs(src):
-        gates.update(re.findall(r"[A-Za-z_][A-Za-z0-9_.]*", expr))
+        for m in re.finditer(r"[A-Za-z_][A-Za-z0-9_.]*", expr):
+            if expr[m.end():].lstrip().startswith('('):
+                continue
+            gates.add(m.group())
     defined = set(re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_.]*)\s*<-", src, re.M))
-    missing = sorted(g for g in gates if g not in defined and g not in {"TRUE", "FALSE"})
+    # R's own constants are never assigned anywhere, so they are not "defined".
+    builtins = {"TRUE", "FALSE", "T", "F", "NULL", "NA", "Inf", "NaN"}
+    missing = sorted(g for g in gates if g not in defined and g not in builtins)
     report(f"all {len(gates)} gates resolve to a defined variable", not missing,
            f"-- undefined: {missing}")
 

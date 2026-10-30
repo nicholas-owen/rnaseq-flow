@@ -361,17 +361,38 @@ if (matrix_mode) {
     count_files <- inputs
     counts_list <- list()
     for (s in samples$sample) {
-        match_file <- grep(paste0(s, ".featureCounts.txt"), count_files, value = TRUE)
-        if (length(match_file) == 0) stop(paste("File not found for", s))
+        # Exact basename match, not an unanchored grep (M3): 'rep1' used to also
+        # match 'rep10.featureCounts.txt', and match_file[1] then picked one
+        # silently. See the fuller note on the same block in deseq2.R.
+        wanted <- paste0(s, ".featureCounts.txt")
+        match_file <- count_files[basename(count_files) == wanted]
+        if (length(match_file) == 0) stop(paste("File not found for", s, ":", wanted))
+        if (length(match_file) > 1) {
+            stop(paste("More than one count file matches sample", s, ":",
+                       paste(match_file, collapse = ", ")))
+        }
 
-        df <- read.table(match_file[1], header = TRUE, comment.char = "#",
+        df <- read.table(match_file, header = TRUE, comment.char = "#",
                          stringsAsFactors = FALSE)
         counts <- df[, ncol(df)]
         names(counts) <- df$Geneid
         counts_list[[s]] <- counts
     }
+
+    # Index by the first sample's gene ids rather than trusting cbind()'s
+    # positional bind (M4). See the fuller note in deseq2.R.
+    gene_ids <- names(counts_list[[1]])
+    for (s in names(counts_list)) {
+        if (!identical(names(counts_list[[s]]), gene_ids)) {
+            if (!setequal(names(counts_list[[s]]), gene_ids)) {
+                stop(paste("Count file for sample", s, "has a different gene set to",
+                           names(counts_list)[1], "- they must come from one annotation"))
+            }
+            counts_list[[s]] <- counts_list[[s]][gene_ids]
+        }
+    }
     count_matrix <- do.call(cbind, counts_list)
-    rownames(count_matrix) <- names(counts_list[[1]])
+    rownames(count_matrix) <- gene_ids
 
     y <- DGEList(counts = count_matrix, group = samples$condition)
     keep <- filterByExpr(y)

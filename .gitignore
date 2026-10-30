@@ -41,4 +41,11 @@ __pycache__/
 *.code-workspace
 *.pptx
 *.rar
-validate*.py
+
+# Scratch validators dropped at the repository root, which are per-machine.
+# Anchored with a leading slash: unanchored, this pattern matches at any depth,
+# and it was excluding tests/validate_topology.py from the repository
+# altogether. The checker that verifies every process call's arity against its
+# declared inputs was therefore not in any clone, which is how the four
+# never-executed defects found on 2026-10-29 reached a release.
+/validate*.py

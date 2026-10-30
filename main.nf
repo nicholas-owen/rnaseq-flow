@@ -107,6 +107,23 @@ def checkParameters() {
               "directives are ignored and every tool is taken from PATH."
     }
 
+    // The STAR route cannot run without an annotation: STAR_ALIGN passes
+    // --sjdbGTFfile unconditionally, and the workflow hands it file(params.gtf).
+    // Without --gtf that call failed with "Argument of `file()` function cannot
+    // be null", which names neither the parameter nor the aligner. HISAT2 takes
+    // no GTF at alignment time, so a GTF-less run there is legitimate and only
+    // skips the annotation-dependent stages.
+    //
+    // Exempt when alignment never happens: --stop_at preQC stops at read QC,
+    // and --counts enters below alignment and already demands --gtf of its own
+    // accord just below.
+    if (params.aligner == 'star' && !params.gtf && !params.counts &&
+        params.stop_at != 'preQC' && !params.build_indices && !params.download_refs) {
+        error "--aligner star requires --gtf: STAR is given the annotation as " +
+              "--sjdbGTFfile. Pass --gtf, or use --aligner hisat2, which does not " +
+              "need one at alignment time."
+    }
+
     // Count-matrix entry (--counts): starts at differential expression, so it
     // needs the samplesheet (for the design) and the GTF (for gene annotation),
     // and it is incompatible with the pre-DE stop points.

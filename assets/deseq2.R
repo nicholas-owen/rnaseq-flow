@@ -408,20 +408,51 @@ if (matrix_mode) {
     count_files <- inputs
     counts_list <- list()
     for (s in samples$sample) {
-        # featureCounts files are named "<sample>.featureCounts.txt".
-        match_file <- grep(paste0(s, ".featureCounts.txt"), count_files, value = TRUE)
+        # Exact basename match rather than a pattern search (M3). grep() here
+        # was unanchored, so sample 'rep1' also matched
+        # 'rep10.featureCounts.txt' and any sample whose name is a prefix of
+        # another could take the wrong file; '.' is a regex metacharacter too,
+        # matching any character. match_file[1] then chose silently among the
+        # hits, so the wrong sample's counts were attached to the right sample
+        # name and nothing complained. The module stages these as
+        # "<sample>.featureCounts.txt", so equality is exact and no pattern is
+        # needed. This is the same defect that was found and fixed in the rMATS
+        # path (C3); the fix never reached here.
+        wanted <- paste0(s, ".featureCounts.txt")
+        match_file <- count_files[basename(count_files) == wanted]
         if (length(match_file) == 0) {
-            stop(paste("Count file for sample", s, "not found in inputs"))
+            stop(paste("Count file for sample", s, "not found in inputs:", wanted))
+        }
+        if (length(match_file) > 1) {
+            stop(paste("More than one count file matches sample", s, ":",
+                       paste(match_file, collapse = ", ")))
         }
         # featureCounts format: Geneid, Chr, Start, End, Strand, Length, <count>
-        df <- read.table(match_file[1], header = TRUE, comment.char = "#",
+        df <- read.table(match_file, header = TRUE, comment.char = "#",
                          stringsAsFactors = FALSE)
         counts <- df[, ncol(df)]          # count is the last column
         names(counts) <- df$Geneid
         counts_list[[s]] <- counts
     }
+
+    # cbind() binds by position, and the row names were taken from the first
+    # sample alone, so a file whose genes arrived in a different order would have
+    # had its counts attached to the wrong gene ids with no error (M4). Index
+    # every sample by the first sample's gene ids instead: an identical order is
+    # a no-op, a reordering is repaired, and a genuinely different gene set stops
+    # the run rather than being silently recycled to length.
+    gene_ids <- names(counts_list[[1]])
+    for (s in names(counts_list)) {
+        if (!identical(names(counts_list[[s]]), gene_ids)) {
+            if (!setequal(names(counts_list[[s]]), gene_ids)) {
+                stop(paste("Count file for sample", s, "has a different gene set to",
+                           names(counts_list)[1], "- they must come from one annotation"))
+            }
+            counts_list[[s]] <- counts_list[[s]][gene_ids]
+        }
+    }
     count_matrix <- do.call(cbind, counts_list)
-    rownames(count_matrix) <- names(counts_list[[1]])
+    rownames(count_matrix) <- gene_ids
 
     dds <- DESeqDataSetFromMatrix(countData = count_matrix,
                                   colData   = samples,

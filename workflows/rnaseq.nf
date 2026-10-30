@@ -910,7 +910,16 @@ workflow RNASEQ {
              ch_versions = ch_versions.mix(BAM_TO_BIGWIG.out.versions.first())
              
              // rMATS (Level 4+) - collapse all per-sample BAMs into one task.
-             if (run_level >= 4 && params.input.endsWith('.csv')) {
+             //
+             // Guarded on params.gtf, which is optional on this route: rMATS
+             // builds its event model from the annotation, and the call below
+             // passes file(params.gtf). GTF2BED, RSEQC and FEATURECOUNTS are
+             // all guarded this way within twenty lines of here; this one was
+             // not, so a --aligner star run with no --gtf reached file(null).
+             // Skipping with a notice instead, so that configuration now skips
+             // cleanly the whole way down, which is what B2 fixed for DESeq2
+             // and edgeR.
+             if (run_level >= 4 && params.input.endsWith('.csv') && params.gtf) {
                 // One --libType for the whole cohort. Under --strandedness auto
                 // this comes from the per-sample RSeQC verdicts, which
                 // rmatsLibType() refuses to average: a cohort that disagrees is
@@ -965,7 +974,12 @@ workflow RNASEQ {
                 ch_versions = ch_versions.mix(RMATS.out.versions)
                 ch_quarto_rmats = RMATS.out.results
              }
-         
+             else if (run_level >= 4 && params.input.endsWith('.csv')) {
+                 def msg = "rMATS needs --gtf for its splicing event model; skipping."
+                 log.warn msg
+                 notices.add(msg)
+             }
+
              // FeatureCounts gene counts (input to DESeq2 / edgeR at Level >= 3).
              if (params.gtf) {
                  def gtf_file = file(params.gtf)
