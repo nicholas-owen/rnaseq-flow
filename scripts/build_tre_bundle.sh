@@ -20,16 +20,16 @@
 #
 # The containers declared in modules/local/*.nf are pulled straight from their
 # registry, and are discovered by grepping those files, so a new module needs
-# nothing here. The eight processes that declare a `conda` directive instead
-# have no registry image at all: Wave builds one per run from the Conda spec,
-# under an ephemeral URL. Those are taken from a completed run's task
-# directories, which record the image in `.command.run`, and rewritten to
-# stable local names that tre.config then points at.
+# nothing here. The processes that declare a `conda` directive instead have no
+# registry image at all: Wave builds one per run from the Conda spec, under an
+# ephemeral URL. Those are taken from a completed run's task directories, which
+# record the image in `.command.run`, and rewritten to stable local names that
+# tre.config then points at. That set is discovered too, as of 2026-10-30.
 #
-# So this needs a run that exercised all eight first, and that run has to
-# include --isoform_switch on a Salmon route, which is the only way to reach
+# So this needs a run that exercised every one of them first, and that run has
+# to include --isoform_switch on a Salmon route, which is the only way to reach
 # ISOFORM_SWITCH. The script says which are missing rather than producing a
-# bundle with holes in it, but only for processes listed in CONDA_PROCS below.
+# bundle with holes in it.
 
 set -euo pipefail
 
@@ -45,17 +45,31 @@ DEST="${3:-$HOME}"
 OUT="$DEST/singularity-$VERSION"
 TAR="$DEST/rnaseq-flow-$VERSION-singularity.tar"
 
-# The eight Conda-only processes, and the local image name each gets.
+# The Conda-only processes, and the local image name each gets, discovered the
+# same way the registry images already are.
 #
-# This list is the one part of the script that does not discover itself, and a
-# process missing from it is never looked for, so the bundle is short an image
-# with nothing reported. Keep it in step with:
-#     grep -l "^\s*conda '" modules/local/*.nf
-# ISOFORM_SWITCH joined on 2026-10-18, when it stopped pinning a biocontainer
-# that had no MASS in it.
-CONDA_PROCS="DESEQ2:deseq2 DIFFSPLICE:diffsplice DOWNLOAD_GMT:download-gmt \
-DTU:dtu GPROFILER:gprofiler GSEA:gsea ISOFORM_SWITCH:isoform-switch \
-QUARTO_REPORT:quarto-report"
+# This used to be a hand-maintained list, and it was the one part of the script
+# that did not discover itself. A process missing from it is never looked for,
+# so the bundle comes out an image short and says nothing about it. The list had
+# already fallen behind once: ISOFORM_SWITCH joined on 2026-10-18, when it
+# stopped pinning a biocontainer that had no MASS in it, and the comment here
+# carried the grep to run by hand instead of running it.
+#
+# The process name comes from each file's own `process NAME {` line rather than
+# from the filename, because quarto.nf declares QUARTO_REPORT. The image name is
+# that lowercased with underscores turned into hyphens, which is the convention
+# the hand-written list followed.
+CONDA_PROCS=$(
+    grep -l "^[[:space:]]*conda '" "$REPO"/modules/local/*.nf | while read -r f; do
+        proc=$(sed -n 's/^process[[:space:]]\{1,\}\([A-Za-z0-9_]\{1,\}\).*/\1/p' "$f" | head -1)
+        if [ -z "$proc" ]; then
+            echo "no process declaration found in $f" >&2
+            exit 1
+        fi
+        printf '%s:%s\n' "$proc" "$(printf '%s' "$proc" | tr 'A-Z_' 'a-z-')"
+    done | sort
+)
+[ -n "$CONDA_PROCS" ] || { echo "no module declares a conda directive" >&2; exit 1; }
 
 command -v singularity >/dev/null || { echo "singularity not found" >&2; exit 1; }
 

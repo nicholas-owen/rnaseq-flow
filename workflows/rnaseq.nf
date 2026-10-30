@@ -866,6 +866,20 @@ workflow RNASEQ {
         }
         else if (params.aligner == 'salmon') {
             if (!params.salmon_index) error "Salmon index not provided via --salmon_index"
+            // Salmon is invoked with --libType A (modules/local/salmon.nf) and
+            // detects the library type per sample, so --strandedness reaches
+            // nothing on this route. Auto-detection is the better behaviour and
+            // is not being changed; the fault was the silence. A value set here
+            // was accepted and discarded with no sign of it, and this example's
+            // own Salmon command carried --strandedness unstranded for months
+            // doing nothing at all (m4).
+            if (params.strandedness != 'auto') {
+                def msg = "--strandedness ${params.strandedness} has no effect with --aligner salmon: " +
+                          "Salmon is run with --libType A and detects the library type per sample. " +
+                          "The detected type is recorded in each sample's lib_format_counts.json."
+                log.warn msg
+                notices.add(msg)
+            }
             SALMON_QUANT( FASTP.out.reads, file(params.salmon_index) )
             ch_versions = ch_versions.mix(SALMON_QUANT.out.versions.first())
             ch_align_results = ch_align_results.mix(SALMON_QUANT.out.results.collect { row -> row[1] })

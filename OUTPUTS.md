@@ -307,6 +307,14 @@ and `.png`, and each can be redrawn from `reproduce/` (§18).
 > Genes called significant by **both** DESeq2 and edgeR are the most robust
 > hits. Modest disagreement near the significance threshold is expected.
 
+The two also test different gene sets, which is worth knowing before reading
+their counts side by side. DESeq2 keeps genes with `rowSums(counts) >= 10`,
+edgeR uses `filterByExpr()`, which accounts for group sizes and library sizes.
+Each is its own package's recommendation and neither is being overridden, but it
+means the denominators differ: on the yeast example edgeR tests roughly 800
+fewer genes than DESeq2 on the same data. A gene present in one table and absent
+from the other has usually been filtered, not found non-significant.
+
 ---
 
 ## 9. Gene-set enrichment: `gsea_output/`

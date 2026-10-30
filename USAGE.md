@@ -476,7 +476,12 @@ genome aligners (STAR/HISAT2): each sample's verdict is written to
 Set `--strandedness` explicitly only to override the inference.
 
 **Salmon** auto-detects library type internally (`--libType A`), so it needs no
-setting. **Kallisto** has no equivalent and produces no BAM for RSeQC, so it
+setting and `--strandedness` reaches nothing on that route. Setting one anyway
+is not an error, but the pipeline warns and records a notice, because a flag
+that is accepted and discarded in silence is worse than one that is refused.
+Salmon writes what it detected to `results/salmon/<sample>/lib_format_counts.json`,
+where `expected_format` and `strand_mapping_bias` give the verdict and how
+clear-cut it was. **Kallisto** has no equivalent and produces no BAM for RSeQC, so it
 *cannot* auto-detect: with `auto` (or `unstranded`) it runs without a strand
 flag. If your library is stranded and you use kallisto, pass `--strandedness
 forward` or `reverse` explicitly so the `--fr-stranded` / `--rf-stranded` flag
@@ -1033,10 +1038,11 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
     --outdir results
 ```
 
-The `tre` profile disables Wave and pins the seven Conda-declared processes
-(DESeq2, edgeR/tximport, DEXSeq, GSEA, gProfiler, `--download_gmt`, and the
-Quarto report) to the images in the bundle. Combine it with whichever executor
-profile you need: `tre,sge` above, or `tre` alone for a local run.
+The `tre` profile disables Wave and pins the eight Conda-declared processes
+(DESeq2, edgeR/tximport, DEXSeq, IsoformSwitchAnalyzeR, GSEA, gProfiler,
+`--download_gmt`, and the Quarto report) to the images in the bundle. Combine it
+with whichever executor profile you need: `tre,sge` above, or `tre` alone for a
+local run.
 
 Verify the download before transferring it, since a truncated 7 GB file fails in
 confusing ways much later:
@@ -1066,6 +1072,17 @@ sha256sum -c rnaseq-flow-1.8.0-singularity.tar.sha256
 - **Do not use `-profile conda` in a TRE.** It resolves and installs
   environments at run time, which needs both Conda and reachable channels. The
   containers exist precisely to avoid that.
+- **The bundle is the only way to re-run a release's exact software.** Outside
+  it, the eight Conda-declared processes are built by Wave at run time from
+  their Conda specs, under a URL that is per-run and cannot be pulled again.
+  `wave.freeze` is deliberately not set, so those images are never pushed to a
+  registry and nothing pins them by digest. A run from 2026 and the same command
+  in 2028 will therefore resolve whatever the Conda channels hold then, and the
+  two are not guaranteed to be identical. Everything else is pinned: the other
+  24 processes name a fixed biocontainer tag, and `versions.yml` records the
+  version each tool actually reported, so a result states the software that
+  produced it even where it cannot recreate it. If you need a release to stay
+  re-runnable, keep its Singularity bundle.
 
 If your environment has an internal container registry (Harbor, Artifactory,
 Nexus) rather than a shared filesystem, push the bundle's images there and

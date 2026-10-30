@@ -321,7 +321,12 @@ repro_directions <- character(0)
 for (f in res_files) {
     # Extract contrast name
     basename_f <- basename(f)
-    contrast_name <- sub("deseq2_results_", "", sub(".csv", "", basename_f))
+    # Both patterns anchored, and the dot escaped (m3). sub(".csv", "", x) treats
+    # '.' as a wildcard and is unanchored, so it removes the first four-character
+    # run ending in "csv" anywhere in the name: a contrast called "Mcsv_vs_REF"
+    # loses the wrong piece and the enrichment is filed under a mangled name.
+    # Same defect as the count-file match in deseq2.R and edger.R (M3).
+    contrast_name <- sub("^deseq2_results_", "", sub("\\.csv$", "", basename_f))
     
     message(paste("Processing contrast:", contrast_name))
     

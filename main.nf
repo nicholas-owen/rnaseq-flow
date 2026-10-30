@@ -156,7 +156,7 @@ def checkParameters() {
     // Skipped: values containing a glob (resolved later, and legitimately may
     // match nothing yet) and remote URIs (s3://, https://, ...), which cannot be
     // checked cheaply or offline.
-    def path_params = ['gmt', 'gtf', 'fasta', 'transcript_fasta', 'counts',
+    def path_params = ['gmt', 'gtf', 'transcript_fasta', 'counts',
                        'genome_fasta', 'star_index', 'hisat2_index',
                        'salmon_index', 'kallisto_index', 'ctat_lib']
     def bad_paths = path_params.findAll { p ->
@@ -480,20 +480,36 @@ workflow {
                 }
                 .set { ch_reads }
         } else {
-            // Fallback to original Glob pattern logic
+            // Glob input: no samplesheet, so there is no condition column and
+            // differential expression cannot run. Read layout is taken from what
+            // fromFilePairs actually grouped, not guessed from the pattern.
+            //
+            // `size: -1` means "however many files share a key". It replaced
+            // `size: params.input.count('*') > 1 ? 2 : 1`, which counted
+            // asterisks in the pattern: the commonest paired-end glob there is,
+            // /data/*_R{1,2}.fastq.gz, has exactly one, so it was read as
+            // single-end and each mate was aligned as a separate sample with
+            // half the evidence and a doubled sample count (m7). Counting
+            // asterisks could not work, because the alternation group rather
+            // than the wildcard is what makes a pattern paired.
             channel
-                .fromFilePairs( params.input, size: params.input.count('*') > 1 ? 2 : 1 )
+                .fromFilePairs( params.input, size: -1 )
                 .ifEmpty { error "Cannot find any reads matching: ${params.input}" }
                 .map { name, reads ->
-                    def meta = [:]
-                    meta.id = name
-                    meta.single_end = reads instanceof Path
-                    if (reads instanceof List && reads.size() == 2) {
-                        meta.single_end = false
-                    } else {
-                         meta.single_end = true
+                    // Always a list under size: -1, but normalised anyway so the
+                    // size test below cannot be fooled by a bare path.
+                    def files = (reads instanceof List) ? reads : [ reads ]
+                    if (files.size() > 2) {
+                        error "Read pattern '${params.input}' grouped ${files.size()} files " +
+                              "under sample '${name}': ${files.collect { it.name }.join(', ')}. " +
+                              "Expected one file for single-end or two for paired-end. Narrow the " +
+                              "pattern, or use a samplesheet with --input, which names each file."
                     }
-                    return [ meta, reads ]
+                    // Derived once, from the files in hand. The previous version
+                    // assigned this from `reads instanceof Path` and then
+                    // overwrote it in the very next statement.
+                    def meta = [ id: name, single_end: files.size() == 1 ]
+                    return [ meta, files ]
                 }
                 .set { ch_reads }
         }

@@ -67,11 +67,6 @@
       "type": "object",
       "description": "Reference files and pre-built aligner indices.",
       "properties": {
-        "fasta": {
-          "type": "string",
-          "format": "file-path",
-          "description": "Genome FASTA reference file."
-        },
         "gtf": {
           "type": "string",
           "format": "file-path",
