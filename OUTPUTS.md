@@ -730,6 +730,24 @@ Salmon/Kallisto.
   Because `sha256` has no term in the RO-Crate 1.1 context, the crate's
   `@context` is extended with one pointing at SPDX.
 
+  **The crate references its inputs rather than enclosing them.** nf-prov copies
+  each input named by a parameter into the results directory;
+  `lib/CrateEnricher.groovy` replaces that copy with a `file:///absolute/path`
+  pointing at the original and deletes the copy, reporting how many and how much
+  on the console (`2 input copies removed (582 kB)`). Without it a run carrying
+  a 3 GB GTF and a transcriptome ships a second copy of both inside the results.
+
+  The cost is that those references resolve only on the machine that produced
+  the crate. A crate sent by email names input paths the recipient does not
+  have. What travels intact is the `sha256` of every one, which is retained, so
+  a recipient who obtains the same reference files separately can prove they are
+  the same files. Treat the input entities as identifiers, not as enclosures,
+  and send the references alongside if the recipient needs them.
+
+  Only genuine inputs are externalised, and only when the parameter resolves to
+  a file that still exists outside `--outdir`. Published results are never
+  touched, and anything that does not match is left exactly as nf-prov wrote it.
+
 The reference set's own provenance is not here: `--download_refs` writes
 `reference_metadata.json` beside the reference files
 ([USAGE.md §2](USAGE.md#2-mode-1-download-references)), and the manifest
