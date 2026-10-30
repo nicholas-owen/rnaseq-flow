@@ -61,6 +61,20 @@ process HISAT2_BUILD {
                  "  To accept the reduced index and silence this warning, set " +
                  "--hisat2_build_memory ${avail_gb}.GB."
     }
+    // Whether the splice graph went in is recorded inside the index directory,
+    // not only in the log. The warning above scrolls away, and an index built
+    // once and reused for months through --hisat2_index otherwise carries no
+    // record at all of which kind it is: the two are indistinguishable on disk,
+    // and the reduced one aligns across junctions perfectly happily while being
+    // less sensitive to novel ones. workflows/rnaseq.nf reads this back into
+    // run_manifest.json (B3).
+    //
+    // Written with separate echo lines rather than a heredoc on purpose. An
+    // interpolated multi-line string would place its later lines at column 0,
+    // which makes the script block's common indentation zero, so stripIndent()
+    // removes nothing and the space-indented END_VERSIONS terminator below
+    // stops matching. See the same trap in modules/local/multiqc.nf and
+    // modules/local/rmats.nf, and the check for it in tests/check_report.py.
     """
     mkdir hisat2_index
     ${ fasta_gz ? "gunzip -c ${fasta} > ${fasta_use}" : "" }
@@ -74,6 +88,13 @@ process HISAT2_BUILD {
         ${fasta_use} \\
         hisat2_index/genome
 
+    {
+      echo "splice_aware: ${splice_aware}"
+      echo "annotation: ${splice_aware ? gtf.name : 'not used'}"
+      echo "memory_granted_gb: ${avail_gb}"
+      echo "memory_estimated_gb: ${need_gb}"
+    } > hisat2_index/build_info.yml
+
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         hisat2: \$(hisat2 --version | grep -o 'version [^ ]*' | sed 's/version //')
@@ -84,6 +105,7 @@ process HISAT2_BUILD {
     """
     mkdir hisat2_index
     touch hisat2_index/genome.1.ht2
+    echo "splice_aware: stub" > hisat2_index/build_info.yml
     touch versions.yml
     """
 }

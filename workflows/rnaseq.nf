@@ -447,6 +447,32 @@ def describeGeneSets(gmt) {
  * column, and a --counts run has no reads at all.
  */
 /*
+ * Read the build marker HISAT2_BUILD leaves inside its index directory.
+ *
+ * A splice-aware index and a reduced one are indistinguishable on disk, and the
+ * reduced one works: HISAT2 still aligns across junctions using its own model,
+ * it is just less sensitive to novel ones. So the only record of which kind an
+ * index is used to be a log warning, which has scrolled away long before anyone
+ * reads the results, and is absent entirely when an index built months ago is
+ * reused through --hisat2_index (B3).
+ *
+ * Returns null for any other aligner, for an index built before the marker
+ * existed, and for a path that cannot be read. An absent marker is not an
+ * error: most indexes in use predate it.
+ */
+def resolveIndexBuild(index_path) {
+    if (!index_path) return null
+    def marker = file("${index_path}/build_info.yml")
+    if (!marker.exists()) return null
+    def fields = [:]
+    marker.readLines().each { line ->
+        def parts = line.split(':', 2)
+        if (parts.size() == 2) fields[parts[0].trim()] = parts[1].trim()
+    }
+    return fields ?: null
+}
+
+/*
  * Collapse per-sample strandedness verdicts to the single rMATS --libType the
  * whole cohort has to share.
  *
@@ -678,6 +704,9 @@ def buildRunManifest(design, notices) {
             genome_fasta    : params.genome_fasta?.toString(),
             transcript_fasta: params.transcript_fasta?.toString(),
             index           : index?.toString(),
+            // Null for every aligner but HISAT2, and for a HISAT2 index built
+            // before this field existed. See resolveIndexBuild().
+            index_build     : resolveIndexBuild(index),
         ],
         gene_sets: describeGeneSets(params.gmt),
     ]
