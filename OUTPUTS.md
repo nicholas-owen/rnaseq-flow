@@ -273,7 +273,7 @@ email. Each can be redrawn and adapted from `reproduce/` (§18).
 | File | Use |
 |---|---|
 | `pca_plot` | Sample clustering: replicates of a condition should group together; if not, suspect batch effects or mislabelling |
-| `maplot_<A>_vs_<B>` | Fold change vs mean expression; significant genes highlighted |
+| `maplot_<A>_vs_<B>` | Fold change vs mean expression; significant genes highlighted. The y axis is taken from the contrast's own fold changes, never narrower than ±2, so nothing is clipped onto the boundary. Two contrasts in one run can therefore carry different y axes: read the numbers, not the shape, when comparing them |
 | `volcano_<A>_vs_<B>` | Volcano plot: log2 fold change vs −log10 p-value; genes with `padj < 0.05` and `|log2FC| > 1` are coloured (up red, down blue) |
 | `shrinkage_ma_<A>_vs_<B>` | The same contrast before and after apeglm, so you can see how far shrinkage moved the fold changes rather than take it on faith |
 | `heatmap_top_var` | The 20 most variable genes across samples, variance-stabilised |

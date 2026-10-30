@@ -129,6 +129,29 @@ draw_volcano <- function(lfc, pval, padj, title, padj_cut = 0.05, lfc_cut = 1) {
 # ---------------------------------------------------------------------------
 FIG_RES <- 300   # px per inch for the raster copy. 300 is the usual journal minimum for halftone / combination figures. Affects the PNG only -- the SVG is vector, so resolution is meaningless there.
 
+# Symmetric y limits for an MA plot, taken from the data with a floor.
+#
+# This was a hardcoded c(-2, 2) (m5). DESeq2 draws out-of-range genes as
+# triangles on the boundary rather than dropping them, so the clipping was
+# visible, but the clipped genes are exactly the ones worth looking at: on the
+# yeast NaCl contrast HSP12 shrinks to log2FC 8.1, four times the old limit, and
+# sat on the rim along with every other strong result.
+#
+# The floor stops a weak contrast being stretched into a misleadingly dramatic
+# axis, so a run with nothing much happening looks the way it always did.
+# ceiling() keeps the axis labels whole numbers. Symmetric because an MA plot
+# whose zero line is off-centre is harder to read, and zero is the only
+# reference the plot has.
+#
+# Passed into reproduce/maplot.R as a function rather than as a precomputed
+# limit, so the regenerated figure cannot drift from the published one and so
+# it still adapts when the script is pointed at a different contrast.
+ma_ylim <- function(lfc, floor_limit = 2) {
+    widest <- suppressWarnings(max(abs(lfc), na.rm = TRUE))
+    limit  <- if (is.finite(widest)) max(floor_limit, ceiling(widest)) else floor_limit
+    c(-limit, limit)
+}
+
 save_figure <- function(dir, name, draw, width = 7, height = 7) {
     png(file.path(dir, paste0(name, ".png")),
         width = width, height = height, units = "in", res = FIG_RES)
@@ -875,7 +898,7 @@ run_contrast <- function(condA, condB) {
     save_figure("deseq2_output", paste0("maplot_", condA, "_vs_", condB),
                 function() plotMA(res, main = paste(condA, "vs", condB,
                                                     "(apeglm-shrunk LFC)"),
-                                  ylim = c(-2, 2)))
+                                  ylim = ma_ylim(res$log2FoldChange)))
 
     save_figure("deseq2_output", paste0("volcano_", condA, "_vs_", condB),
                 function() draw_volcano(res$log2FoldChange, res$pvalue, res$padj,
@@ -971,17 +994,20 @@ if (length(repro_contrasts)) {
         description = "DESeq2 MA plot: apeglm-shrunken log2 fold change vs mean expression.",
         libraries   = "DESeq2",
         selectors   = list(CONTRAST = repro_contrasts),
-        constants   = list(YLIM = c(-2, 2), WIDTH = 7, HEIGHT = 7,
+        constants   = list(YLIM_FLOOR = 2, WIDTH = 7, HEIGHT = 7,
                            FIG_RES = FIG_RES),
-        functions   = list(save_figure = save_figure),
+        functions   = list(save_figure = save_figure, ma_ylim = ma_ylim),
         inputs      = 'paste0("deseq2_results_", CONTRAST, ".rds")',
         body        = c(
             '# The saved object holds both fits: $res is apeglm-shrunken (what the',
             '# figure shows) and $res_mle is the unshrunken Wald fit.',
             'fits <- readRDS(paste0("deseq2_results_", CONTRAST, ".rds"))',
             '',
+            '# Limits from this contrast, never below +/- YLIM_FLOOR. Raise the',
+            '# floor to widen a quiet plot; the data sets the upper end.',
             'save_and_document(paste0("maplot_", CONTRAST),',
-            '                  function() plotMA(fits$res, ylim = YLIM,',
+            '                  function() plotMA(fits$res,',
+            '                                    ylim = ma_ylim(fits$res$log2FoldChange, YLIM_FLOOR),',
             '                                    main = paste(sub("_vs_", " vs ", CONTRAST),',
             '                                                 "(apeglm-shrunk LFC)")),',
             '                  width = WIDTH, height = HEIGHT)'))
