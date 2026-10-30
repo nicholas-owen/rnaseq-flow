@@ -19,6 +19,32 @@ include { BUILD_INDICES } from './workflows/build_indices'
  * at the top of the file. The schema is loaded defensively: if it is missing or
  * unreadable the pipeline still runs, with help / parameter checking skipped.
  */
+
+/*
+ * A parameter as a number, or null when it is not one.
+ *
+ * Needed because a value from the command line arrives as a String while the
+ * same parameter declared in nextflow.config is a number, so neither a cast nor
+ * a type check works for both. `as Double` on a non-numeric String throws, and
+ * the message names a Groovy internal rather than the parameter, so the caller
+ * gets null and writes its own error.
+ *
+ * A top-level function rather than a local closure, because the strict parser
+ * does not resolve a closure variable invoked as a function. That is the same
+ * constraint recorded for the run-summary helpers in workflows/rnaseq.nf, and
+ * the first version of this check hit it: every value failed, valid ones
+ * included.
+ */
+def asNumber(value) {
+    if (value == null) return null
+    try {
+        return value.toString().toDouble()
+    }
+    catch (Exception e) {
+        return null
+    }
+}
+
 def checkParameters() {
     def schema_json = null
     try {
@@ -105,6 +131,32 @@ def checkParameters() {
               "-profile singularity or -profile conda (combine with others using " +
               "a comma, e.g. -profile test_yeast,docker). Without one, container " +
               "directives are ignored and every tool is taken from PATH."
+    }
+
+    // Significance thresholds, checked here rather than left to R. The analysis
+    // scripts validate them too, but they run after alignment and
+    // quantification, so a typo would cost the whole run before being noticed.
+    //
+    // asNumber() is a top-level function (see above it) rather than a local
+    // closure: the strict parser does not resolve a closure variable invoked
+    // as a function, which is the same constraint recorded in
+    // workflows/rnaseq.nf for its run-summary helpers.
+    def padj_cut = asNumber(params.padj_cutoff)
+    if (padj_cut == null) {
+        error "--padj_cutoff must be a number; got '${params.padj_cutoff}'"
+    }
+    if (padj_cut <= 0 || padj_cut > 1) {
+        error "--padj_cutoff must be greater than 0 and at most 1; got ${padj_cut}. " +
+              "It is an adjusted p-value, so a value above 1 selects every gene."
+    }
+    def lfc_cut = asNumber(params.lfc_cutoff)
+    if (lfc_cut == null) {
+        error "--lfc_cutoff must be a number; got '${params.lfc_cutoff}'"
+    }
+    if (lfc_cut < 0) {
+        error "--lfc_cutoff must be 0 or more; got ${lfc_cut}. It is compared against " +
+              "an absolute log2 fold change, so a negative value selects every gene. " +
+              "Use 0 to select on the adjusted p-value alone."
     }
 
     // The STAR route cannot run without an annotation: STAR_ALIGN passes

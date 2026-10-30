@@ -235,8 +235,19 @@ or_unrecorded <- function(x) {
 }
 
 # ---- Significance thresholds (shared throughout the report) ----------------
-PADJ_CUT       <- 0.05   # adjusted-p / FDR cutoff
-LFC_CUT        <- 1      # |log2 fold change| cutoff (a 2-fold change)
+# Read from the manifest, which records what --padj_cutoff and --lfc_cutoff were
+# for this run, rather than repeating the numbers here (m2). Repeating them meant
+# the report could describe a rule the figures beside it had not used: four
+# copies of the pair existed, in deseq2.R, edger.R, gprofiler.R and here.
+#
+# The fallbacks are the param defaults, for a manifest written before these
+# fields existed. as.numeric() because mf() returns character.
+num_or <- function(x, fallback) {
+  v <- suppressWarnings(as.numeric(x))
+  if (length(v) == 0 || is.na(v)) fallback else v
+}
+PADJ_CUT       <- num_or(mf("analysis", "padj_cutoff"), 0.05)
+LFC_CUT        <- num_or(mf("analysis", "lfc_cutoff"), 1)
 MAX_TABLE_ROWS <- 1000   # cap on rows shown in an interactive results table
 MAX_NS_POINTS  <- 8000   # cap on non-significant points drawn per volcano
 

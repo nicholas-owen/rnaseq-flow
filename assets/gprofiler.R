@@ -11,6 +11,23 @@ if (length(args) < 2) {
 organism <- args[1]
 de_dir <- args[2]
 
+# Which genes count as differentially expressed, from --padj_cutoff and
+# --lfc_cutoff (m2). The same pair the volcano figures and the report use, so an
+# enrichment result and the figure beside it are selected by one rule. Defaults
+# match the params so the script still runs standalone. Applied to DESeq2's
+# apeglm-shrunken log2FoldChange; see the note in deseq2.R for why that makes
+# the effect-size filter stricter than the number alone suggests.
+PADJ_CUT <- as.numeric(Sys.getenv("RNASEQ_FLOW_PADJ_CUTOFF", "0.05"))
+LFC_CUT  <- as.numeric(Sys.getenv("RNASEQ_FLOW_LFC_CUTOFF", "1"))
+if (is.na(PADJ_CUT) || PADJ_CUT <= 0 || PADJ_CUT > 1) {
+    stop("--padj_cutoff must be a number greater than 0 and at most 1; got '",
+         Sys.getenv("RNASEQ_FLOW_PADJ_CUTOFF"), "'")
+}
+if (is.na(LFC_CUT) || LFC_CUT < 0) {
+    stop("--lfc_cutoff must be a number of 0 or more; got '",
+         Sys.getenv("RNASEQ_FLOW_LFC_CUTOFF"), "'")
+}
+
 library(gprofiler2)
 library(ggplot2)
 
@@ -333,11 +350,16 @@ for (f in res_files) {
     # Read DE results
     res <- read.csv(f, row.names = 1, stringsAsFactors = FALSE)
     
-    # Identify significant genes
-    # Filter: padj < 0.05 and |log2FC| > 1 (optional, stricter is usually better for GO)
+    # Identify significant genes, at the same thresholds as the volcano figures
+    # and the report (m2). These were literals here, so the enrichment could be
+    # run at a different rule from the figures beside it with nothing to say so.
+    #
+    # Not to be confused with user_threshold further down, which is gProfiler's
+    # own significance threshold on the enrichment p-value. That is a different
+    # quantity on a different test and is deliberately left alone.
     if ("padj" %in% colnames(res) & "log2FoldChange" %in% colnames(res)) {
-       sig_genes_up <- rownames(res)[which(res$padj < 0.05 & res$log2FoldChange > 1)]
-       sig_genes_down <- rownames(res)[which(res$padj < 0.05 & res$log2FoldChange < -1)]
+       sig_genes_up <- rownames(res)[which(res$padj < PADJ_CUT & res$log2FoldChange > LFC_CUT)]
+       sig_genes_down <- rownames(res)[which(res$padj < PADJ_CUT & res$log2FoldChange < -LFC_CUT)]
     } else {
        next
     }

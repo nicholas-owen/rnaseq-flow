@@ -148,6 +148,21 @@
           "default": "REF",
           "description": "Baseline condition: the denominator of every contrast.",
           "help_text": "Every fold change and every PSI difference is measured against this condition, so it decides which way results point. It must be one of the values in the samplesheet's condition column; the run fails at launch if a level you named is not there. When left at the default and no condition is called REF, the tools fall back to alphabetical order and say so in the log. Used by DESeq2, edgeR, rMATS, DEXSeq and diffSplice."
+        },
+        "padj_cutoff": {
+          "type": "number",
+          "default": 0.05,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Adjusted p-value cutoff for calling a gene differentially expressed.",
+          "help_text": "DESeq2's padj and edgeR's FDR, at the same value. Shared by the volcano figures, the shrinkage diagnostic, the gene lists sent to gProfiler and the report, so a figure and an enrichment result beside it are selected by one rule. Distinct from gProfiler's own enrichment p-value threshold, which is a different test and is not configurable here."
+        },
+        "lfc_cutoff": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "description": "Absolute log2 fold change cutoff for calling a gene differentially expressed.",
+          "help_text": "1 is a two-fold change. Set 0 to select on the adjusted p-value alone. Applied to DESeq2's apeglm-shrunken log2FoldChange, which is DESeq2's recommendation for thresholding and which pulls estimates toward zero, so 1 here is stricter than 1 on a raw Wald estimate; the unshrunken values are in the log2FoldChange_MLE column of every results CSV. edgeR's logFC is not shrunk that way, so the same cutoff is marginally looser there."
         }
       }
     },

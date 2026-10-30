@@ -21,6 +21,8 @@ process DESEQ2 {
     path counts_files
     path r_script
     val  ref_level
+    val  padj_cutoff   // what counts as significant; see nextflow.config
+    val  lfc_cutoff
 
     output:
     path "deseq2_output", emit: results
@@ -46,6 +48,8 @@ process DESEQ2 {
     // result and should not resume.
     """
     export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
+    export RNASEQ_FLOW_PADJ_CUTOFF='${padj_cutoff}'
+    export RNASEQ_FLOW_LFC_CUTOFF='${lfc_cutoff}'
     Rscript ${r_script} ${samplesheet} '${design}' ${gene_info} ${args}${counts_files}
 
     cat <<-END_VERSIONS > versions.yml

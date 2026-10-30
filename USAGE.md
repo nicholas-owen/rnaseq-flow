@@ -539,7 +539,43 @@ condition.
 > If you name nothing and no group is called `REF`, conditions are ordered
 > alphabetically, the direction is arbitrary, and each tool says so in the log.
 
-### 4.6 Batch effects & covariates
+### 4.6 What counts as significant (`--padj_cutoff`, `--lfc_cutoff`)
+
+One pair of numbers decides it, and everything downstream uses the same pair:
+the volcano figures for both tools, the shrinkage diagnostic, the gene lists
+sent to gProfiler, and every count in the report.
+
+| Parameter | Default | Applies to |
+|---|---|---|
+| `--padj_cutoff` | `0.05` | DESeq2 `padj`, edgeR `FDR` |
+| `--lfc_cutoff` | `1` | DESeq2 `log2FoldChange`, edgeR `logFC`. 1 is a two-fold change; `0` selects on the adjusted p-value alone |
+
+```bash
+nextflow run main.nf --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --padj_cutoff 0.01 --lfc_cutoff 1.5 \
+    --outdir results -profile docker
+```
+
+The run records the pair it used in `pipeline_info/run_manifest.json` under
+`analysis`, and the report reads them back from there, so a results directory
+states the rule its own numbers were produced under.
+
+Two things worth knowing before changing them.
+
+`--lfc_cutoff` is applied to DESeq2's apeglm-shrunken `log2FoldChange`, which is
+DESeq2's own recommendation for thresholding. Shrinkage pulls estimates toward
+zero, so `1` on the shrunken value is a stricter filter than `1` on the raw Wald
+estimate, and the genes it removes are those whose apparent effect was weakly
+supported. Both columns are in every results CSV, so you can threshold the
+unshrunken `log2FoldChange_MLE` yourself if you prefer. edgeR's `logFC` is not
+shrunk that way, which is one reason the two tools differ at the margin.
+
+Neither parameter touches gProfiler's own significance threshold on the
+enrichment p-value, which is a different test on a different quantity and is
+left at gProfiler's `g_SCS` correction at 0.05.
+
+### 4.7 Batch effects & covariates
 
 The gene-level differential-expression model (DESeq2 and edgeR) defaults to
 `~ condition`. To adjust for a confounder there are two ways:
@@ -568,7 +604,7 @@ every treated sample in another): the model would be rank-deficient and
 DESeq2/edgeR would abort. `--design` covers the gene-level DE tests; rMATS, DTU
 and diffSplice keep their own designs.
 
-### 4.7 Starting from a count matrix (`--counts`)
+### 4.8 Starting from a count matrix (`--counts`)
 
 If you already have a gene count matrix, from a previous run, a collaborator,
 or a public dataset (e.g. a GEO supplementary file), you can skip QC and
@@ -648,7 +684,7 @@ cannot run from a count matrix.
 
 ---
 
-### 4.8 Credit for the people who did the analysis
+### 4.9 Credit for the people who did the analysis
 
 Results outlive the machine that made them. Once a results directory has been
 copied to a share or emailed to a collaborator, nothing in it says who produced

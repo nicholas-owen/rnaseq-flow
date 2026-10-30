@@ -300,7 +300,7 @@ pipeline, or a public dataset such as a GEO supplementary file), you can skip th
 FASTQ, alignment and quantification steps entirely and enter at differential
 expression with `--counts`. You still supply the samplesheet (for `condition`)
 and `--gtf` (for gene annotation); see
-[USAGE.md §4.7](USAGE.md#47-starting-from-a-count-matrix---counts).
+[USAGE.md §4.8](USAGE.md#48-starting-from-a-count-matrix---counts).
 
 The whole example is deliberately small, reproducible (subsample seed,
 pinned Ensembl release) and self-verifying through the TGF-β signature,

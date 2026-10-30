@@ -89,7 +89,7 @@ was reclaimed.
 > `bam_to_bigwig/`, `featurecounts/`, `tximport/`) and the MultiQC report are
 > **not** produced. You get the differential-expression outputs onward
 > (`deseq2_output/`, `edger_output/`, and any enrichment), plus a Quarto report
-> whose QC section is omitted. See [USAGE.md §4.7](USAGE.md#47-starting-from-a-count-matrix---counts).
+> whose QC section is omitted. See [USAGE.md §4.8](USAGE.md#48-starting-from-a-count-matrix---counts).
 
 ---
 
@@ -262,9 +262,20 @@ giving more reliable effect sizes and cleaner MA / volcano plots. Shrinkage
 changes only the effect-size estimate: the `stat`, `pvalue` and `padj` come
 from the unshrunken Wald test, so significance calling is unaffected.
 
-**Calling a gene significant**: a common threshold is `padj < 0.05` and
-`|log2FoldChange| > 1` (a 2-fold change). `padj` may be `NA` when DESeq2
-filters a gene for low counts or flags it as an outlier. That is normal.
+**Calling a gene significant**: `padj < 0.05` and `|log2FoldChange| > 1` (a
+2-fold change), which are the `--padj_cutoff` and `--lfc_cutoff` defaults.
+Change either and the volcano figures, the shrinkage diagnostic, the gene lists
+sent to gProfiler and the report all move together; the run records the pair it
+used in `pipeline_info/run_manifest.json` under `analysis`, so a results
+directory states its own rule. `padj` may be `NA` when DESeq2 filters a gene
+for low counts or flags it as an outlier. That is normal.
+
+`--lfc_cutoff` is applied to the apeglm-shrunken `log2FoldChange`, not to
+`log2FoldChange_MLE`. Shrinkage pulls estimates toward zero, so a cutoff of 1
+on the shrunken value removes more genes than the same cutoff on the raw Wald
+estimate, and the ones it removes are those whose apparent effect was poorly
+supported by the data. Both columns are in every results CSV if you want to
+threshold the other way.
 
 Plots. Every figure is written twice, as `.svg` and as a 300 dpi `.png`: the
 vector copy for publication and figure assembly, the raster for slides and
@@ -274,7 +285,7 @@ email. Each can be redrawn and adapted from `reproduce/` (§18).
 |---|---|
 | `pca_plot` | Sample clustering: replicates of a condition should group together; if not, suspect batch effects or mislabelling |
 | `maplot_<A>_vs_<B>` | Fold change vs mean expression; significant genes highlighted. The y axis is taken from the contrast's own fold changes, never narrower than ±2, so nothing is clipped onto the boundary. Two contrasts in one run can therefore carry different y axes: read the numbers, not the shape, when comparing them |
-| `volcano_<A>_vs_<B>` | Volcano plot: log2 fold change vs −log10 p-value; genes with `padj < 0.05` and `|log2FC| > 1` are coloured (up red, down blue) |
+| `volcano_<A>_vs_<B>` | Volcano plot: log2 fold change vs −log10 p-value; genes past `--padj_cutoff` and `--lfc_cutoff` are coloured (up red, down blue), with the cutoffs drawn as dashed lines |
 | `shrinkage_ma_<A>_vs_<B>` | The same contrast before and after apeglm, so you can see how far shrinkage moved the fold changes rather than take it on faith |
 | `heatmap_top_var` | The 20 most variable genes across samples, variance-stabilised |
 
@@ -300,8 +311,10 @@ only). Results CSVs are `edger_results_<A>_vs_<B>.csv`.
 
 `mds_plot` is edgeR's sample-similarity plot (analogous to the PCA);
 `smear_<A>_vs_<B>` plots logFC vs logCPM with significant genes marked;
-`volcano_<A>_vs_<B>` plots logFC vs −log10 p-value, colouring genes with
-`FDR < 0.05` and `|logFC| > 1` (up red, down blue). Each is written as `.svg`
+`volcano_<A>_vs_<B>` plots logFC vs −log10 p-value, colouring genes past
+`--padj_cutoff` and `--lfc_cutoff` (up red, down blue). The same pair applies
+here as to DESeq2, though edgeR's `logFC` is not shrunk the way apeglm shrinks
+DESeq2's, so the effect-size cutoff bites a little less hard. Each is written as `.svg`
 and `.png`, and each can be redrawn from `reproduce/` (§18).
 
 > Genes called significant by **both** DESeq2 and edgeR are the most robust
@@ -680,7 +693,7 @@ Salmon/Kallisto.
   them. `source` is `declared` when a person identified themselves and
   `system_user` when nothing was set and the launching account's user name was
   recorded instead, in which case no roles are assigned at all. See
-  [USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis) for
+  [USAGE.md §4.9](USAGE.md#49-credit-for-the-people-who-did-the-analysis) for
   how to set them once rather than per run.
 
   `pipeline.config_files` lists the configuration files the run loaded. Nextflow
@@ -713,7 +726,7 @@ Salmon/Kallisto.
   directory outputs, every contributor as a `Person` behind `Role` entities
   carrying CRediT URIs, and the project with its RAiD, funder and rights
   holder. No separate step: it is finished before the pipeline exits. See
-  [USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis).
+  [USAGE.md §4.9](USAGE.md#49-credit-for-the-people-who-did-the-analysis).
   Because `sha256` has no term in the RO-Crate 1.1 context, the crate's
   `@context` is extended with one pointing at SPDX.
 

@@ -78,13 +78,33 @@ annotate_genes <- function(df) {
           df)
 }
 
+# What counts as significant, from --padj_cutoff and --lfc_cutoff (m2). One pair
+# of numbers shared with deseq2.R, gprofiler.R and the report; see the fuller
+# note in deseq2.R. The defaults match the params so the script still behaves
+# the same way when run by hand.
+#
+# edgeR's quasi-likelihood logFC is not shrunk the way apeglm shrinks DESeq2's,
+# so the same LFC_CUT is a slightly looser filter here than there. That is one
+# of the reasons the two tools disagree at the margin, and it is why the report
+# reports their counts separately rather than pooling them.
+PADJ_CUT <- as.numeric(Sys.getenv("RNASEQ_FLOW_PADJ_CUTOFF", "0.05"))
+LFC_CUT  <- as.numeric(Sys.getenv("RNASEQ_FLOW_LFC_CUTOFF", "1"))
+if (is.na(PADJ_CUT) || PADJ_CUT <= 0 || PADJ_CUT > 1) {
+    stop("--padj_cutoff must be a number greater than 0 and at most 1; got '",
+         Sys.getenv("RNASEQ_FLOW_PADJ_CUTOFF"), "'")
+}
+if (is.na(LFC_CUT) || LFC_CUT < 0) {
+    stop("--lfc_cutoff must be a number of 0 or more; got '",
+         Sys.getenv("RNASEQ_FLOW_LFC_CUTOFF"), "'")
+}
+
 # Volcano plot: log2 fold change vs -log10 p-value, coloured by significance
-# (FDR < 0.05 and |logFC| > 1; up in red, down in blue, the rest grey).
-# padj is the adjusted p-value (DESeq2 padj, edgeR FDR). The cutoffs are
-# arguments rather than literals so that the generated reproduce/ scripts can
-# expose them as editable settings -- inlined with them hardcoded, a user could
-# change PADJ_CUT / LFC_CUT and see the figure not move.
-draw_volcano <- function(lfc, pval, padj, title, padj_cut = 0.05, lfc_cut = 1) {
+# (up in red, down in blue, the rest grey). padj is the adjusted p-value
+# (DESeq2 padj, edgeR FDR). The cutoffs are arguments rather than literals so
+# that the generated reproduce/ scripts can expose them as editable settings:
+# inlined with them hardcoded, a user could change PADJ_CUT / LFC_CUT and see
+# the figure not move.
+draw_volcano <- function(lfc, pval, padj, title, padj_cut = PADJ_CUT, lfc_cut = LFC_CUT) {
     ok   <- !is.na(lfc) & !is.na(pval)
     lfc  <- lfc[ok]; pval <- pval[ok]; padj <- padj[ok]
     sig  <- !is.na(padj) & padj < padj_cut & abs(lfc) > lfc_cut
@@ -809,7 +829,7 @@ if (length(repro_contrasts)) {
         file        = file.path(REPRO_DIR, "volcano.R"),
         description = "edgeR volcano plot: log2 fold change vs -log10 p-value.",
         selectors   = list(CONTRAST = repro_contrasts),
-        constants   = list(FDR_CUT = 0.05, LFC_CUT = 1,
+        constants   = list(FDR_CUT = PADJ_CUT, LFC_CUT = LFC_CUT,
                            WIDTH = 8, HEIGHT = 6.5, FIG_RES = FIG_RES),
         functions   = list(draw_volcano = draw_volcano, save_figure = save_figure),
         inputs      = 'paste0("edger_results_", CONTRAST, ".csv.gz")',

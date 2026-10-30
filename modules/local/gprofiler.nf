@@ -13,13 +13,20 @@ process GPROFILER {
     val organism
     path deseq2_dir
     path r_script
+    val  padj_cutoff   // what counts as significant; see nextflow.config
+    val  lfc_cutoff
 
     output:
     path "gprofiler_output", emit: results
     path "versions.yml"    , emit: versions
 
     script:
+    // Exported rather than passed as arguments, matching how the baseline
+    // reaches the other analysis scripts, and as inputs so they reach the task
+    // hash: changing a threshold is a different result and should not resume.
     """
+    export RNASEQ_FLOW_PADJ_CUTOFF='${padj_cutoff}'
+    export RNASEQ_FLOW_LFC_CUTOFF='${lfc_cutoff}'
     Rscript ${r_script} ${organism} ${deseq2_dir}
 
     cat <<-END_VERSIONS > versions.yml

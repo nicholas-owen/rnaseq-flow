@@ -182,7 +182,7 @@ The `RNASEQ` mode can also start from a **pre-computed gene count matrix** with
 `--counts <matrix>` (plus `--input` for the design and `--gtf` for annotation).
 This skips QC and alignment and enters directly at differential expression:
 useful for re-analysing published or collaborator count tables (e.g. GEO
-supplementary files). See [Starting from a count matrix](USAGE.md#47-starting-from-a-count-matrix---counts)
+supplementary files). See [Starting from a count matrix](USAGE.md#48-starting-from-a-count-matrix---counts)
 in the usage guide.
 
 ---
@@ -332,6 +332,8 @@ silently ignored.
 | `--diffsplice` | No | `false` | Enable edgeR `diffSpliceDGE`: exon-level usage (STAR/HISAT2) or transcript-level usage (Salmon/Kallisto); needs `--gtf` |
 | `--design` | No | auto | DESeq2/edgeR model formula, e.g. `~ batch + condition`. Default: `~ batch + condition` if the samplesheet has a `batch` column, else `~ condition` |
 | `--reference_level` | No | `REF` | Baseline condition, the denominator of every contrast. Decides which way fold changes and PSI differences point |
+| `--padj_cutoff` | No | `0.05` | Adjusted-p / FDR cutoff for calling a gene differentially expressed. Shared by the volcano figures, the gene lists sent to gProfiler and the report |
+| `--lfc_cutoff` | No | `1` | \|log2 fold change\| cutoff; `1` is two-fold, `0` selects on adjusted p alone. Applied to DESeq2's apeglm-shrunken estimate, so stricter than the same cut on `log2FoldChange_MLE` |
 | `--gmt` | No | - | GMT gene-set file (enables GSEA) |
 | `--organism` | No | `hsapiens` | Organism ID for gProfiler / GMT download |
 
@@ -473,7 +475,7 @@ The roles are validated against the standard at launch, land in
 `credit.niso.org/contributor-roles/` URIs, and appear in the analysis report's
 Run overview. Set nothing and the run records the launching account's name with
 no roles, marked as such.
-[USAGE.md §4.8](USAGE.md#48-credit-for-the-people-who-did-the-analysis) has the
+[USAGE.md §4.9](USAGE.md#49-credit-for-the-people-who-did-the-analysis) has the
 detail, including several contributors and shared accounts.
 
 ---

@@ -82,13 +82,43 @@ annotate_genes <- function(df) {
           df)
 }
 
+# What counts as significant, from --padj_cutoff and --lfc_cutoff (m2).
+#
+# One pair of numbers, shared by the volcano figures, the shrinkage diagnostic,
+# the gene lists handed to gProfiler and the report. They were four separate sets
+# of literals, so changing the enrichment threshold meant finding and editing
+# every one, and a reader comparing a volcano against an enrichment result had no
+# way to know whether the two used the same rule.
+#
+# The defaults match the params, so the script still behaves the same way when
+# run by hand outside the pipeline.
+#
+# Note what LFC_CUT is applied to. deseq2.R thresholds the apeglm-SHRUNKEN
+# log2 fold change, which is DESeq2's own recommendation for ranking and
+# thresholding, and shrinkage pulls estimates toward zero. So |log2FC| > 1 on
+# the shrunken value is a stricter filter than the same cut on the raw Wald
+# estimate, and deliberately: the genes it removes are the ones whose apparent
+# effect was poorly supported. The unshrunken values are in the
+# log2FoldChange_MLE column of every results CSV for anyone who wants to
+# threshold on them instead.
+PADJ_CUT <- as.numeric(Sys.getenv("RNASEQ_FLOW_PADJ_CUTOFF", "0.05"))
+LFC_CUT  <- as.numeric(Sys.getenv("RNASEQ_FLOW_LFC_CUTOFF", "1"))
+if (is.na(PADJ_CUT) || PADJ_CUT <= 0 || PADJ_CUT > 1) {
+    stop("--padj_cutoff must be a number greater than 0 and at most 1; got '",
+         Sys.getenv("RNASEQ_FLOW_PADJ_CUTOFF"), "'")
+}
+if (is.na(LFC_CUT) || LFC_CUT < 0) {
+    stop("--lfc_cutoff must be a number of 0 or more; got '",
+         Sys.getenv("RNASEQ_FLOW_LFC_CUTOFF"), "'")
+}
+
 # Volcano plot: log2 fold change vs -log10 p-value, coloured by significance
-# (padj < 0.05 and |log2FC| > 1; up in red, down in blue, the rest grey).
-# padj is the adjusted p-value (DESeq2 padj, edgeR FDR). The cutoffs are
-# arguments rather than literals so that the generated reproduce/ scripts can
-# expose them as editable settings -- inlined with them hardcoded, a user could
-# change PADJ_CUT / LFC_CUT and see the figure not move.
-draw_volcano <- function(lfc, pval, padj, title, padj_cut = 0.05, lfc_cut = 1) {
+# (up in red, down in blue, the rest grey). padj is the adjusted p-value
+# (DESeq2 padj, edgeR FDR). The cutoffs are arguments rather than literals so
+# that the generated reproduce/ scripts can expose them as editable settings:
+# inlined with them hardcoded, a user could change PADJ_CUT / LFC_CUT and see
+# the figure not move.
+draw_volcano <- function(lfc, pval, padj, title, padj_cut = PADJ_CUT, lfc_cut = LFC_CUT) {
     ok   <- !is.na(lfc) & !is.na(pval)
     lfc  <- lfc[ok]; pval <- pval[ok]; padj <- padj[ok]
     sig  <- !is.na(padj) & padj < padj_cut & abs(lfc) > lfc_cut
@@ -183,7 +213,7 @@ save_figure <- function(dir, name, draw, width = 7, height = 7) {
 # depend on the RNG. (The Quarto report thins its interactive version, where
 # widget size matters and exact reproducibility does not.)
 # ---------------------------------------------------------------------------
-draw_shrinkage_ma <- function(df, padj_cut = 0.05, lfc_cut = 1) {
+draw_shrinkage_ma <- function(df, padj_cut = PADJ_CUT, lfc_cut = LFC_CUT) {
     if (!("log2FoldChange_MLE" %in% names(df))) return(NULL)
     d <- df[!is.na(df$baseMean) & df$baseMean > 0 &
             !is.na(df$log2FoldChange) & !is.na(df$log2FoldChange_MLE), , drop = FALSE]
@@ -1019,7 +1049,7 @@ if (length(repro_contrasts)) {
         description = "DESeq2 shrinkage diagnostic: the same contrast before and after apeglm.",
         libraries   = "ggplot2",
         selectors   = list(CONTRAST = repro_contrasts),
-        constants   = list(PADJ_CUT = 0.05, LFC_CUT = 1, WIDTH = 9, HEIGHT = 5,
+        constants   = list(PADJ_CUT = PADJ_CUT, LFC_CUT = LFC_CUT, WIDTH = 9, HEIGHT = 5,
                            FIG_RES = FIG_RES),
         functions   = list(draw_shrinkage_ma = draw_shrinkage_ma,
                            save_figure       = save_figure),
@@ -1041,7 +1071,7 @@ if (length(repro_contrasts)) {
         file        = file.path(REPRO_DIR, "volcano.R"),
         description = "DESeq2 volcano plot: log2 fold change vs -log10 p-value.",
         selectors   = list(CONTRAST = repro_contrasts),
-        constants   = list(PADJ_CUT = 0.05, LFC_CUT = 1,
+        constants   = list(PADJ_CUT = PADJ_CUT, LFC_CUT = LFC_CUT,
                            WIDTH = 8, HEIGHT = 6.5, FIG_RES = FIG_RES),
         functions   = list(draw_volcano = draw_volcano, save_figure = save_figure),
         inputs      = 'paste0("deseq2_results_", CONTRAST, ".csv.gz")',

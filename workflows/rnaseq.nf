@@ -688,6 +688,17 @@ def buildRunManifest(design, notices) {
             // fold change and PSI difference points -- worth recording in the
             // artefact that travels.
             reference_level: params.reference_level?.toString(),
+            // What counted as significant. Recorded because every figure, gene
+            // list and count in the results was selected by this pair, and the
+            // report reads them back from here rather than carrying its own
+            // copy of the numbers.
+            // Coerced, because a value from the command line arrives as a
+            // String while the default declared in nextflow.config is a number.
+            // Left alone, the JSON type depended on how the run was invoked:
+            // "0.01" quoted on an override, 0.05 bare on a default run, which
+            // anything parsing the manifest has to cope with for no reason.
+            padj_cutoff   : params.padj_cutoff as Double,
+            lfc_cutoff    : params.lfc_cutoff as Double,
             organism      : params.organism,
             stop_at       : params.stop_at,
             optional      : optional,
@@ -1266,11 +1277,11 @@ workflow RNASEQ {
             def de_design = resolveDesign(params.input)
             log.info "Differential-expression design: ${de_design}"
 
-            DESEQ2 ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/deseq2.R"), params.reference_level )
+            DESEQ2 ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/deseq2.R"), params.reference_level, params.padj_cutoff, params.lfc_cutoff )
             ch_versions = ch_versions.mix(DESEQ2.out.versions)
             ch_quarto_deseq2 = DESEQ2.out.results
 
-            EDGER ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/edger.R"), params.reference_level )
+            EDGER ( file(params.input), de_design, ch_gene_info, ch_de_counts, file("${projectDir}/assets/edger.R"), params.reference_level, params.padj_cutoff, params.lfc_cutoff )
             ch_versions = ch_versions.mix(EDGER.out.versions)
             ch_quarto_edger = EDGER.out.results
 
@@ -1283,7 +1294,7 @@ workflow RNASEQ {
                      ch_versions = ch_versions.mix(GSEA.out.versions)
                      ch_quarto_gsea = GSEA.out.results
                 }
-                GPROFILER ( params.organism, DESEQ2.out.results, file("${projectDir}/assets/gprofiler.R") )
+                GPROFILER ( params.organism, DESEQ2.out.results, file("${projectDir}/assets/gprofiler.R"), params.padj_cutoff, params.lfc_cutoff )
                 ch_versions = ch_versions.mix(GPROFILER.out.versions)
                 ch_quarto_gprofiler = GPROFILER.out.results
             }
