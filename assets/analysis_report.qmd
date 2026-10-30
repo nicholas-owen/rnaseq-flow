@@ -904,12 +904,19 @@ invocation <- if (!is.na(mf("pipeline", "command_line"))) {
 # simply less sensitive to novel junctions, which is a property of these results
 # that nothing else in this report would reveal. Before the marker, the only
 # record was a warning in a run log that has long scrolled away.
+#
+# The flag names go through no_smart(), which turns every hyphen into &#45;.
+# Pandoc's smart typography rewrites a double hyphen as an en dash, so the
+# first version of this row rendered as an en-dashed flag that does not exist,
+# in a non-ASCII character this project does not use. The command row above
+# does the same for the same reason.
 index_build_mode <- mf("references", "index_build", "splice_aware")
 index_build_row <- if (is.na(index_build_mode)) {
   character(0)
 } else if (identical(index_build_mode, "true")) {
   row("Index build",
-      paste0("splice-aware, built with <code>--ss/--exon</code> extracted from ",
+      paste0("splice-aware, built with <code>", no_smart("--ss/--exon"),
+             "</code> extracted from ",
              esc(mf("references", "index_build", "annotation"))))
 } else if (identical(index_build_mode, "false")) {
   row("Index build",
@@ -917,7 +924,8 @@ index_build_row <- if (is.na(index_build_mode)) {
              esc(mf("references", "index_build", "memory_granted_gb")),
              " GB granted against ~",
              esc(mf("references", "index_build", "memory_estimated_gb")),
-             " GB estimated, so <code>--ss/--exon</code> were dropped. HISAT2 ",
+             " GB estimated, so <code>", no_smart("--ss/--exon"),
+             "</code> were dropped. HISAT2 ",
              "still aligns across junctions using its own model, with reduced ",
              "sensitivity to novel ones."))
 } else {
@@ -1821,10 +1829,14 @@ if (!is.null(rmats) && nrow(rmats)) {
   rmats_conc_ok <- rmats_ok && all(c("JC", "JCEC") %in% unique(rmats$count_mode))
 }
 
-# Strandedness, read for the notice below. rMATS is invoked without --libType
-# (assets/run_rmats.py), so it runs fr-unstranded whatever the library was.
-rmats_strand <- if (have_manifest) mf("analysis", "strandedness") else NA_character_
-rmats_strand_mismatch <- !is.na(rmats_strand) && rmats_strand != "unstranded"
+# There was a strandedness caveat here until 2026-10-30, because
+# assets/run_rmats.py passed no --libType and rMATS therefore ran
+# fr-unstranded whatever the library was, while featureCounts used the real
+# strand. It now receives the library type, mapped from --strandedness or from
+# the RSeQC verdicts, and a cohort whose samples disagree is an error rather
+# than a silent choice. So there is no mismatch left to disclose, and a caveat
+# saying otherwise would be worse than none: it would tell a reader their
+# stranded results were computed unstranded when they were not.
 
 # Replicate counts, for the low-replication notice. rMATS estimates the
 # among-replicate variance component from these.
@@ -1836,18 +1848,10 @@ rmats_min_reps <- if (have_samples) {
 ```
 
 ```{r rmats-caveats, eval=have_rmats, results="asis"}
-# Two facts that change how everything below should be read, placed above the
-# results rather than in a caption under them. Both are properties of how this
-# pipeline invokes rMATS, so neither is visible in the output files.
+# Facts that change how everything below should be read, placed above the
+# results rather than in a caption under them. They are properties of how this
+# pipeline invokes rMATS, so they are not visible in the output files.
 caveats <- character(0)
-
-if (rmats_strand_mismatch) {
-  caveats <- c(caveats, paste0(
-    "The run was configured as <code>", esc(rmats_strand), "</code>, but rMATS ",
-    "was invoked without <code>--libType</code> and so treated every library as ",
-    "unstranded. featureCounts used the strand information and rMATS did not, ",
-    "which can cost specificity where genes overlap on opposite strands."))
-}
 
 if (!is.na(rmats_min_reps) && rmats_min_reps < 3) {
   caveats <- c(caveats, paste0(

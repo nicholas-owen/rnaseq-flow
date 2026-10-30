@@ -611,10 +611,18 @@ Salmon/Kallisto.
   bar of significant events, per-replicate PSI for the top 16 events, a
   JC-against-JCEC concordance scatter, and a searchable results table. It ends
   by counting the genes whose splicing changed while their total expression did
-  not, which the DE tables miss by construction. Two things the result files do
-  not show are stated above the results: rMATS runs without `--libType`, so a
-  stranded run is flagged, and a design with fewer than three replicates per
-  group is flagged as well.
+  not, which the DE tables miss by construction. One thing the result files do
+  not show is stated above the results: a design with fewer than three
+  replicates per group is flagged, because rMATS estimates the among-replicate
+  variance from those counts and with one or two observations the FDR is a
+  weakly-informed estimate rather than a calibrated error rate.
+
+  A second notice used to sit beside it, reporting that rMATS ran without
+  `--libType` and so analysed every library as unstranded whatever
+  `--strandedness` said. That is fixed: rMATS is now given the library type,
+  mapped from `--strandedness` or from the RSeQC verdicts, and a cohort whose
+  samples disagree stops the run rather than being averaged. The notice went
+  with the defect.
 
   Three more sections follow it, one per optional isoform-level analysis, each
   reading its own result directory the same way. **Differential splicing** (§15)

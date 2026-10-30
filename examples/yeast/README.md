@@ -162,7 +162,7 @@ nextflow run main.nf \
     --input        test_data/samplesheet_yeast.csv \
     --aligner      hisat2 \
     --hisat2_index idx/yeast_hisat2/hisat2_index \
-    --strandedness unstranded \
+    --strandedness reverse \
     --gtf          refs/yeast/v116/*.gtf.gz \
     --gmt          refs/yeast/gmt/c5_go_bp.gmt \
     --outdir       results_hisat2 \
@@ -186,7 +186,6 @@ nextflow run main.nf \
     --input        test_data/samplesheet_yeast.csv \
     --aligner      salmon \
     --salmon_index idx/yeast_salmon/salmon_index \
-    --strandedness unstranded \
     --gtf          refs/yeast/v116/*.gtf.gz \
     --gmt          refs/yeast/gmt/c5_go_bp.gmt \
     --outdir       results_salmon \
@@ -207,20 +206,29 @@ nextflow run main.nf \
     --input          test_data/samplesheet_yeast.csv \
     --aligner        kallisto \
     --kallisto_index idx/yeast_kallisto/kallisto_index \
-    --strandedness   unstranded \
+    --strandedness   reverse \
     --gtf            refs/yeast/v116/*.gtf.gz \
     --gmt            refs/yeast/gmt/c5_go_bp.gmt \
     --outdir         results_kallisto \
     -profile test_yeast,docker
 ```
 
-> **Why `--strandedness unstranded` on three of the four.** The default is
-> `auto`, which infers strandedness per sample with RSeQC, and RSeQC needs a
-> BAM. Salmon and Kallisto produce none, so `auto` cannot work there; Kallisto
-> logs a warning and runs library-type-agnostic. This dataset is unstranded, so
-> stating it explicitly is both correct and quieter. For a stranded library pass
-> `forward` or `reverse`. STAR is left on `auto` above so that the inference
-> path itself gets exercised at least once.
+> **Why `--strandedness reverse` on HISAT2 and Kallisto, and nothing on Salmon.**
+> This library is reverse-stranded. RSeQC puts 0.011 of reads on the sense
+> strand against 0.896 antisense, the same to within 0.01 across all six
+> samples, which is the signature of a dUTP protocol. STAR is left on `auto`
+> above, where RSeQC infers exactly that, so the inference path gets exercised
+> at least once.
+>
+> `auto` needs a BAM, which the pseudo-aligners do not produce, so the value has
+> to be stated for them. Kallisto takes `reverse` as `--rf-stranded`. Salmon is
+> given no value because it would ignore one: it is invoked with `--libType A`
+> and detects the library type itself.
+>
+> These three carried `--strandedness unstranded` until 2026-10-30, on the
+> mistaken premise that the dataset was unstranded. featureCounts therefore ran
+> `-s 0` on a stranded library and Kallisto quantified without a strand flag.
+> The four-route table below was regenerated after the correction.
 
 The `--gtf` is required on the pseudo-aligner runs too: tximport needs it to
 build the transcript-to-gene map.
@@ -300,24 +308,38 @@ Replace `results_*` below with whichever output directory you used.
 
 Running more than one route is the cheapest real test of the pipeline, because
 the four are independent implementations that should reach the same biology.
-Observed on this dataset (1 M read pairs, DESeq2, `padj < 0.05` and
-`|log2FC| > 1`):
+
+Counted from `deseq2_output/deseq2_results_NaCl_vs_REF.csv`: a row is tested if
+it is in the file, and significant if `padj < 0.05` and `|log2FoldChange| > 1`,
+taking the shrunk `log2FoldChange` column rather than `log2FoldChange_MLE`. Up
+and down split that set by the sign of the same column. Stating the column
+matters: the two differ for genes sitting on the threshold, which is enough to
+move a count by one.
 
 | route | genes tested | significant | up | down |
 | --- | --- | --- | --- | --- |
-| STAR | 5579 | 852 | 152 | 700 |
-| HISAT2 | 5773 | 833 | 132 | 701 |
-| Salmon | 5510 | 778 | 130 | 648 |
-| Kallisto | 5961 | 866 | 146 | 720 |
+| STAR | 5579 | 852 | 153 | 699 |
+| HISAT2 | 5587 | 847 | 154 | 693 |
+| Salmon | 5508 | 778 | 131 | 647 |
+| Kallisto | 5532 | 854 | 153 | 701 |
 
-668 genes were called significant by all four, every pairwise overlap was ≥83%
-of the smaller set, and all four reproduced the same strong down-regulation
+735 genes were called significant by all four, no pairwise overlap fell below
+95% of the smaller set, and all four reproduced the same strong down-regulation
 bias.
 
 These are the DESeq2 calls. edgeR on the same data is consistently a little more
-generous, having gained power in version 4.x: 924, 951, 893 and 964 significant
-for STAR, HISAT2, Salmon and Kallisto respectively, 722 called by all four, every
-pairwise overlap at or above 84%. The direction of the bias is the same.
+generous, having gained power in version 4.x: 923, 929, 894 and 943 significant
+for STAR, HISAT2, Salmon and Kallisto respectively, 813 called by all four, and
+no pairwise overlap below 91%. Its columns are `FDR` and `logFC` rather than
+`padj` and `log2FoldChange`, at the same thresholds. The direction of the bias
+is the same, though less lopsided: edgeR calls roughly twice as many genes up.
+
+> **These numbers were regenerated on 2026-10-30 and the previous ones were
+> wrong twice over.** HISAT2 and Kallisto ran `--strandedness unstranded` on a
+> reverse-stranded library, and the Salmon and Kallisto transcriptome changed on
+> 2026-10-24 without the table being redone. Correcting both raised the genes
+> called by all four from 668 to 735 and the worst pairwise overlap from 83% to
+> 95%, which is the direction a real fix should move a concordance figure.
 
 > **These numbers come from a subsample, so treat them as a shape to match, not
 > targets to hit.** They were produced from the fetch script's default output:
@@ -333,7 +355,13 @@ What matters is the agreement between routes, not the absolute counts: all four
 moving together is the expected result, whereas one route disagreeing sharply
 with the other three is worth investigating.
 
-Note that the overlaps do **not** split cleanly along the genome-aligner /
-pseudo-aligner line: STAR agreed more closely with Salmon than with HISAT2 on
-this data. That is not in itself a fault; the routes differ in multimapper
-handling and length correction, and 83% is still high concordance.
+The overlaps split along the genome-aligner / pseudo-aligner line, as you would
+hope: STAR and HISAT2 agree on 99% of the smaller set, while every pair that
+crosses the line sits at 95% or 96%. The routes differ in multimapper handling
+and length correction, so some gap across that line is expected.
+
+The previous version of this section reported the opposite, with STAR closer to
+Salmon than to HISAT2, and excused it. That was the strandedness bug: HISAT2
+was being counted unstranded on a reverse-stranded library, which pushed it away
+from the aligner it most resembles. An anomaly that needs excusing is worth
+checking first.
