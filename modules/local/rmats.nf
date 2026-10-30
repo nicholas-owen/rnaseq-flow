@@ -8,6 +8,7 @@ process RMATS {
     path gtf
     path script
     val  ref_level  // baseline condition; see nextflow.config
+    val  lib_type   // rMATS --libType for the whole cohort; see workflows/rnaseq.nf
 
     output:
     path "rmats_output", emit: results
@@ -47,6 +48,8 @@ process RMATS {
     export RNASEQ_FLOW_REFERENCE_LEVEL='${ref_level}'
     ${ gtf_gz ? "gunzip -c ${gtf} > ${gtf_use}" : "" }
     python3 ${script} \\
+        --lib-type ${lib_type} \\
+        --threads ${task.cpus} \\
         ${samplesheet} \\
         ${gtf_use} \\
         ${run_type} \\

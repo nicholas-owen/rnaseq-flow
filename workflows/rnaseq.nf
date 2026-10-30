@@ -446,6 +446,45 @@ def describeGeneSets(gmt) {
  * Returns null when there is no sheet to read: a glob input carries no R2
  * column, and a --counts run has no reads at all.
  */
+/*
+ * Collapse per-sample strandedness verdicts to the single rMATS --libType the
+ * whole cohort has to share.
+ *
+ * rMATS takes one --libType per run, not one per sample, so a cohort that
+ * disagrees cannot be analysed in one go. That fails here the way a mixed
+ * single/paired cohort already does, rather than picking a value and producing
+ * a complete set of wrong PSI numbers.
+ *
+ * The mapping follows the dUTP convention: a reverse-stranded library (RSeQC
+ * sees mostly antisense, featureCounts -s 2, Salmon ISR) is rMATS
+ * fr-firststrand, and a forward-stranded one is fr-secondstrand. Getting these
+ * two the wrong way round is silent, because rMATS still runs and still
+ * produces PSI values.
+ *
+ * Takes rows of [sample_id, verdict] so a disagreement can name the samples.
+ */
+def rmatsLibType(List rows) {
+    def mapping = [ 'unstranded': 'fr-unstranded',
+                    'forward'   : 'fr-secondstrand',
+                    'reverse'   : 'fr-firststrand' ]
+    def verdicts = rows.collect { row -> row[1]?.toString()?.trim() }.unique().sort()
+    if (verdicts.size() > 1) {
+        def detail = rows.toSorted { row -> row[0] }
+                         .collect { row -> "${row[0]}=${row[1]}" }
+                         .join(', ')
+        error "rMATS takes one --libType for the whole cohort, but the samples do not " +
+              "agree: ${detail}. A mixed-strandedness cohort cannot be analysed in a " +
+              "single rMATS run. Either set --strandedness explicitly to apply one value " +
+              "to every sample, or split the disagreeing samples into their own run."
+    }
+    def lib = mapping[verdicts[0]]
+    if (!lib) {
+        error "Cannot map strandedness '${verdicts[0]}' to an rMATS --libType. " +
+              "Expected one of: ${mapping.keySet().join(', ')}."
+    }
+    return lib
+}
+
 def resolveLibraryLayout(samplesheet) {
     if (!samplesheet) {
         return null
@@ -801,7 +840,17 @@ workflow RNASEQ {
             SALMON_QUANT( FASTP.out.reads, file(params.salmon_index) )
             ch_versions = ch_versions.mix(SALMON_QUANT.out.versions.first())
             ch_align_results = ch_align_results.mix(SALMON_QUANT.out.results.collect { row -> row[1] })
+            // Sorted, because collect() emits in task-completion order and that
+            // order reaches the task hash of everything downstream: Nextflow
+            // hashes a path input's staged files in sequence, and RMATS, DESEQ2
+            // and EDGER also interpolate the list straight into their command
+            // line. Three runs of the same six yeast samples on 2026-10-29 gave
+            // three different orders and three different RMATS hashes, so rMATS
+            // re-ran on every -resume and two runs of identical input recorded
+            // different commands in the RO-Crate. Sorting by filename pins it,
+            // and the files are named after the samples.
             ch_tx_quant = SALMON_QUANT.out.results.collect { row -> row[1] }
+                .map { files -> files.toSorted { f -> f.name } }
             
             // Isoform Switch (Level 4+)
             if (run_level >= 4 && params.isoform_switch && params.transcript_fasta) {
@@ -829,7 +878,9 @@ workflow RNASEQ {
             KALLISTO_QUANT( FASTP.out.reads, file(params.kallisto_index) )
             ch_versions = ch_versions.mix(KALLISTO_QUANT.out.versions.first())
             ch_align_results = ch_align_results.mix(KALLISTO_QUANT.out.results.collect { row -> row[1] })
+            // Sorted for a stable task hash; see the Salmon branch above.
             ch_tx_quant = KALLISTO_QUANT.out.results.collect { row -> row[1] }
+                .map { files -> files.toSorted { f -> f.name } }
         }
         
         //
@@ -860,6 +911,20 @@ workflow RNASEQ {
              
              // rMATS (Level 4+) - collapse all per-sample BAMs into one task.
              if (run_level >= 4 && params.input.endsWith('.csv')) {
+                // One --libType for the whole cohort. Under --strandedness auto
+                // this comes from the per-sample RSeQC verdicts, which
+                // rmatsLibType() refuses to average: a cohort that disagrees is
+                // an error, not a coin toss. RSeQC only runs when there is a
+                // GTF, and rMATS needs the GTF too, so the guard covers both.
+                ch_rmats_libtype = (params.strandedness == 'auto' && params.gtf)
+                    ? RSEQC.out.strandedness
+                        .map { meta, txt -> [ meta.id, txt.text.trim() ] }
+                        .collect(flat: false)
+                        .map { rows -> rmatsLibType(rows) }
+                    : channel.value(rmatsLibType([[
+                          'all_samples',
+                          params.strandedness == 'auto' ? 'unstranded' : params.strandedness
+                      ]]))
                 ch_rmats_input = ch_bam_bai
                     // meta.id is carried through so the module can emit an
                     // authoritative sample->BAM mapping. It used to be dropped
@@ -881,12 +946,22 @@ workflow RNASEQ {
                              error "rMATS needs a single library layout, but the samplesheet " +
                                    "mixes single-end and paired-end samples."
                          }
-                         def ids  = rows.collect { row -> row[0] }
-                         def bams = rows.collect { row -> row[1] }
-                         def bais = rows.collect { row -> row[2] }
-                         [ [ id:'all_samples', single_end: rows[0][3], ids: ids ], bams, bais ]
+                         // Sorted by sample id, because collect() emits in
+                         // completion order and this module interpolates that
+                         // order into the command line twice: once as the
+                         // comma-joined id list and once as the BAM arguments.
+                         // Unsorted, the rendered script differed on every run
+                         // of the same data, so the task hash never matched and
+                         // rMATS, the most expensive analysis step here, could
+                         // not resume. Measured on 2026-10-29: three runs of the
+                         // same six yeast samples, three orders, three hashes.
+                         def sorted = rows.toSorted { row -> row[0] }
+                         def ids  = sorted.collect { row -> row[0] }
+                         def bams = sorted.collect { row -> row[1] }
+                         def bais = sorted.collect { row -> row[2] }
+                         [ [ id:'all_samples', single_end: sorted[0][3], ids: ids ], bams, bais ]
                     }
-                RMATS ( file(params.input), ch_rmats_input, file(params.gtf), file("${projectDir}/assets/run_rmats.py"), params.reference_level )
+                RMATS ( file(params.input), ch_rmats_input, file(params.gtf), file("${projectDir}/assets/run_rmats.py"), params.reference_level, ch_rmats_libtype )
                 ch_versions = ch_versions.mix(RMATS.out.versions)
                 ch_quarto_rmats = RMATS.out.results
              }
@@ -907,14 +982,18 @@ workflow RNASEQ {
 
                  FEATURECOUNTS ( ch_fc_input )
                  ch_versions = ch_versions.mix(FEATURECOUNTS.out.versions.first())
+                 // Sorted for a stable task hash; see the Salmon branch above.
                  ch_featurecounts_results = FEATURECOUNTS.out.counts.collect { row -> row[1] }
+                     .map { files -> files.toSorted { f -> f.name } }
                  ch_featurecounts_mqc     = FEATURECOUNTS.out.summary.collect { row -> row[1] }
 
                  // Exon-level counts for the optional edgeR diffSplice test.
                  if (run_level >= 3 && params.diffsplice && params.input.endsWith('.csv')) {
                      FEATURECOUNTS_EXON ( ch_fc_input )
                      ch_versions = ch_versions.mix(FEATURECOUNTS_EXON.out.versions.first())
+                     // Sorted for a stable task hash; see the Salmon branch above.
                      ch_featurecounts_exon = FEATURECOUNTS_EXON.out.counts.collect { row -> row[1] }
+                         .map { files -> files.toSorted { f -> f.name } }
                  }
              }
         }
@@ -1107,9 +1186,21 @@ workflow RNASEQ {
             file("${projectDir}/assets/multiqc_config.yml"),
             [ file("${projectDir}/assets/multiqc_custom.css"),
               file("${projectDir}/assets/multiqc_logo.png") ],
-            ch_versions.unique().collectFile(name: 'software_versions.yml'),
+            // sort: 'deep' orders the entries by the hash of their content.
+            // collectFile's default, sort: true, sorts by grouping key, and
+            // every entry here shares one key (the output filename), so within
+            // the file the order was arrival order. That made
+            // software_versions.yml list the same tools in a different order on
+            // every run, which changed MULTIQC's input and so its task hash:
+            // MultiQC re-ran on every -resume, and a provenance file that is
+            // meant to record what ran was not comparable between two runs of
+            // the same data. Content hashing rather than path sorting, because
+            // a task that gets a new work directory would reorder a path sort.
+            ch_versions.unique().collectFile(name: 'software_versions.yml', sort: 'deep'),
             [],
-            ch_multiqc_files.collect(),
+            // Sorted for a stable task hash; see the Salmon branch above. Also
+            // makes the report's own section order repeatable.
+            ch_multiqc_files.collect().map { files -> files.toSorted { f -> f.name } },
             // The samplesheet is passed so MULTIQC can map each tool's own
             // sample naming onto the sample ids; see the note in the module.
             // Only a CSV samplesheet carries that mapping -- a glob input has

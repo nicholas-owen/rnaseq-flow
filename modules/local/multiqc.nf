@@ -4,6 +4,14 @@
 process MULTIQC {
     label 'process_single'
     container 'quay.io/biocontainers/multiqc:1.19--pyhdfd78af_0'
+    // Hash input files by content rather than by name, size and modification
+    // time, which is the default. software_versions is produced by collectFile,
+    // which writes a fresh file with a new mtime on every run, so under the
+    // default this process could never resume even when every input was
+    // byte-identical. Its content is deterministic since the sort: 'deep' on
+    // that collectFile in workflows/rnaseq.nf. Reading the content costs
+    // nothing here: the inputs are a few dozen small QC reports.
+    cache 'deep'
 
     input:
     path multiqc_config

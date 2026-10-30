@@ -20,19 +20,63 @@ import subprocess
 # each exits hard rather than warning. A warning here would mean rMATS running
 # on the wrong grouping.
 
+LIB_TYPES = ('fr-unstranded', 'fr-firststrand', 'fr-secondstrand')
+
+
+def take_flag(argv, name, default):
+    """Remove '--name value' from argv wherever it sits, and return the value.
+
+    Named flags are pulled out before the positional arguments are read, the
+    same way deseq2.R and edger.R handle --matrix. The positional list ends in a
+    variadic run of BAM paths, so a new positional argument would move that
+    boundary, and it has already moved once: the sample-id list was inserted at
+    position 6 when the filename matching was replaced (C3). A flag does not
+    move it again.
+    """
+    if name not in argv:
+        return default
+    i = argv.index(name)
+    if i + 1 >= len(argv):
+        sys.exit(f"{name} was given with no value")
+    value = argv[i + 1]
+    del argv[i:i + 2]
+    return value
+
+
 def main():
-    if len(sys.argv) < 8:
-        print("Usage: run_rmats.py <samplesheet.csv> <gtf> <read_type> <read_length> "
+    argv = sys.argv[1:]
+
+    # rMATS defaults --libType to fr-unstranded, and this script passed no
+    # --libType at all, so every run was analysed as unstranded no matter what
+    # --strandedness asked for or what RSeQC inferred (B1). On a reverse-stranded
+    # library that counts antisense reads as sense, which changes PSI and so
+    # changes which events are called differentially spliced, with no error and
+    # nothing in the log. The default is kept here only so the script still runs
+    # when called by hand.
+    lib_type = take_flag(argv, '--lib-type', 'fr-unstranded')
+    if lib_type not in LIB_TYPES:
+        sys.exit(f"--lib-type '{lib_type}' is not one of: {', '.join(LIB_TYPES)}")
+
+    # Was hardcoded to 4 while the module asks for process_high, which is 12
+    # CPUs on a 16-core machine (M10). rMATS is the slowest analysis step here,
+    # so two thirds of the allocation sat idle for the whole of it.
+    nthread = take_flag(argv, '--threads', '4')
+    if not str(nthread).isdigit() or int(nthread) < 1:
+        sys.exit(f"--threads '{nthread}' is not a positive integer")
+
+    if len(argv) < 7:
+        print("Usage: run_rmats.py [--lib-type TYPE] [--threads N] "
+              "<samplesheet.csv> <gtf> <read_type> <read_length> "
               "<output_dir> <sample_ids_csv> <bam_files...>")
         sys.exit(1)
 
-    samplesheet = sys.argv[1]
-    gtf = sys.argv[2]
-    read_type = sys.argv[3] # "paired" or "single"
-    read_length = sys.argv[4]
-    base_output_dir = sys.argv[5]
-    sample_ids = [s for s in sys.argv[6].split(',') if s]
-    bam_files = sys.argv[7:]
+    samplesheet = argv[0]
+    gtf = argv[1]
+    read_type = argv[2] # "paired" or "single"
+    read_length = argv[3]
+    base_output_dir = argv[4]
+    sample_ids = [s for s in argv[5].split(',') if s]
+    bam_files = argv[6:]
 
     # Parse Samplesheet
     samples = {} # sample_id -> condition
@@ -153,7 +197,8 @@ def main():
             "-t", read_type,
             "--readLength", str(read_length),
             "--variable-read-length",
-            "--nthread", "4",
+            "--libType", lib_type,
+            "--nthread", str(nthread),
             "--od", out_subdir,
             "--tmp", os.path.join(out_subdir, "tmp")
         ]
