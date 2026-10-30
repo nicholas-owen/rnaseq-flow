@@ -155,6 +155,46 @@ jobs:
           fi
           grep -q "requires --gtf" stargtf.log
 
+      # A paired-end glob has to be recognised as paired. The commonest such
+      # pattern, /data/*_R{1,2}.fastq.gz, has exactly one asterisk, and the
+      # pattern-counting heuristic this replaced read that as single-end and
+      # aligned each mate as its own sample. The fixtures hold four paired
+      # samples, so four FASTQC tasks is right and eight means the pairing was
+      # lost. Quoted so the shell passes the pattern through to Nextflow.
+      - name: Paired-end glob input is read as paired
+        run: |
+          n=$(nextflow run main.nf -profile test -stub-run \
+                --input      "$RUNNER_TEMP/fixtures/reads/*_{1,2}.fastq.gz" \
+                --aligner    star \
+                --star_index "$RUNNER_TEMP/fixtures/star_index" \
+                --gtf        "$RUNNER_TEMP/fixtures/genome.gtf.gz" \
+                --outdir     "$RUNNER_TEMP/out_glob" \
+                -ansi-log false 2>&1 | grep -cE 'Submitted process > RNASEQ:FASTQC' || true)
+          echo "FASTQC tasks for 4 paired samples: $n"
+          [ "$n" = "4" ]
+
+      # An optional analysis that cannot run has to say so. Isoform switching is
+      # gated at analysis level 4 and --stop_at DE stops at level 3, so this
+      # combination produces nothing; before 2026-10-30 it produced nothing
+      # silently, with the run exiting 0 and the analysis simply absent.
+      - name: An analysis dropped by --stop_at says so
+        run: |
+          nextflow run main.nf -profile test -stub-run \
+            --input            "$RUNNER_TEMP/fixtures/samplesheet.csv" \
+            --aligner          salmon \
+            --salmon_index     "$RUNNER_TEMP/fixtures/salmon_index" \
+            --gtf              "$RUNNER_TEMP/fixtures/genome.gtf.gz" \
+            --transcript_fasta "$RUNNER_TEMP/fixtures/transcripts.fa.gz" \
+            --isoform_switch \
+            --stop_at          DE \
+            --outdir           "$RUNNER_TEMP/out_m6" \
+            -ansi-log false 2>&1 | tee m6.log
+          grep -q "runs at analysis level 4" m6.log
+          if [ -d "$RUNNER_TEMP/out_m6/isoform_switch_output" ]; then
+            echo "isoform_switch_output exists on a run stopped below its level"
+            exit 1
+          fi
+
       # The samplesheet validator has to refuse a condition make.names() would
       # rewrite, before any work starts. "TGF-beta" is the condition name in
       # the paper this pipeline's own human example is built on.

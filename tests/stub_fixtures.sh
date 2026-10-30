@@ -9,9 +9,9 @@
 #
 # Usage: bash tests/stub_fixtures.sh <dir>
 #
-# Writes <dir>/samplesheet.csv, <dir>/genome.gtf.gz, <dir>/star_index/,
-# <dir>/hisat2_index/, <dir>/salmon_index/ and eight empty FASTQ files under
-# <dir>/reads/.
+# Writes <dir>/samplesheet.csv, <dir>/genome.gtf.gz, <dir>/transcripts.fa.gz,
+# <dir>/star_index/, <dir>/hisat2_index/, <dir>/salmon_index/ and eight empty
+# FASTQ files under <dir>/reads/.
 #
 # Conditions are REF and TREAT. Both are valid R names, which the samplesheet
 # validator now requires: DESeq2 builds its coefficient names from
@@ -37,6 +37,10 @@ mkdir -p "$DEST/reads" "$DEST/star_index" "$DEST/salmon_index" "$DEST/hisat2_ind
 # annotation to --sjdbGTFfile and now refuses up front without it.
 : > "$DEST/hisat2_index/genome.1.ht2"
 : > "$DEST/genome.gtf.gz"
+# For --isoform_switch, which needs the transcript sequences. Present so a test
+# can reach the analysis-level gate rather than stopping at the missing-file
+# notice before it.
+: > "$DEST/transcripts.fa.gz"
 
 printf 'sample,R1,R2,condition\n' > "$DEST/samplesheet.csv"
 for sample in ctrl_rep1 ctrl_rep2 treat_rep1 treat_rep2; do

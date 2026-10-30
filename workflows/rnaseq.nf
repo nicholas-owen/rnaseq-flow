@@ -838,6 +838,90 @@ workflow RNASEQ {
     ch_multiqc_files         = channel.empty()
     ch_tx_quant              = channel.empty()  // Salmon/Kallisto quant dirs -> tximport
 
+    // Optional analyses that were asked for and cannot run here (M6).
+    //
+    // Each of these was silent: the gate simply did not open, the run went
+    // green, and the analysis was absent from the results with nothing in the
+    // log to say why. That is the failure this notices mechanism exists for,
+    // and these four were the ones not using it.
+    //
+    // Checked here, before the aligner branches, rather than inside the branch
+    // that would have run each one. A branch that is not taken cannot report
+    // anything: --ctat_lib on a Salmon run never reaches the STAR branch at
+    // all, which is why that case produced no message however the STAR branch
+    // was written.
+    //
+    // The level numbers come from --stop_at, mapped at the top of this
+    // workflow: preQC 1, postQC 2, DE 3, GSEA 4, unset 100. Fusion calling and
+    // isoform switching sit at 4 while DTU and diffSplice sit at 3, which is
+    // worth revisiting: isoform switching is a transcript-usage analysis like
+    // DTU and arguably belongs beside it. Left as it is, and now at least said
+    // out loud, because moving a gate changes what an existing --stop_at
+    // command produces.
+    //
+    // Not repeated here: --dtu on a genome aligner and --diffsplice without a
+    // GTF already have notices further down, in the branches that do run.
+    // A --counts run is excluded because checkParameters() already warns that
+    // all four are ignored on that route.
+    if (!from_counts) {
+        def unrunnable = []
+
+        if (params.ctat_lib) {
+            if (params.aligner != 'star') {
+                unrunnable << "--ctat_lib (fusion calling with STAR-Fusion) needs --aligner star: " +
+                              "it reads STAR's Chimeric.out.junction, which no other aligner writes. " +
+                              "It has no effect with --aligner ${params.aligner}."
+            }
+            else if (run_level < 4) {
+                unrunnable << "--ctat_lib (fusion calling with STAR-Fusion) runs at analysis level 4, " +
+                              "and --stop_at ${params.stop_at} stops before it; no fusions will be called."
+            }
+        }
+
+        if (params.isoform_switch) {
+            if (params.aligner != 'salmon') {
+                unrunnable << "--isoform_switch (IsoformSwitchAnalyzeR) runs on the Salmon route only; " +
+                              "it has no effect with --aligner ${params.aligner}."
+            }
+            else if (!params.transcript_fasta) {
+                unrunnable << "--isoform_switch needs --transcript_fasta: IsoformSwitchAnalyzeR reads the " +
+                              "transcript sequences themselves. The Salmon index build publishes " +
+                              "transcripts.fa.gz beside the index; pass that file."
+            }
+            else if (run_level < 4) {
+                unrunnable << "--isoform_switch (IsoformSwitchAnalyzeR) runs at analysis level 4, " +
+                              "and --stop_at ${params.stop_at} stops before it."
+            }
+        }
+
+        if (params.dtu && run_level < 3) {
+            unrunnable << "--dtu (differential transcript usage) runs at analysis level 3, " +
+                          "and --stop_at ${params.stop_at} stops before it."
+        }
+
+        if (params.diffsplice && run_level < 3) {
+            unrunnable << "--diffsplice (edgeR diffSplice) runs at analysis level 3, " +
+                          "and --stop_at ${params.stop_at} stops before it."
+        }
+
+        // Analyses that need the condition column, which only a samplesheet has.
+        if (params.input && !params.input.endsWith('.csv')) {
+            if (params.dtu) {
+                unrunnable << "--dtu needs a CSV samplesheet: a file glob carries no condition column, " +
+                              "so there are no groups to compare."
+            }
+            if (params.diffsplice) {
+                unrunnable << "--diffsplice needs a CSV samplesheet: a file glob carries no condition " +
+                              "column, so there are no groups to compare."
+            }
+        }
+
+        unrunnable.each { m ->
+            log.warn m
+            notices.add(m)
+        }
+    }
+
     if (run_level >= 2 && !from_counts) {
         if (params.aligner == 'star') {
             if (!params.star_index) error "STAR index not provided via --star_index"
