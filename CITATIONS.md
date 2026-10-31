@@ -42,6 +42,9 @@ is the overview. A styled HTML version of this page is at
 - **kallisto**: pseudoalignment-based transcript quantification.
   > Bray NL, Pimentel H, Melsted P, Pachter L. Near-optimal probabilistic RNA-seq quantification. Nat Biotechnol. 2016;34(5):525-527. doi:[10.1038/nbt.3519](https://doi.org/10.1038/nbt.3519)
 
+- **gffread**: cuts the transcriptome from the genome FASTA and the GTF, so a Salmon or kallisto index and its annotation describe the same transcripts. Run by `--build_indices` for those two aligners.
+  > Pertea G, Pertea M. GFF Utilities: GffRead and GffCompare. F1000Research. 2020;9:304. doi:[10.12688/f1000research.23297.2](https://doi.org/10.12688/f1000research.23297.2)
+
 - **SAMtools**: BAM sorting and indexing.
   > Danecek P, Bonfield JK, Liddle J, Marshall J, Ohan V, Pollard MO, Whitwham A, Keane T, McCarthy SA, Davies RM, Li H. Twelve years of SAMtools and BCFtools. GigaScience. 2021;10(2):giab008. doi:[10.1093/gigascience/giab008](https://doi.org/10.1093/gigascience/giab008)
 
@@ -146,7 +149,10 @@ tool **versions** from `pipeline_info/software_versions_mqc.yml`.
 > adapter/quality trimmed with fastp v[…] (Chen et al., 2018). Trimmed reads
 > were aligned to the [genome/transcriptome] with [STAR v[…] (Dobin et al.,
 > 2013) | HISAT2 v[…] (Kim et al., 2019) | Salmon v[…] (Patro et al., 2017) |
-> kallisto v[…] (Bray et al., 2016)]. [For the genome aligners, alignments were
+> kallisto v[…] (Bray et al., 2016)]. [For the pseudo-aligners, the
+> transcriptome was extracted from the genome FASTA and the GTF with gffread
+> v[…] (Pertea & Pertea, 2020), so the index and the annotation describe the
+> same transcript set.] [For the genome aligners, alignments were
 > sorted and indexed with SAMtools v[…] (Danecek et al., 2021); library
 > strandedness, read distribution and gene-body coverage were assessed with
 > RSeQC v[…] (Wang et al., 2012), and CPM-normalised coverage tracks were

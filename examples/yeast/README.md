@@ -32,7 +32,7 @@ That is why none of the commands below pass `--reference_level`: it defaults to
 `REF`, which is what this dataset calls its control, so the flag would be a
 no-op. Adapting these commands to data whose control group has another name is
 the case that needs it: `--reference_level Untreated`, say. See
-[USAGE.md §4.5](../USAGE.md#45-which-condition-results-are-measured-against---reference_level).
+[USAGE.md §4.5](../../USAGE.md#45-which-condition-results-are-measured-against---reference_level).
 
 Full runs are 3.5–9.8 M read pairs. The fetch script subsamples to 1 M pairs by
 default, which is enough to exercise every process while keeping the download

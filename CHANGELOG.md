@@ -787,7 +787,7 @@ any analysis step: this release only affects how and where jobs are run.
   `--gtf` (for gene annotation); the `R1`/`R2` samplesheet columns become
   optional. Non-integer input (normalised / TPM / FPKM or Salmon/Kallisto
   estimates) and Entrez/RefSeq-keyed matrices are rejected with clear guidance.
-  See [USAGE.md §4.6](USAGE.md#46-starting-from-a-count-matrix---counts).
+  See [USAGE.md §4.8](USAGE.md#48-starting-from-a-count-matrix---counts).
 
 ### Fixed
 

@@ -511,9 +511,9 @@ flowchart TD
       <tr><td><code>--counts</code></td><td>Enters at differential expression from a pre-computed gene count matrix (featureCounts wide or plain gene &times; sample), skipping FastQC, fastp, alignment and quantification. DESeq2, edgeR and enrichment run as normal. Requires <code>--input</code> (design) and <code>--gtf</code> (annotation).</td></tr>
       <tr><td><code>--stop_at preQC</code></td><td>Stops after FastQC + fastp.</td></tr>
       <tr><td><code>--stop_at postQC</code></td><td>Stops after alignment, SAMtools index, RSeQC and BigWig.</td></tr>
-      <tr><td><code>--stop_at DE</code></td><td>Stops after gene quantification, DESeq2 and edgeR.</td></tr>
-      <tr><td><code>--ctat_lib</code></td><td>Enables STAR-Fusion (STAR only).</td></tr>
-      <tr><td><code>--isoform_switch</code> + <code>--transcript_fasta</code></td><td>Enables IsoformSwitchAnalyzeR (Salmon only).</td></tr>
+      <tr><td><code>--stop_at DE</code></td><td>Stops after gene quantification, DESeq2, edgeR and the transcript-usage tests (<code>--dtu</code>, <code>--diffsplice</code>, <code>--isoform_switch</code>). rMATS, STAR-Fusion and enrichment need full depth.</td></tr>
+      <tr><td><code>--ctat_lib</code></td><td>Enables STAR-Fusion (STAR only, full depth).</td></tr>
+      <tr><td><code>--isoform_switch</code> + <code>--transcript_fasta</code></td><td>Enables IsoformSwitchAnalyzeR (Salmon only). Runs at the <code>DE</code> stage, beside <code>--dtu</code> and <code>--diffsplice</code>.</td></tr>
       <tr><td><code>--dtu</code></td><td>Enables the DEXSeq differential transcript usage test (Salmon or Kallisto; needs <code>--gtf</code>).</td></tr>
       <tr><td><code>--diffsplice</code></td><td>Enables the edgeR diffSpliceDGE test: exon-level usage on STAR/HISAT2, transcript-level usage on Salmon/Kallisto (needs <code>--gtf</code>).</td></tr>
       <tr><td><code>--gmt</code></td><td>Enables GSEA. gProfiler runs whenever differential expression runs.</td></tr>

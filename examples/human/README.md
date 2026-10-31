@@ -105,8 +105,10 @@ nextflow run main.nf --input hsc_data/samplesheet_hsc.csv --aligner salmon --sal
 ```
 
 No `--strandedness` flag. Salmon is invoked with `--libType A` and detects the
-library type per sample, so the parameter never reaches it. The yeast example
-passes `--strandedness unstranded` because its genome-aligner routes need it.
+library type per sample, so the parameter never reaches it. GSE151251 is
+unstranded anyway: Salmon's `lib_format_counts.json` reports `IU` for every run.
+The yeast example passes `--strandedness reverse` on its HISAT2 and Kallisto
+routes, because that library is reverse-stranded and neither route can infer it.
 
 `--transcript_fasta` points at the derived `transcripts.fa.gz` from step 3, not
 at the downloaded cDNA. `--isoform_switch` is skipped without it, and it has to

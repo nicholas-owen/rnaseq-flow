@@ -108,6 +108,8 @@ stopping at the first:
 - R1 and R2 paths that do not resolve on disk
 - at least two conditions, and at least two replicates per condition
 - `--design` variables that are not samplesheet columns
+- a `--reference_level` that is not one of the conditions
+- condition, batch and covariate values that are not valid R names (below)
 
 ```
 Samplesheet validation failed (2 problem(s)):
@@ -220,9 +222,12 @@ from; delete it and that is unrecoverable.
 > loudly rather than guessing. Reference sets downloaded with rnaseq-flow before
 > **v1.2.0** used the patch/haplotype GTF and should be re-downloaded.
 
-> **Total-RNA libraries.** Only the cDNA transcriptome is fetched. If your
-> library is rRNA-depleted rather than poly-A selected, also index Ensembl's
-> `ncrna.fa.gz` for that species, or lncRNAs go unquantified.
+> **Total-RNA libraries.** Only the cDNA transcriptome is fetched, and since
+> v1.8.0 it is not what the indexes are built from: `--build_indices` cuts the
+> transcriptome from the genome and the GTF, so every transcript the annotation
+> carries is quantified, lncRNA included (§3). The old advice, to index Ensembl's
+> `ncrna.fa.gz` alongside it for an rRNA-depleted library, applies only if you
+> override that with `--transcript_fasta cdna.all.fa.gz`, which is cDNA only.
 
 ---
 
@@ -259,12 +264,15 @@ nextflow run main.nf --build_indices --aligner kallisto \
 | Aligner | Requires | Produces |
 |---|---|---|
 | `star` | `--genome_fasta`, `--gtf` | `star_index/` |
-| `hisat2` | `--genome_fasta`, `--gtf` | `hisat2_index/` |
+| `hisat2` | `--genome_fasta`, `--gtf` | `hisat2_index/`, including `build_info.yml` |
 | `salmon` | `--genome_fasta`, `--gtf` | `salmon_index/`, `transcripts.fa.gz` |
 | `kallisto` | `--genome_fasta`, `--gtf` | `kallisto_index`, `transcripts.fa.gz` |
 | `all` | all of the above | all four |
 
-Indices are written under `--outdir`. FASTA/GTF inputs may be gzipped.
+Indices are written under `--outdir`. FASTA/GTF inputs may be gzipped. See
+[OUTPUTS.md §19](OUTPUTS.md#19-index-builds-star_index-hisat2_index-salmon_index-kallisto_index)
+for what each index directory holds, and `hisat2_index/build_info.yml` for
+whether the HISAT2 index was built splice-aware.
 
 #### The transcriptome is cut from the genome, not downloaded
 
@@ -387,6 +395,17 @@ missing, a sample id is duplicated, a FASTQ path does not exist, or the
 condition/replicate minimums are not met, the run aborts immediately with a
 list of every problem found. (When `--stop_at preQC`/`postQC` skips
 differential expression, the condition/replicate rules become warnings.)
+
+> **Condition names have to be valid R names.** So do `batch` and `--design`
+> covariate values. DESeq2 builds its coefficient names from
+> `make.names()`-sanitised levels and the analysis scripts reconstruct that name
+> to look a contrast up, so `TGF-beta`, `6h` and `Ctrl 1` each produce a name
+> DESeq2 does not have, and the lookup failed after alignment and quantification
+> had already run. Use letters, digits, `.` and `_` only, starting with a letter:
+> `TGF-beta` becomes `TGFbeta` or `TGF_beta`, and `6h` becomes `h6` or `T6h`. The
+> validator refuses the value at launch and names the replacement. Covariate
+> values matter less, since nothing rebuilds their coefficient names by hand, but
+> a `timepoint` of `6h` still reaches `resultsNames()` as `timepointX6h`.
 
 ### 4.2 Worked scenarios
 

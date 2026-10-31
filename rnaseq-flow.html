@@ -1759,12 +1759,62 @@
 
 
 <!-- ============================================================
-  SLIDE 17: WHAT'S NEW IN 1.6.0
+  SLIDE 17: WHAT'S NEW IN 1.8.0
 ============================================================ -->
-<section data-label="14 What's new in 1.6.0">
+<section data-label="14 What's new in 1.8.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">What's new in 1.6.0</h2>
+    <h2 class="slide-title">What's new in 1.8.0</h2>
+    <div class="release-head" style="margin-top: 18px;">
+      <span class="release-tag">v1.8.0</span>
+      <span class="release-date">24 October 2026</span>
+    </div>
+    <div class="rule" style="margin-top: 6px;"></div>
+
+    <div class="changes">
+      <div class="change">
+        <h4>Breaking: the pseudo-aligner transcriptome is cut from the genome</h4>
+        <p><code>--build_indices</code> runs <code>gffread</code> over <code>--genome_fasta</code> and <code>--gtf</code>, so the index and the annotation describe the same transcripts by construction, and publishes the result as <code>transcripts.fa.gz</code> beside the index. Ensembl's <code>cdna.all.fa.gz</code> disagreed with the GTF both ways: 14,212 patch and haplotype transcripts the primary-assembly GTF omits, and 465,769 transcripts against the GTF's 646,577, the missing ones almost all lncRNA that a poly-A library does capture. The index now covers roughly 40% more features, so rebuild every Salmon and Kallisto index and do not compare transcript-level results across this release.</p>
+      </div>
+      <div class="change">
+        <h4>New: DTU and differential splicing produce figures</h4>
+        <p><code>--dtu</code> and <code>--diffsplice</code> published tables and nothing to look at. Both now draw their ten most significant genes, with a <code>reproduce/</code> folder per analysis, and both have a section in the report. <code>--isoform_switch</code> has one too.</p>
+      </div>
+      <div class="change">
+        <h4>New: one pair of significance thresholds</h4>
+        <p><code>--padj_cutoff</code> and <code>--lfc_cutoff</code>, defaulting to 0.05 and 1, shared by DESeq2, edgeR, the gProfiler input lists, the volcano colouring, the <code>reproduce/</code> scripts and the report. The numbers were previously written into six files separately.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: rMATS always ran unstranded</h4>
+        <p>No <code>--libType</code> was passed, so a reverse-stranded library was analysed as unstranded and produced a complete set of PSI values that looked fine. The per-sample RSeQC verdicts are now collapsed to the one library type rMATS takes, and a cohort that disagrees stops the run rather than being averaged.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: a green run with no differential expression</h4>
+        <p>A genome-aligner run without <code>--gtf</code> exited 0 with no DE results and said nothing. It now says which analyses it is skipping, and <code>--aligner star</code> without <code>--gtf</code> is refused by name, since STAR is handed the annotation as <code>--sjdbGTFfile</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: a condition name DESeq2 cannot use</h4>
+        <p><code>TGF-beta</code>, <code>6h</code> and <code>Ctrl 1</code> are ordinary labels that <code>make.names()</code> rewrites, so the coefficient lookup failed after alignment and quantification had run. Condition, batch and <code>--design</code> covariate values are now checked at launch, with the replacement spelled out.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: <code>--reference_level</code> was invisible to <code>-resume</code></h4>
+        <p>It reached the analysis scripts through the <code>env</code> config scope, which the task hash does not cover, so re-running with a different baseline reused the cached results and relabelled them. It is a process input now, and the manifest and the RO-Crate record the baseline that was used rather than the one that was asked for.</p>
+      </div>
+      <div class="change">
+        <h4>Also in 1.7.0</h4>
+        <p>Every Bioconductor package moved to release 3.22, and the <code>reproduce/</code> folders arrived for the remaining analyses. A stub-run CI job now exercises the whole channel graph on empty inputs and asserts that each result directory exists, because every defect in this list was in code that had never executed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  SLIDE 18: WHAT'S NEW IN 1.6.0
+============================================================ -->
+<section data-label="15 Previously: 1.6.0">
+  <div class="frame">
+    <p class="eyebrow">Release notes</p>
+    <h2 class="slide-title">Previously: 1.6.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.6.0</span>
       <span class="release-date">2 September 2026</span>

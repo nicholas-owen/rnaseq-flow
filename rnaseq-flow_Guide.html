@@ -647,11 +647,37 @@ treat_rep2,data/treat_rep2_R1.fastq.gz,data/treat_rep2_R2.fastq.gz,treatment</co
   <p>The samplesheet is validated before any work starts, and the run aborts
      immediately if there is a problem. The checks are: required columns present,
      sample ids unique and non-empty, every R1 and R2 path resolving on disk, at
-     least two conditions, at least two replicates per condition, and every
-     <code>--design</code> variable being a real column. With
+     least two conditions, at least two replicates per condition, every
+     <code>--design</code> variable being a real column, and a
+     <code>--reference_level</code> you name being one of the conditions. With
      <code>--stop_at preQC</code> or <code>postQC</code>, where no differential
      expression runs, the condition and replicate rules are downgraded to
      warnings.</p>
+
+  <div class="box warn">
+    <span class="t">Condition names have to be valid R names</span>
+    <p>So do batch and <code>--design</code> covariate values. DESeq2 builds its
+       coefficient names from <code>make.names()</code>-sanitised levels, so
+       <code>TGF-beta</code>, <code>6h</code> and <code>Ctrl 1</code> each
+       produce a name it does not have, and the analysis failed at the lookup
+       after alignment and quantification had already run. Letters, digits,
+       <code>.</code> and <code>_</code> only, starting with a letter:
+       <code>TGF-beta</code> becomes <code>TGFbeta</code> or
+       <code>TGF_beta</code>, <code>6h</code> becomes <code>h6</code> or
+       <code>T6h</code>. The run refuses such a value up front and names the
+       replacement.</p>
+  </div>
+
+  <div class="box note">
+    <span class="t">Two launch checks sit beside it</span>
+    <p><code>--aligner star</code> without <code>--gtf</code> is refused by name,
+       because STAR is handed the annotation as <code>--sjdbGTFfile</code> and
+       cannot align without it. HISAT2 can, so a GTF-less HISAT2 run is allowed
+       and says which analyses it is skipping. A run with no container engine and
+       no <code>-profile</code> is also refused, since it would otherwise fall
+       back to whatever happens to be on the host and report versions that have
+       nothing to do with the containers.</p>
+  </div>
 
   <h3 id="baseline">The baseline condition <a class="anchor" href="#baseline">#</a></h3>
 
@@ -810,6 +836,8 @@ treat_2,/data/treat_2_R1.fastq.gz,/data/treat_2_R2.fastq.gz,treatment,b2</code><
       <tr><td><code>--isoform_switch</code></td><td class="req">No</td><td><code>false</code></td><td>IsoformSwitchAnalyzeR. Needs <code>--aligner salmon</code></td></tr>
       <tr><td><code>--dtu</code></td><td class="req">No</td><td><code>false</code></td><td>DEXSeq differential transcript usage. Needs Salmon or Kallisto, and <code>--gtf</code></td></tr>
       <tr><td><code>--diffsplice</code></td><td class="req">No</td><td><code>false</code></td><td>edgeR <code>diffSpliceDGE</code>. Exon level on STAR/HISAT2, transcript level on Salmon/Kallisto. Needs <code>--gtf</code></td></tr>
+      <tr><td><code>--padj_cutoff</code></td><td class="req">No</td><td><code>0.05</code></td><td>Adjusted p-value below which a gene is called significant. One value shared by DESeq2, edgeR, the gProfiler input lists, the volcano colouring, the <code>reproduce/</code> scripts and the report</td></tr>
+      <tr><td><code>--lfc_cutoff</code></td><td class="req">No</td><td><code>1</code></td><td>Absolute log2 fold change a significant gene must also exceed, on the same shared basis. <code>1</code> is two-fold; <code>0</code> drops the effect-size requirement</td></tr>
       <tr><td><code>--gmt</code></td><td class="req">No</td><td>&ndash;</td><td>GMT gene-set file. Enables GSEA</td></tr>
       <tr><td><code>--organism</code></td><td class="req">No</td><td><code>hsapiens</code></td><td>Organism ID for gProfiler and GMT download</td></tr>
     </tbody>
@@ -948,10 +976,10 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
     --star_index /path/to/star_index --gtf /path/to/genes.gtf \
     --outdir results</code></pre></div>
 
-  <p>The <code>tre</code> profile disables Wave and pins the seven Conda-declared
-     processes (DESeq2, edgeR/tximport, DEXSeq, GSEA, gProfiler,
-     <code>--download_gmt</code> and the Quarto report) to the bundled images.
-     Combine it with whichever executor profile you need.</p>
+  <p>The <code>tre</code> profile disables Wave and pins the eight Conda-declared
+     processes (DESeq2, edgeR/tximport, DEXSeq, IsoformSwitchAnalyzeR, GSEA,
+     gProfiler, <code>--download_gmt</code> and the Quarto report) to the bundled
+     images. Combine it with whichever executor profile you need.</p>
 
   <ul>
     <li>The bundle is pinned to a release, and v1.8.0 is the current one. Its
@@ -1097,12 +1125,19 @@ writing-original-draft   writing-review-editing</code></pre></div>
      off.</p>
 
   <div class="box note">
-    <span class="t">Nothing to run afterwards</span>
-    <p>The crate is finished before the pipeline exits, and the console says
-       what went into it:</p>
-    <div class="codeblock"><pre><code>RO-Crate: 871 entities, 140 files hashed, 6 result folders expanded
+    <span class="t">Nothing to run afterwards, but let it finish</span>
+    <p>The crate is completed before the pipeline exits, and the console says
+       what went into it and how long it took:</p>
+    <div class="codeblock"><pre><code>Completing the RO-Crate: reading and checksumming every published file. Let it finish.
+
+RO-Crate: 871 entities, 140 files hashed, 6 result folders expanded
           (175 files), 1 contributor(s), project, 3 input copies removed
-          (1.0 MB), 4 workflow files moved to .crate/</code></pre></div>
+          (1.0 MB), 4 workflow files moved to .crate/, 48.2s</code></pre></div>
+    <p>That work starts after <code>run COMPLETE</code> has already printed,
+       because nf-prov writes <code>ro-crate-metadata.json</code> later than any
+       Nextflow hook runs. On a cohort with BAMs and BigWigs it is minutes of
+       reading, and interrupting it leaves the crate partly enriched. Pass
+       <code>--ro_crate false</code> if you do not want one at all.</p>
   </div>
 
   <p>Two pieces produce it. The
@@ -1121,6 +1156,19 @@ writing-original-draft   writing-review-editing</code></pre></div>
      duplicated into every results directory; the entities become absolute
      <code>file:</code> references instead, exactly as the plugin already does
      for the aligner index.</p>
+
+  <div class="box note">
+    <span class="t">So the crate references its inputs rather than enclosing them</span>
+    <p>The cost is that those references resolve only on the machine that
+       produced the crate: a crate sent by email names input paths the recipient
+       does not have. What travels intact is the <code>sha256</code> of each one,
+       which is retained, so a recipient who obtains the same files separately
+       can prove they are the same files. Treat the input entities as
+       identifiers, not as enclosures, and send the references alongside if the
+       recipient needs them. Only genuine inputs are externalised, and only when
+       the parameter resolves to a file that still exists outside
+       <code>--outdir</code>; published results are never touched.</p>
+  </div>
 
   <div class="box note">
     <span class="t">Launch by name for a crate that travels</span>
@@ -1209,7 +1257,8 @@ writing-original-draft   writing-review-editing</code></pre></div>
 ├── v102/                                             # pinned Ensembl release 102
 │   ├── Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz   # genome FASTA
 │   ├── Homo_sapiens.GRCh38.102.gtf.gz                   # annotation (note the .102.)
-│   ├── Homo_sapiens.GRCh38.cdna.all.fa.gz               # transcriptome (--transcript_fasta)
+│   ├── Homo_sapiens.GRCh38.cdna.all.fa.gz               # cDNA, kept for reference; the indices
+│   │                                                    # use a GTF-derived transcriptome instead
 │   ├── download_log.txt                                 # provenance log (human-readable)
 │   └── reference_metadata.json                          # provenance record (machine-readable)
 └── gmt/                                              # if --download_gmt
@@ -1252,10 +1301,10 @@ writing-original-draft   writing-review-editing</code></pre></div>
     <thead><tr><th>Aligner</th><th>Requires</th><th>Produces</th></tr></thead>
     <tbody>
       <tr><td><span class="route r-star"></span><code>star</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>star_index/</code></td></tr>
-      <tr><td><span class="route r-hisat2"></span><code>hisat2</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>hisat2_index/</code></td></tr>
-      <tr><td><span class="route r-salmon"></span><code>salmon</code></td><td><code>--transcript_fasta</code>, <code>--genome_fasta</code></td><td><code>salmon_index/</code></td></tr>
-      <tr><td><span class="route r-kallisto"></span><code>kallisto</code></td><td><code>--transcript_fasta</code></td><td><code>kallisto_index</code></td></tr>
-      <tr><td><code>all</code></td><td>all of the above</td><td>all four</td></tr>
+      <tr><td><span class="route r-hisat2"></span><code>hisat2</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>hisat2_index/</code>, including <code>build_info.yml</code></td></tr>
+      <tr><td><span class="route r-salmon"></span><code>salmon</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>salmon_index/</code> and <code>transcripts.fa.gz</code></td></tr>
+      <tr><td><span class="route r-kallisto"></span><code>kallisto</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td><code>kallisto_index</code> (a file, not a directory) and <code>transcripts.fa.gz</code></td></tr>
+      <tr><td><code>all</code></td><td><code>--genome_fasta</code>, <code>--gtf</code></td><td>all four, and <code>transcripts.fa.gz</code></td></tr>
     </tbody>
   </table>
   </div>
@@ -1266,19 +1315,57 @@ nextflow run main.nf --build_indices --aligner star \
     --gtf         references/human/Homo_sapiens.GRCh38.110.gtf.gz \
     --outdir indices/human -profile docker
 
-<span class="cmt"># Salmon is decoy-aware: it needs the transcripts AND the genome</span>
+<span class="cmt"># Salmon is decoy-aware: the genome supplies the decoys</span>
 nextflow run main.nf --build_indices --aligner salmon \
-    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
-    --genome_fasta     references/human/genome.fa.gz \
+    --genome_fasta references/human/genome.fa.gz \
+    --gtf          references/human/Homo_sapiens.GRCh38.110.gtf.gz \
     --outdir indices/human -profile docker
 
-<span class="cmt"># Kallisto needs transcripts only</span>
+<span class="cmt"># Kallisto: same inputs, transcriptome derived the same way</span>
 nextflow run main.nf --build_indices --aligner kallisto \
-    --transcript_fasta references/human/transcripts.cdna.all.fa.gz \
+    --genome_fasta references/human/genome.fa.gz \
+    --gtf          references/human/Homo_sapiens.GRCh38.110.gtf.gz \
     --outdir indices/human -profile docker</code></pre></div>
 
   <p>Indices are written under <code>--outdir</code>. FASTA and GTF inputs may be
      gzipped. For HISAT2 memory, see <a href="#resources">section 3.7</a>.</p>
+
+  <div class="box note">
+    <span class="t">The transcriptome is cut from the genome, not downloaded</span>
+    <p>Since v1.8.0 the pseudo-aligner routes derive their transcript sequences
+       from <code>--genome_fasta</code> and <code>--gtf</code> with gffread, so
+       the FASTA headers are the GTF's own <code>transcript_id</code> values and
+       the index and the annotation describe the same transcripts by
+       construction. The result is published as
+       <code>transcripts.fa.gz</code> beside the index, and that is the file to
+       pass to <code>--transcript_fasta</code> for
+       <code>--isoform_switch</code>. Ensembl's <code>cdna.all.fa.gz</code> is
+       cDNA only, 465,769 transcripts against the GTF's 646,577 on GRCh38
+       release 116, the missing ones almost all lncRNA that a poly-A library
+       does capture. <code>--transcript_fasta</code> still overrides the derived
+       file, with a warning, because nothing can check that a supplied FASTA
+       matches the GTF.</p>
+    <p><strong>Results are not comparable across that change.</strong> The index
+       now covers roughly 40% more features, so gene-level counts shift where a
+       gene overlaps an lncRNA and transcript-level tests carry a larger
+       multiple-testing burden. Rebuild every Salmon and Kallisto index.</p>
+  </div>
+
+  <div class="box note">
+    <span class="t">hisat2_index/build_info.yml records which index you got</span>
+    <p><code>hisat2-build --ss --exon</code> needs memory in proportion to the
+       splice graph, of the order of 200 GB for human. Given less, the build
+       drops those two flags rather than being OOM-killed: the index still
+       aligns across known junctions and is less sensitive to novel ones. The
+       two are indistinguishable on disk and the warning scrolls away, so the
+       marker records <code>splice_aware</code>, the annotation used, and the
+       memory granted against the memory estimated. Every run that uses the
+       index copies those fields into <code>run_manifest.json</code> and the
+       report prints them as Index build. Raise <code>--max_memory</code>, on a
+       node that large, for the splice-aware index; set
+       <code>--hisat2_build_memory</code> to accept the reduced one and silence
+       the warning.</p>
+  </div>
 
   <h3 id="mode-analysis">Mode 3: run the analysis <a class="anchor" href="#mode-analysis">#</a></h3>
 
@@ -1308,7 +1395,7 @@ nextflow run main.nf --build_indices --aligner kallisto \
     <span class="flag">--aligner</span> salmon \
     <span class="flag">--salmon_index</span> indices/human/salmon_index \
     <span class="flag">--gtf</span> references/human/Homo_sapiens.GRCh38.110.gtf.gz \
-    <span class="flag">--transcript_fasta</span> references/human/transcripts.cdna.all.fa.gz \
+    <span class="flag">--transcript_fasta</span> indices/human/transcripts.fa.gz \
     <span class="flag">--isoform_switch</span> \
     <span class="flag">--dtu</span> \
     <span class="flag">--diffsplice</span> \
@@ -1365,10 +1452,21 @@ nextflow run main.nf --build_indices --aligner kallisto \
     <tbody>
       <tr><td><code>preQC</code></td><td>FastQC and fastp trimming</td></tr>
       <tr><td><code>postQC</code></td><td>Alignment, BAM indexing, RSeQC, BigWig</td></tr>
-      <tr><td><code>DE</code></td><td>featureCounts, DESeq2 and edgeR</td></tr>
-      <tr><td><code>GSEA</code> <em>(or unset)</em></td><td>Everything, including enrichment, fusions and splicing</td></tr>
+      <tr><td><code>DE</code></td><td>featureCounts, DESeq2, edgeR, and the transcript-usage analyses: <code>--dtu</code>, <code>--diffsplice</code> and <code>--isoform_switch</code></td></tr>
+      <tr><td><code>GSEA</code> <em>(or unset)</em></td><td>Everything, including enrichment, rMATS and fusion calling</td></tr>
     </tbody>
   </table>
+  </div>
+
+  <div class="box note">
+    <span class="t">--isoform_switch moved into the DE stage after 1.8.0</span>
+    <p>It needed full depth before that, which put a transcript-usage analysis
+       after gene-set enrichment, while <code>--dtu</code> and
+       <code>--diffsplice</code>, which test the same quantification, ran at
+       <code>DE</code>. A <code>--stop_at DE</code> command that asks for it now
+       produces <code>isoform_switch_output/</code> where it produced nothing.
+       rMATS and STAR-Fusion still need full depth: they read the BAMs and the
+       chimeric junctions, not the quantification.</p>
   </div>
 
   <div class="codeblock"><pre><code>nextflow run main.nf --input samplesheet.csv --aligner star \
@@ -1462,8 +1560,8 @@ treat_2,treatment</code></pre></div>
           <td>Matrix and GTF are different annotation builds, or the matrix is keyed by Entrez/RefSeq IDs</td></tr>
       <tr><td>No <code>diffsplice_output/</code></td>
           <td><code>--diffsplice</code> not set, or <code>--gtf</code> missing</td></tr>
-      <tr><td>Splicing or fusions missing</td>
-          <td>These run only at full depth. Do not combine with <code>--stop_at DE</code></td></tr>
+      <tr><td>No <code>rmats_output/</code> or <code>star_fusion/</code></td>
+          <td>Both run only at full depth. Do not combine them with <code>--stop_at DE</code>, which reaches <code>--dtu</code>, <code>--diffsplice</code> and <code>--isoform_switch</code> but not these two</td></tr>
       <tr><td>Out-of-memory kills</td>
           <td>Raise <code>--max_memory</code>, or lower concurrency</td></tr>
       <tr><td>Container pull failures</td>
@@ -1563,18 +1661,21 @@ nextflow run main.nf \
     --input        test_data/samplesheet_yeast.csv \
     --aligner      hisat2 \
     --hisat2_index idx/yeast_hisat2/hisat2_index \
-    --strandedness unstranded \
+    --strandedness reverse \
     --gtf          refs/yeast/v116/*.gtf.gz \
     --gmt          refs/yeast/gmt/c5_go_bp.gmt \
     --outdir       results_hisat2 \
     -profile test_yeast,docker</code></pre></div>
 
   <h4><span class="route r-salmon"></span>Salmon</h4>
-  <p>The index needs the cDNA FASTA and the genome, the latter only to build the
-     decoy set.</p>
+  <p>The transcriptome is cut from the genome with gffread using the GTF, so the
+     index and the annotation describe the same transcripts. The genome is needed
+     twice over, for that and for the decoy set. The build also writes
+     <code>idx/yeast_salmon/transcripts.fa.gz</code>, which is the file to pass
+     to <code>--transcript_fasta</code> on any later run that needs one.</p>
   <div class="codeblock"><pre><code>nextflow run main.nf --build_indices --aligner salmon \
-    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
-    --genome_fasta     refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
     --outdir idx/yeast_salmon \
     -profile test_yeast,docker
 
@@ -1582,16 +1683,17 @@ nextflow run main.nf \
     --input        test_data/samplesheet_yeast.csv \
     --aligner      salmon \
     --salmon_index idx/yeast_salmon/salmon_index \
-    --strandedness unstranded \
     --gtf          refs/yeast/v116/*.gtf.gz \
     --gmt          refs/yeast/gmt/c5_go_bp.gmt \
     --outdir       results_salmon \
     -profile test_yeast,docker</code></pre></div>
 
   <h4><span class="route r-kallisto"></span>Kallisto</h4>
-  <p>Transcripts only, no decoys.</p>
+  <p>Transcripts only, no decoys, but the genome is still needed to cut the
+     transcriptome from.</p>
   <div class="codeblock"><pre><code>nextflow run main.nf --build_indices --aligner kallisto \
-    --transcript_fasta refs/yeast/v116/*.cdna.all.fa.gz \
+    --genome_fasta refs/yeast/v116/*.dna.toplevel.fa.gz \
+    --gtf          refs/yeast/v116/*.gtf.gz \
     --outdir idx/yeast_kallisto \
     -profile test_yeast,docker
 
@@ -1599,19 +1701,29 @@ nextflow run main.nf \
     --input          test_data/samplesheet_yeast.csv \
     --aligner        kallisto \
     --kallisto_index idx/yeast_kallisto/kallisto_index \
-    --strandedness   unstranded \
+    --strandedness   reverse \
     --gtf            refs/yeast/v116/*.gtf.gz \
     --gmt            refs/yeast/gmt/c5_go_bp.gmt \
     --outdir         results_kallisto \
     -profile test_yeast,docker</code></pre></div>
 
   <div class="box note">
-    <span class="t">Why --strandedness unstranded on three of the four</span>
-    <p>The default <code>auto</code> infers strandedness with RSeQC, which needs a
-       BAM. Salmon and Kallisto produce none. This dataset is unstranded, so
-       stating it explicitly is both correct and quieter. STAR is left on
-       <code>auto</code> so the inference path itself gets exercised at least
-       once.</p>
+    <span class="t">Why --strandedness reverse on HISAT2 and Kallisto, and nothing on Salmon</span>
+    <p>This library is reverse-stranded. RSeQC puts 0.011 of reads on the sense
+       strand against 0.896 antisense, the same to within 0.01 across all six
+       samples, which is the signature of a dUTP protocol. STAR is left on
+       <code>auto</code> above, where RSeQC infers exactly that, so the inference
+       path gets exercised at least once.</p>
+    <p><code>auto</code> needs a BAM, which the pseudo-aligners do not produce,
+       so the value has to be stated for them. Kallisto takes
+       <code>reverse</code> as <code>--rf-stranded</code>. Salmon is given no
+       value because it would ignore one: it is invoked with
+       <code>--libType A</code> and detects the library type itself.</p>
+    <p>These three carried <code>--strandedness unstranded</code> until
+       2026-10-30, on the mistaken premise that the dataset was unstranded.
+       featureCounts therefore ran <code>-s 0</code> on a stranded library and
+       Kallisto quantified without a strand flag. The route-comparison table
+       below was regenerated after the correction.</p>
   </div>
 
   <h4>What to check</h4>
@@ -1655,25 +1767,34 @@ nextflow run main.nf \
     <thead><tr><th>Route</th><th>Genes tested</th><th>Significant</th><th>Up</th><th>Down</th></tr></thead>
     <tbody>
       <tr><td><span class="route r-star"></span>STAR</td><td>5579</td><td>852</td><td>152</td><td>700</td></tr>
-      <tr><td><span class="route r-hisat2"></span>HISAT2</td><td>5773</td><td>833</td><td>132</td><td>701</td></tr>
-      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5510</td><td>778</td><td>130</td><td>648</td></tr>
-      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5961</td><td>866</td><td>146</td><td>720</td></tr>
+      <tr><td><span class="route r-hisat2"></span>HISAT2</td><td>5587</td><td>847</td><td>153</td><td>694</td></tr>
+      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5508</td><td>778</td><td>130</td><td>648</td></tr>
+      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5532</td><td>854</td><td>152</td><td>702</td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>668 genes were called significant by all four, every pairwise overlap was at
-     least 83 percent of the smaller set, and all four reproduced the same strong
-     down-regulation bias. The overlaps do not split cleanly along the
-     genome-aligner and pseudo-aligner line: STAR agreed more closely with Salmon
-     than with HISAT2 here. That is not in itself a fault, since the routes differ
-     in multimapper handling and length correction.</p>
+  <p>735 genes were called significant by all four, no pairwise overlap fell
+     below 95 percent of the smaller set, and all four reproduced the same strong
+     down-regulation bias.</p>
 
   <p>Those are the DESeq2 calls. edgeR on the same data is consistently a little
-     more generous, having gained power in version 4.x: 924, 951, 893 and 964
-     significant for STAR, HISAT2, Salmon and Kallisto, 722 called by all four,
-     every pairwise overlap at or above 84 percent. The direction of the bias is
-     the same.</p>
+     more generous, having gained power in version 4.x: 924, 930, 895 and 944
+     significant for STAR, HISAT2, Salmon and Kallisto, 814 called by all four,
+     and no pairwise overlap below 91 percent. The direction of the bias is the
+     same, though less lopsided: edgeR calls roughly twice as many genes up.</p>
+
+  <div class="box note">
+    <span class="t">This table was wrong twice over until 2026-10-30</span>
+    <p>HISAT2 and Kallisto ran <code>--strandedness unstranded</code> on a
+       reverse-stranded library, and the Salmon and Kallisto transcriptome
+       changed on 2026-10-24 without the table being redone. Correcting both
+       raised the genes called by all four from 668 to 735 and the worst pairwise
+       overlap from 83 to 95 percent, which is the direction a real fix should
+       move a concordance figure. STAR did not move: it was always on
+       <code>auto</code>, which infers <code>reverse</code>, and it uses no
+       transcriptome, so its row is the control for everything else here.</p>
+  </div>
 
   <div class="box note">
     <span class="t">A shape to match, not targets to hit</span>
@@ -1860,10 +1981,15 @@ nextflow run main.nf \
      <code>pvalue</code> and <code>padj</code> come from the unshrunken Wald test,
      so significance calling is unaffected.</p>
 
-  <p>A common threshold is <code>padj &lt; 0.05</code> with
-     <code>|log2FoldChange| &gt; 1</code>, a two-fold change.
-     <code>padj</code> may be <code>NA</code> when DESeq2 filters a gene for low
-     counts or flags it as an outlier, which is normal.</p>
+  <p>Significance is <code>padj &lt; 0.05</code> with
+     <code>|log2FoldChange| &gt; 1</code>, a two-fold change, which are the
+     defaults of <code>--padj_cutoff</code> and <code>--lfc_cutoff</code>.
+     Change them once and every consumer follows: DESeq2 and edgeR's own counts,
+     the gene lists gProfiler is given, the colouring on the volcano plots, the
+     constants written into the <code>reproduce/</code> scripts, and the
+     thresholds the report states. Nothing in the run carries a second copy of
+     either number. <code>padj</code> may be <code>NA</code> when DESeq2 filters
+     a gene for low counts or flags it as an outlier, which is normal.</p>
 
   <h4><code>edger_output/</code></h4>
   <p>Columns are <code>logFC</code>, <code>logCPM</code>, <code>F</code>,

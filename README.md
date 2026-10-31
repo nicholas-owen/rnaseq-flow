@@ -282,6 +282,12 @@ is present.
 > edgeR need them, **at least 2 conditions and at least 2 replicates per
 > condition**. (With `--stop_at preQC`/`postQC`, where no differential
 > expression runs, the condition/replicate rules are downgraded to warnings.)
+>
+> Condition names, `batch` values and `--design` covariate values also have to
+> be **valid R names**, because DESeq2 builds its coefficient names from
+> `make.names()`-sanitised levels: `TGF-beta` becomes `TGFbeta` or `TGF_beta`,
+> `6h` becomes `h6` or `T6h`. See
+> [USAGE.md §4.1](USAGE.md#41-prepare-the-samplesheet).
 
 > **Batch effects & covariates.** Extra columns beyond the four above are kept
 > and may be used as model covariates. A `batch` column is auto-detected and

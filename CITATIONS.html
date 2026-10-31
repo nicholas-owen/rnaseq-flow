@@ -135,6 +135,10 @@
       <div class="cite">Bray NL, Pimentel H, Melsted P, Pachter L. Near-optimal probabilistic RNA-seq quantification. Nat Biotechnol. 2016;34(5):525-527. <a href="https://doi.org/10.1038/nbt.3519" target="_blank" rel="noopener">doi:10.1038/nbt.3519</a></div>
     </div>
     <div class="tool">
+      <div class="tool-name">gffread <span class="role">(transcriptome extraction for the pseudo-aligner indices)</span></div>
+      <div class="cite">Pertea G, Pertea M. GFF Utilities: GffRead and GffCompare. F1000Research. 2020;9:304. <a href="https://doi.org/10.12688/f1000research.23297.2" target="_blank" rel="noopener">doi:10.12688/f1000research.23297.2</a></div>
+    </div>
+    <div class="tool">
       <div class="tool-name">SAMtools <span class="role">(BAM sorting &amp; indexing)</span></div>
       <div class="cite">Danecek P, Bonfield JK, Liddle J, Marshall J, Ohan V, Pollard MO, Whitwham A, Keane T, McCarthy SA, Davies RM, Li H. Twelve years of SAMtools and BCFtools. GigaScience. 2021;10(2):giab008. <a href="https://doi.org/10.1093/gigascience/giab008" target="_blank" rel="noopener">doi:10.1093/gigascience/giab008</a></div>
     </div>
@@ -267,7 +271,10 @@
       al., 2018). Trimmed reads were aligned to the [genome/transcriptome] with
       [STAR v[&hellip;] (Dobin et al., 2013) | HISAT2 v[&hellip;] (Kim et al., 2019)
       | Salmon v[&hellip;] (Patro et al., 2017) | kallisto v[&hellip;] (Bray et al.,
-      2016)]. [For the genome aligners, alignments were sorted and indexed with
+      2016)]. [For the pseudo-aligners, the transcriptome was extracted from the
+      genome FASTA and the GTF with gffread v[&hellip;] (Pertea &amp; Pertea,
+      2020), so the index and the annotation describe the same transcript set.]
+      [For the genome aligners, alignments were sorted and indexed with
       SAMtools v[&hellip;] (Danecek et al., 2021); library strandedness, read
       distribution and gene-body coverage were assessed with RSeQC v[&hellip;]
       (Wang et al., 2012), and CPM-normalised coverage tracks were generated with
