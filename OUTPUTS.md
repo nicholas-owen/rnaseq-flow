@@ -55,7 +55,11 @@ results/
 └── ro-crate-metadata.json   The RO-Crate (§17), unless --ro_crate false
 ```
 
-Which directories appear depends on the aligner and options you chose.
+Which directories appear depends on the aligner and options you chose. The two
+helper modes write none of them: `--build_indices` writes index directories
+(§19), and `--download_refs` writes a reference set beside its
+`reference_metadata.json`
+([USAGE.md §2](USAGE.md#2-mode-1-download-references)).
 
 `.crate/` and `ro-crate-metadata.json` exist because a Workflow Run RO-Crate
 is meant to be self-contained.
@@ -910,6 +914,44 @@ the pipeline's own once it leaves the folder.
 > Every analysis directory the pipeline publishes now carries a `reproduce/`
 > folder. `rmats_output/` and `star_fusion/` do not, because neither step
 > produces a figure: rMATS and STAR-Fusion emit tables only.
+
+---
+
+## 19. Index builds: `star_index/`, `hisat2_index/`, `salmon_index/`, `kallisto_index`
+
+`--build_indices` produces no analysis, so none of the directories above
+appears. It writes the index for one aligner, or all four with `--aligner all`,
+straight into `--outdir`. Later runs take the result with the matching
+`--star_index`, `--hisat2_index`, `--salmon_index` or `--kallisto_index`. See
+[USAGE.md §3](USAGE.md#3-mode-2-build-indices) for the commands and the memory
+each build needs.
+
+| Path | Built by | What it is |
+|---|---|---|
+| `star_index/` | `--aligner star` | STAR genome directory (`SA`, `SAindex`, `Genome`, `sjdbList.out.tab` and the rest). Built with `--sjdbGTFfile`, so the annotation's junctions are in it |
+| `hisat2_index/` | `--aligner hisat2` | `genome.1.ht2` to `genome.8.ht2`, plus `build_info.yml` |
+| `salmon_index/` | `--aligner salmon` | Decoy-aware index: the transcriptome indexed with the genome's sequence names as decoys |
+| `kallisto_index` | `--aligner kallisto` | A single file, not a directory. `--kallisto_index` takes the file path |
+| `transcripts.fa.gz` | `--aligner salmon`, `kallisto` or `all` | The transcriptome `gffread` cut from `--genome_fasta` and `--gtf`, written beside the index it fed. Keep it. `--isoform_switch` needs a transcript FASTA at run time and it has to be this one, since the index was built from it |
+
+**`hisat2_index/build_info.yml`** records which kind of index you got. Four
+fields: `splice_aware`, `true` or `false`; `annotation`, the GTF file name, or
+`not used`; and `memory_granted_gb` beside `memory_estimated_gb`, the two
+numbers that decided it.
+
+`hisat2-build --ss --exon` needs memory in proportion to the splice graph, of
+the order of 200 GB for human. Given less, `HISAT2_BUILD` drops those two flags
+rather than being OOM-killed. The reduced index still aligns across junctions
+using HISAT2's own model; it is less sensitive to novel ones. The distinction is
+invisible on disk and the warning scrolls away, which is why it is written here:
+an index built once and reused for a year through `--hisat2_index` otherwise
+carries no record of which kind it is. Every run that uses the index copies
+these fields into `pipeline_info/run_manifest.json` as `references.index_build`,
+and the Quarto report prints them as "Index build" in its run overview.
+
+Raise the ceiling with `--max_memory`, on a node that large, to get the
+splice-aware index. Set `--hisat2_build_memory` to accept the reduced one and
+silence the warning.
 
 ---
 

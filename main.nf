@@ -307,6 +307,18 @@ def validateSamplesheet(samplesheet_path) {
     def condition_counts = [:].withDefault { 0 }
     def batch_values     = [] as Set
 
+    // Any other --design covariate column. 'condition' and 'batch' are checked
+    // by name above; a third variable introduced through
+    // --design '~ timepoint + condition' had its column checked for existence
+    // and its values checked for nothing.
+    def design_cols = [] as Set
+    if (params.design) {
+        design_cols = ((params.design =~ /[A-Za-z_]\w*/).collect { v -> v } as Set)
+            .findAll { v -> v != 'condition' && v != 'batch' && cols.contains(v) }
+    }
+    def design_values = [:]
+    design_cols.each { c -> design_values[c] = [] as Set }
+
     rows.eachWithIndex { row, i ->
         def lineno = i + 2   // +1 for 0-index, +1 for the header line
         def s = row.sample?.trim()
@@ -329,6 +341,12 @@ def validateSamplesheet(samplesheet_path) {
             def b = row.batch?.trim()
             if (!b) errors << "row ${lineno} (sample '${s}'): empty 'batch' value"
             else    batch_values << b
+        }
+
+        design_cols.each { c ->
+            def v = row[c]?.toString()?.trim()
+            if (!v) errors << "row ${lineno} (sample '${s}'): empty '${c}' value"
+            else    design_values[c] << v
         }
 
         // FASTQ existence (skipped during -stub-run, which never reads the data,
@@ -364,10 +382,17 @@ def validateSamplesheet(samplesheet_path) {
                   "Found: ${condition_counts.keySet().sort().join(', ')}"
     }
 
-    // Condition and batch values have to survive make.names() unchanged.
-    // See isValidRName() above for why: DESeq2 names its coefficients from the
-    // sanitised levels, and deseq2.R reconstructs that name by hand, so a
-    // mismatch fails only once alignment and quantification are done.
+    // Condition, batch and --design covariate values have to survive
+    // make.names() unchanged. See isValidRName() above for why: DESeq2 names
+    // its coefficients from the sanitised levels, and deseq2.R reconstructs
+    // that name by hand, so a mismatch fails only once alignment and
+    // quantification are done.
+    //
+    // A covariate fails more gently than a condition, because nothing rebuilds
+    // its coefficient name by hand: a timepoint of '6h' reaches resultsNames()
+    // as 'timepointX6h' instead of 'timepoint6h', a name that is in no input
+    // file, and the model is otherwise fine. Checked all the same, since it is
+    // one loop here against explaining that discrepancy to someone later.
     //
     // Checked here rather than in the R scripts so it lands with every other
     // samplesheet problem, before any container is pulled.
@@ -377,6 +402,11 @@ def validateSamplesheet(samplesheet_path) {
     }
     batch_values.each { b ->
         if (!isValidRName(b)) bad_names << "batch '${b}'"
+    }
+    design_values.each { col, vals ->
+        vals.each { v ->
+            if (!isValidRName(v)) bad_names << "${col} '${v}'"
+        }
     }
     if (bad_names) {
         errors << "these values are not valid R names, which DESeq2 requires for " +
@@ -869,9 +899,23 @@ ${procTable}
         def crateParams = new LinkedHashMap(params)
         Runtime.runtime.addShutdownHook(new Thread({
             try {
+                // Said before the work, not only after it. Every published file
+                // is read and hashed with SHA-256 here, which on a cohort with
+                // BAMs and BigWigs is minutes of real time starting after the
+                // console has already printed "run COMPLETE". Unannounced that
+                // reads as a hang, and a Ctrl-C part way through leaves
+                // ro-crate-metadata.json half enriched with nothing recording
+                // which half (m12). The checksums are what make a crate whose
+                // inputs are references rather than copies verifiable at all,
+                // so they stay; the wait is stated instead.
+                if (new File(crateOutdir, CrateEnricher.CRATE).exists()) {
+                    println " Completing the RO-Crate: reading and checksumming every published file. Let it finish."
+                }
+                def started = System.currentTimeMillis()
                 def summary = CrateEnricher.enrich(crateOutdir, crateManifest, crateParams)
                 // println, not log: the logger is being torn down by now.
-                if (summary) println " ${summary}"
+                def took = String.format('%.1f', (System.currentTimeMillis() - started) / 1000d)
+                if (summary) println " ${summary}, ${took}s"
             }
             catch (Exception e) {
                 println " RO-Crate could not be completed: ${e}"

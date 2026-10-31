@@ -5,6 +5,28 @@ All notable changes to **rnaseq-flow** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`--isoform_switch` runs at the `DE` stage rather than at full depth.** It
+  was gated with fusion calling at analysis level 4, which put a
+  transcript-usage analysis after gene-set enrichment. It now sits at level 3
+  beside `--dtu` and `--diffsplice`, which test the same quantification. A
+  `--stop_at DE` run passing `--isoform_switch` and `--transcript_fasta`
+  produces `isoform_switch_output/` where it produced nothing before. rMATS and
+  STAR-Fusion still need full depth: they read the BAMs and the chimeric
+  junctions, not the quantification.
+
+- **`--design` covariate values are checked for R-safety at launch.** The
+  samplesheet validator checked `condition` and `batch` values. A covariate
+  introduced through `--design '~ timepoint + condition'` had its column checked
+  for existence and its values checked for nothing, so a timepoint of `6h`
+  reached `resultsNames()` as `timepointX6h`, a name that is in no input file.
+  Such a samplesheet is now refused before any process is scheduled, naming the
+  value and a replacement. A samplesheet that validated before this can fail
+  now: rename the values (`T6h`, `h6`) rather than working around it.
+
 ## [1.8.0] - 2026-10-24
 
 Two optional analyses that had never produced usable output now do, and the

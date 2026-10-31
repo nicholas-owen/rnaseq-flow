@@ -52,6 +52,30 @@ an unanchored `validate*.py`, which matched it at any depth, so the one check
 that would have caught a wrong call arity was in nobody's clone. The rule is now
 `/validate*.py`, which ignores scratch validators at the root and nothing else.
 
+## Unit test (`unit_rmats_libtype.nf`)
+
+```bash
+nextflow run ./tests/unit_rmats_libtype.nf
+```
+
+Seven assertions against `rmatsLibType()`, which collapses the per-sample RSeQC
+verdicts to the one `--libType` rMATS takes for a whole cohort. Nextflow is
+needed to resolve the include; nothing else is, since the function is pure and
+takes a plain list.
+
+Keep the `./`. A script path containing a slash is read as a `<owner>/<repo>`
+project name, so `nextflow run tests/unit_rmats_libtype.nf` tries to pull
+`nextflow-io/tests` from GitHub.
+
+Six `no process matching config selector` warnings are expected. The selectors
+are in `conf/modules.config` and this script includes no process at all.
+
+The mapping is worth asserting because getting it the wrong way round is
+silent: rMATS accepts any `--libType` and produces a full set of PSI values
+either way. The three error paths are worth asserting because no dataset here
+reaches them, the yeast cohort agreeing on `reverse` and GSE151251 being
+unstranded.
+
 ## Stub run (`stub_fixtures.sh` and CI)
 
 ```bash
@@ -70,9 +94,16 @@ script builds the empty inputs Nextflow still insists on staging.
 routes and then asserts each result directory exists. The assertions carry the
 value: a silently skipped analysis is an absent directory and nothing in the
 log, which is how a release shipped with `--aligner star --gtf`-less runs
-completing green and empty. It also checks that a run with no `--gtf` says so
-and skips, and that a condition name `make.names()` would rewrite is refused
-before any work begins.
+completing green and empty. Five negative cases sit beside them: STAR refusing
+a GTF-less run by name, a run with no `--gtf` saying so and skipping, an
+analysis dropped by `--stop_at` saying so, and a condition or a `--design`
+covariate value `make.names()` would rewrite being refused before any work
+begins.
+
+The job sets `defaults.run.shell: bash` for `pipefail`. Without it a step's
+`nextflow ... | tee log` reports `tee`'s exit status, which is always zero, so
+a negative test fires its failure branch on a pipeline that refused exactly as
+intended.
 
 Deliberately no container engine in that job. A stub run still containerises
 its tasks when an engine is enabled, so it would pull around thirty images to

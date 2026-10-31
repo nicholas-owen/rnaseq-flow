@@ -2852,7 +2852,7 @@ fold change.
 if (!have_isoform) {
   cat("\n*No isoform-switching results were produced. `--isoform_switch` runs",
       "on Salmon only, needs `--transcript_fasta`, and is skipped below",
-      "analysis level 4 and by a `--counts` run.*\n")
+      "analysis level 3 and by a `--counts` run.*\n")
 }
 ```
 

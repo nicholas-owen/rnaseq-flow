@@ -205,7 +205,8 @@ early (see [Parameter reference](#parameter-reference)).
 6. **Alternative splicing**: rMATS (genome aligners, CSV samplesheet).
 7. **Fusion detection**: STAR-Fusion (STAR only, needs `--ctat_lib`).
 8. **Isoform switching**: IsoformSwitchAnalyzeR (Salmon only, needs
-   `--isoform_switch` and `--transcript_fasta`).
+   `--isoform_switch` and `--transcript_fasta`). Reached by `--stop_at DE`, like
+   the two transcript-usage stages below it, unlike rMATS and STAR-Fusion above.
 9. **Differential transcript usage**: DEXSeq (Salmon/Kallisto, opt-in with
    `--dtu`): tests whether transcript-isoform proportions shift between
    conditions, complementing gene-level DE.

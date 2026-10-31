@@ -493,8 +493,15 @@ is applied (the pipeline logs a warning when kallisto runs with `auto`).
 |---|---|
 | `preQC` | FastQC + fastp trimming |
 | `postQC` | Alignment, BAM indexing, RSeQC, BigWig |
-| `DE` | featureCounts + DESeq2 + edgeR |
+| `DE` | featureCounts + DESeq2 + edgeR, and the transcript-usage analyses: `--dtu`, `--diffsplice`, `--isoform_switch` |
 | `GSEA` *(or unset)* | Everything, incl. enrichment, fusions, splicing |
+
+`--isoform_switch` moved into the `DE` stage after 1.8.0. It needed full depth
+before that, which put a transcript-usage analysis after gene-set enrichment. A
+`--stop_at DE` command that asks for it now produces `isoform_switch_output/`
+where it produced nothing. Fusion calling (`--ctat_lib`) still needs full depth,
+and rMATS with it: one reads STAR's chimeric junctions and the other the BAMs,
+neither the quantification.
 
 ```bash
 nextflow run main.nf --input samplesheet.csv --aligner star \
@@ -1155,7 +1162,7 @@ allows it.
 | `count matrix has non-integer values` | The matrix holds normalised values (TPM, FPKM/RPKM, DESeq2-/CPM-normalised) or Salmon/Kallisto estimates: `--counts` needs raw integer counts. Get the raw counts, or for pseudo-aligner data re-run via `--aligner salmon\|kallisto` |
 | `only N% of matrix gene IDs match the --gtf` | The `--counts` matrix and the `--gtf` are different annotation builds, or the matrix is keyed by Entrez/RefSeq IDs. Map the IDs to Ensembl gene IDs or symbols first |
 | No `diffsplice_output/` | `--diffsplice` not set, or `--gtf` missing (needed for exon counting and the transcript-to-gene map) |
-| Splicing/fusion missing | These run only at full depth. Don't combine with `--stop_at DE` |
+| No `rmats_output/` or `star_fusion/` | Both run only at full depth. Don't combine them with `--stop_at DE`, which now reaches `--dtu`, `--diffsplice` and `--isoform_switch` but not these two |
 | Out-of-memory kills | Raise `--max_memory`, or lower concurrency |
 | Container pull failures | Check internet access / Docker daemon; on HPC prefer `-profile singularity` |
 

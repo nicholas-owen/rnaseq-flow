@@ -42,6 +42,20 @@ __pycache__/
 *.pptx
 *.rar
 
+# rnaseq-flow_User_Guide.docx is deliberately NOT ignored, although it is
+# generated too. It is 59 kB and it is the only file someone can download on
+# its own and read the whole guide from, which is worth a binary diff each time
+# it is rebuilt. The slides and the archive above are not: they are large and
+# nobody reads them from a clone.
+#
+# Its generator is docs/build_user_guide.js, which this file ignores along with
+# the rest of docs/, so the guide can only be rebuilt where that script is. The
+# guide's prose lives in that script rather than being read from USAGE.md and
+# OUTPUTS.md: it is a condensation of them, which is the point of it, and the
+# script cites those two files as the long-form version. So editing either one
+# does not change the guide. Keeping them in step is a manual job until the
+# generator reads them.
+
 # Scratch validators dropped at the repository root, which are per-machine.
 # Anchored with a leading slash: unanchored, this pattern matches at any depth,
 # and it was excluding tests/validate_topology.py from the repository

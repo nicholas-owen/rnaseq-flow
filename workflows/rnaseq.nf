@@ -863,12 +863,12 @@ workflow RNASEQ {
     // was written.
     //
     // The level numbers come from --stop_at, mapped at the top of this
-    // workflow: preQC 1, postQC 2, DE 3, GSEA 4, unset 100. Fusion calling and
-    // isoform switching sit at 4 while DTU and diffSplice sit at 3, which is
-    // worth revisiting: isoform switching is a transcript-usage analysis like
-    // DTU and arguably belongs beside it. Left as it is, and now at least said
-    // out loud, because moving a gate changes what an existing --stop_at
-    // command produces.
+    // workflow: preQC 1, postQC 2, DE 3, GSEA 4, unset 100. Isoform switching
+    // joined DTU and diffSplice at 3 on 2026-10-31: all three are
+    // transcript-usage tests on the same quantification, and gating it at 4 put
+    // it after gene-set enrichment. Fusion calling stays at 4, which is where a
+    // STAR-Fusion run belongs: it reads the chimeric junctions rather than the
+    // quantification.
     //
     // Not repeated here: --dtu on a genome aligner and --diffsplice without a
     // GTF already have notices further down, in the branches that do run.
@@ -899,8 +899,8 @@ workflow RNASEQ {
                               "transcript sequences themselves. The Salmon index build publishes " +
                               "transcripts.fa.gz beside the index; pass that file."
             }
-            else if (run_level < 4) {
-                unrunnable << "--isoform_switch (IsoformSwitchAnalyzeR) runs at analysis level 4, " +
+            else if (run_level < 3) {
+                unrunnable << "--isoform_switch (IsoformSwitchAnalyzeR) runs at analysis level 3, " +
                               "and --stop_at ${params.stop_at} stops before it."
             }
         }
@@ -990,8 +990,15 @@ workflow RNASEQ {
             ch_tx_quant = SALMON_QUANT.out.results.collect { row -> row[1] }
                 .map { files -> files.toSorted { f -> f.name } }
             
-            // Isoform Switch (Level 4+)
-            if (run_level >= 4 && params.isoform_switch && params.transcript_fasta) {
+            // Isoform Switch (Level 3+)
+            //
+            // Level 3, beside DTU and diffSplice, since all three are
+            // transcript-level usage tests on the same quantification. It was
+            // at 4 with fusion calling until 2026-10-31, which put it after
+            // gene-set enrichment for no reason anyone could state. --stop_at
+            // DE therefore now produces isoform_switch_output/ where it used to
+            // produce nothing.
+            if (run_level >= 3 && params.isoform_switch && params.transcript_fasta) {
                 ISOFORM_SWITCH (
                     file(params.input),
                     file(params.transcript_fasta),
