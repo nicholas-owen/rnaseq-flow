@@ -7,6 +7,24 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- **The introduction deck builds to PDF and PowerPoint from one source.**
+  `scripts/slides/build_slides.js` reads `rnaseq-flow.html`, the authored deck,
+  and writes `rnaseq-flow_Slides.pdf` (Chrome print-to-PDF, one landscape slide
+  per page, SVG intact) and `rnaseq-flow_Slides_screens.pptx` (the same slides
+  as full-bleed renders, pixel-identical to the deck, speaker notes included,
+  nothing editable). Neither holds slide content of its own, so neither can go
+  stale on its own: `rnaseq-flow-screens.pptx`, built in May 2026, was still
+  saying version 1.1.0 on its title slide in October.
+
+  The deck itself no longer depends on `deck-stage.js`, which was in no clone,
+  so it opened at 1920px wide whatever the window; the stage sizing is inline
+  now and the page carries print rules. Its title slide said 1.6.0.
+
+  `rnaseq-flow-editable.pptx` stays hand-maintained and is the copy to change
+  when the deck needs design work.
+
 ### Changed
 
 - **`--isoform_switch` runs at the `DE` stage rather than at full depth.** It

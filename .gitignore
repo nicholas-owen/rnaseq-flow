@@ -38,15 +38,21 @@ to-fix.md
 docs/
 .claude/
 __pycache__/
+node_modules/
 *.code-workspace
 *.pptx
 *.rar
 
+# The deck's generated copies. scripts/slides/build_slides.js rebuilds both
+# from rnaseq-flow.html, which is the authored source and is tracked, so there
+# is nothing here that cannot be recreated in a few seconds.
+/rnaseq-flow_Slides.pdf
+
 # rnaseq-flow_User_Guide.docx is deliberately NOT ignored, although it is
 # generated too. It is 59 kB and it is the only file someone can download on
 # its own and read the whole guide from, which is worth a binary diff each time
-# it is rebuilt. The slides and the archive above are not: they are large and
-# nobody reads them from a clone.
+# it is rebuilt. The deck's .pptx and .pdf are not: both rebuild from
+# rnaseq-flow.html, which is tracked, in about fifteen seconds.
 #
 # Its generator is docs/build_user_guide.js, which this file ignores along with
 # the rest of docs/, so the guide can only be rebuilt where that script is. The

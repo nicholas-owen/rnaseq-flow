@@ -1,0 +1,15 @@
+{
+  "name": "rnaseq-flow-slides",
+  "version": "1.8.0",
+  "private": true,
+  "description": "Builds rnaseq-flow_Slides.pdf and rnaseq-flow_Slides_screens.pptx from rnaseq-flow.html, the authored deck.",
+  "scripts": {
+    "build": "node build_slides.js",
+    "pdf": "node build_slides.js --pdf",
+    "screens": "node build_slides.js --screens"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "pptxgenjs": "^3.12.0"
+  }
+}

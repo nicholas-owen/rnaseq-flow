@@ -409,7 +409,7 @@ silently ignored.
 | [rnaseq-flow_Example_Analysis.md](rnaseq-flow_Example_Analysis.md) | End-to-end worked example on a public dataset (GSE151251), from FASTQ download to results, with an expected TGF-beta signature to check your setup against |
 | [rnaseq-flow_User_Guide.docx](rnaseq-flow_User_Guide.docx) | The whole guide as a formatted Word document, for printing or circulating offline |
 | [overview.html](overview.html) | Interactive workflow diagram: DAG and metro-map views (open in a browser) |
-| [rnaseq-flow.html](rnaseq-flow.html) | Slide-deck introduction to the pipeline and its release history, with speaker notes (open in a browser) |
+| [rnaseq-flow.html](rnaseq-flow.html) | Slide-deck introduction to the pipeline and its release history, with speaker notes (open in a browser). `scripts/slides/build_slides.js` rebuilds it as a PDF and a PowerPoint |
 | [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [CITATIONS.md](CITATIONS.md) | Every tool with its publication, plus a methods-paragraph template |
 | [CITATIONS.html](CITATIONS.html) | The citations page as a styled HTML report (open in a browser) |
