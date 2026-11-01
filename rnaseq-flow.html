@@ -17,7 +17,9 @@
   "Stage 5a, alternative splicing on the genome-aligner route. Two complementary views. rMATS is event-based: it detects skipped exons, mutually-exclusive exons, alternative splice sites, retained introns (five event classes) and reports inclusion-level differences with FDR. edgeR diffSplice is exon-usage based: it asks whether an exon's fold-change between conditions departs from the gene's overall fold-change, which catches differential usage even when total expression looks similar. diffSplice is opt-in via the diffsplice flag.",
   "Stage 5b, transcript isoforms and fusions. This is the territory where gene-level differential expression can miss things entirely. IsoformSwitchAnalyzeR flags genes whose dominant transcript actually flips between conditions, even when total expression doesn't change. DEXSeq tests differential transcript usage, significant shifts in transcript proportions. And STAR-Fusion detects gene fusions from STAR's chimeric alignments, and needs a CTAT library to run. Three independent tools, three windows on the transcriptome that gene-level DE simply can't see.",
   "Stage 6 is functional enrichment. Two methods, intentionally complementary. GSEA via fgsea runs on the whole ranked DESeq2 gene list (no cutoffs) and reports normalised enrichment scores per pathway. Its sign tells you direction. gProfiler runs over-representation testing on the thresholded significant up- and down-regulated lists separately, against GO terms and pathway databases. Different statistical approaches, often agreeing on the same biology. When they do agree, you can be much more confident in the result.",
-  "Stage seven, the final stage, is reporting. Every run produces three pieces of self-contained HTML. MultiQC is the QC aggregation, one page combining metrics from every QC tool across every sample. Start there. The Quarto report is the analysis narrative: interactive plotly volcano plots, PCA, MDS, heatmaps, searchable result tables, a DESeq2-vs-edgeR agreement table. Sections appear only when their data is present, so a smaller run gives a smaller report. And there's a third, the run summary, which I'll come back to in a moment.",
+  "Stage seven is reporting. Every run produces three pieces of self-contained HTML. MultiQC is the QC aggregation, one page combining metrics from every QC tool across every sample. Start there. The Quarto report is the analysis narrative: interactive plotly volcano plots, PCA, MDS, heatmaps, searchable result tables, a DESeq2-vs-edgeR agreement table. Sections appear only when their data is present, so a smaller run gives a smaller report. And there's a third, the run summary, which I'll come back to in a moment.",
+  "Stage eight, and this is the one I would most want you to take away. Every figure the pipeline publishes can be redrawn from the results directory alone: no rerunning, no access to the cluster, no digging through the work directory. Each analysis folder carries a reproduce subfolder with a standalone R script per figure type, gzipped copies of the tables behind it, and the R objects a plot genuinely needs, always the smallest that will do. The scripts are written to be changed rather than just run: the contrast, the cutoffs, the colours and the figure dimensions are named constants in the first few lines, so adjusting a legend does not mean reading a ggplot chain. Regenerated figures get a repro_ prefix and an info file recording the settings and the environment, so a reworked figure is never mistaken for the pipeline's own once it leaves the folder. GSEA is the case that needs this most, because plotGseaTable needs gene-set membership, and that lives in the GMT, which is an input and is never published with the results. rMATS and STAR-Fusion are the two that have no reproduce folder, for the simple reason that neither draws anything.",
+  "Stage nine is provenance and credit, and it is the part of this pipeline I care about most. Two files. The run manifest records how the run was configured: version and commit, the command line, the aligner, the baseline, the thresholds, the design, the samples per condition, the reference set with its Ensembl release, even whether the HISAT2 index was built splice-aware. The RO-Crate says the same thing in standard JSON-LD that WorkflowHub and other tools can read, with one CreateAction per task and a SHA-256 for every published file, and the pipeline as it ran is carried inside the crate. Inputs are referenced rather than copied, so a three-gigabyte GTF does not ship twice inside your results. Then the credit half. Core facility staff run analyses that end up in papers without an author line, and the usual fix, a sentence in the acknowledgements, is not machine-readable and does not count for anything. Here each contributor is a Person with an ORCID, behind CRediT roles expressed as resolvable URIs, and the record is deliberately honest: it says whether a role was declared by the person or inferred from whoever launched the run. The project carries a RAiD, a funder with its grant, and a rights holder, which is a rights relation rather than a contribution. Every identifier is validated at launch, because an identifier that does not resolve reads as provenance while pointing nowhere.",
   "Now usage. Everything starts with this four-column CSV. Sample ID, R1 path, R2 path (empty for single-end data) and condition. The pipeline auto-detects paired versus single-end from whether R2 is present. There's an important convention here: one condition is the baseline of every contrast, and it defaults to a condition literally named REF. Name your control group REF, or point reference level at whatever you called it, and positive log2 fold changes mean up in the other condition. A baseline you name has to exist in the samplesheet, or the run stops at launch. Optional batch column? Add it and the design becomes batch plus condition automatically. The samplesheet is validated before any process is scheduled, so typos and missing files surface immediately.",
   "Here's a comprehensive STAR run end-to-end. Input samplesheet, STAR aligner with its index, the GTF, stranded library (note this could be set to 'auto' to let RSeQC infer it), the CTAT library for fusion calling, opt-in diffsplice for exon-level splicing, a GMT for GSEA, the output directory, and the Docker profile. That's one invocation, end-to-end. For the Salmon route, swap aligner to salmon, point at the salmon_index and transcript fasta, and add isoform_switch and dtu for the transcript-level analyses. Same samplesheet, same output structure.",
   "When the run finishes, this is what you get. The two HTML files I keep mentioning (multiqc_report and analysis_report) are your entry points. Then there's a directory per analysis stage. Per-contrast result CSVs from DESeq2 and edgeR carry gene_name and gene_biotype annotation so you can read them without an ID-mapping step. The RSeQC strandedness file per sample is worth knowing about: it's the auto-detected verdict that feeds featureCounts. And run_summary.html under pipeline_info is written automatically at the end of every run, success or failure. It has the resource usage per process and links to everything that was produced.",
@@ -1127,7 +1129,7 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>02 · Overview</div>
+  <div class="pagemark"><span class="dot"></span>2 · Overview</div>
 </section>
 
 
@@ -1292,14 +1294,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>04 · Setup</div>
+  <div class="pagemark"><span class="dot"></span>4 · Setup</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 5: THREE RUN MODES
 ============================================================ -->
-<section data-label="04 Three run modes">
+<section data-label="05 Three run modes">
   <div class="frame">
     <p class="eyebrow">main.nf</p>
     <h2 class="slide-title">Three run modes, one entry point</h2>
@@ -1329,14 +1331,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>05 · main.nf</div>
+  <div class="pagemark"><span class="dot"></span>5 · main.nf</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 5: READ QC
 ============================================================ -->
-<section data-label="05 Read QC">
+<section data-label="06 Read QC">
   <div class="frame">
     <p class="eyebrow">Stage 1 · Read QC and trimming</p>
     <h2 class="slide-title">From raw FASTQ to clean reads</h2>
@@ -1368,14 +1370,14 @@
       <li><strong>Aggregated, not isolated.</strong> All FastQC and fastp metrics are picked up by MultiQC for cross-sample comparison.</li>
     </ul>
   </div>
-  <div class="pagemark qc"><span class="dot"></span>06 · Read QC</div>
+  <div class="pagemark qc"><span class="dot"></span>6 · Read QC</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 6: ALIGNERS
 ============================================================ -->
-<section data-label="06 Aligners">
+<section data-label="07 Aligners">
   <div class="frame">
     <p class="eyebrow">Stage 2 · Alignment and quantification</p>
     <h2 class="slide-title">Four aligners, one --aligner flag</h2>
@@ -1412,7 +1414,7 @@
 <!-- ============================================================
   SLIDE 7: QUANTIFICATION
 ============================================================ -->
-<section data-label="07 Quantification">
+<section data-label="08 Quantification">
   <div class="frame">
     <p class="eyebrow">Stage 3 · Gene-level counts</p>
     <h2 class="slide-title">Two paths converge on one count matrix</h2>
@@ -1435,14 +1437,14 @@
     </div>
     <p class="slide-subtitle" style="margin-top: 22px;">Already have counts? Skip QC and alignment entirely: <span class="chip">--counts matrix.tsv</span> enters the pipeline right here. Feed a featureCounts table or a plain gene × sample matrix (e.g. a GEO supplementary file), add <span class="chip">--gtf</span> for gene annotation, and DESeq2, edgeR and everything downstream run unchanged.</p>
   </div>
-  <div class="pagemark"><span class="dot"></span>08 · Quantification</div>
+  <div class="pagemark"><span class="dot"></span>8 · Quantification</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 8: DIFFERENTIAL EXPRESSION (parallel rails)
 ============================================================ -->
-<section data-label="08 Differential expression">
+<section data-label="09 Differential expression">
   <div class="frame">
     <p class="eyebrow">Stage 4 · Differential expression</p>
     <h2 class="slide-title">DESeq2 and edgeR run in parallel</h2>
@@ -1483,7 +1485,7 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>09 · Differential expression</div>
+  <div class="pagemark"><span class="dot"></span>9 · Differential expression</div>
 </section>
 
 
@@ -1566,7 +1568,7 @@
 <!-- ============================================================
   SLIDE 10: ENRICHMENT
 ============================================================ -->
-<section data-label="10 Functional enrichment">
+<section data-label="12 Functional enrichment">
   <div class="frame">
     <p class="eyebrow">Stage 6 · Functional enrichment</p>
     <h2 class="slide-title">From gene lists to pathway biology</h2>
@@ -1595,7 +1597,7 @@
 <!-- ============================================================
   SLIDE 11: REPORTING
 ============================================================ -->
-<section data-label="11 Reporting">
+<section data-label="13 Reporting">
   <div class="frame">
     <p class="eyebrow">Stage 7 · Reporting</p>
     <h2 class="slide-title">Three reports per run, no clicking required</h2>
@@ -1635,9 +1637,86 @@
 
 
 <!-- ============================================================
+  SLIDE 12: REPRODUCE
+============================================================ -->
+<section data-label="14 Reproducible figures">
+  <div class="frame">
+    <p class="eyebrow">Stage 8 · Reproducibility</p>
+    <h2 class="slide-title">Every figure redraws from the results folder</h2>
+    <p class="slide-subtitle">No rerunning, no access to the original compute, no digging through work/. Each analysis directory carries a reproduce/ subfolder.</p>
+    <div class="rule"></div>
+
+    <div class="reports">
+      <div class="report-card">
+        <p class="r-eyebrow">What is in it</p>
+        <h3>A script per figure</h3>
+        <p>A standalone, commented R script for each figure type, gzipped copies of the tables it reads, and the R objects a plot genuinely needs: always the smallest that will do.</p>
+        <ul>
+          <li>Contrast, cutoffs, colours and dimensions are named constants in the first lines</li>
+          <li>Runs from a terminal with Rscript, or from RStudio</li>
+          <li>Redrawn figures are prefixed <code>repro_</code> and carry an <code>.info.txt</code> of the settings and environment that made them</li>
+        </ul>
+        <div class="filepath">deseq2_output/reproduce/volcano.R</div>
+      </div>
+
+      <div class="report-card">
+        <p class="r-eyebrow">Why it is there</p>
+        <h3>Reusable by someone who was not there</h3>
+        <p>A published figure that cannot be adjusted is a picture. A collaborator can change a legend, a threshold or a palette months later without the pipeline, the reference data or the cluster.</p>
+        <ul>
+          <li>GSEA needs it most: <code>plotGseaTable</code> reads gene-set membership from the GMT, an input never published with the results</li>
+          <li>Seven analysis folders carry one; <code>rmats_output/</code> and <code>star_fusion/</code> do not, because neither draws anything</li>
+        </ul>
+        <div class="filepath">OUTPUTS.md §18</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================
+  SLIDE 13: PROVENANCE AND CREDIT
+============================================================ -->
+<section data-label="15 Provenance and credit">
+  <div class="frame">
+    <p class="eyebrow">Stage 9 · Provenance and credit</p>
+    <h2 class="slide-title">A results folder that still explains itself</h2>
+    <p class="slide-subtitle">Every run records what it did and who did it, in a form another tool can read. On by default, because provenance that has to be remembered is not provenance.</p>
+    <div class="rule"></div>
+
+    <div class="reports">
+      <div class="report-card">
+        <p class="r-eyebrow">What was run</p>
+        <h3>Manifest and RO-Crate</h3>
+        <p>The manifest records the configuration; the crate says the same in standard JSON-LD that WorkflowHub and other tools read.</p>
+        <ul>
+          <li>Version and commit, the command line, the aligner, the baseline, the thresholds, the design, the samples per condition</li>
+          <li>The reference set with its Ensembl release, and how the HISAT2 index was built</li>
+          <li>One <code>CreateAction</code> per task, a <code>sha256</code> per published file, and the pipeline as it ran inside <code>.crate/</code></li>
+        </ul>
+        <div class="filepath">pipeline_info/run_manifest.json</div>
+      </div>
+
+      <div class="report-card">
+        <p class="r-eyebrow">Who did it</p>
+        <h3>Credit the analyst, not just the tools</h3>
+        <p>Core facility staff run analyses that end up in papers without an author line. The crate names them, in a vocabulary a repository can resolve.</p>
+        <ul>
+          <li>Each contributor is a <code>Person</code> with an ORCID, behind CRediT roles as resolvable <code>credit.niso.org</code> URIs</li>
+          <li><code>roles_declared</code> says whether a role was stated or inferred from who launched the run: an honest record beats a flattering one</li>
+          <li>The project carries a RAiD, a funder and grant, and a rights holder. Every identifier is checked at launch, because one that does not resolve reads as provenance while pointing nowhere</li>
+        </ul>
+        <div class="filepath">USAGE.md §4.9 · --project, --contributors</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ============================================================
   SLIDE 12: SAMPLESHEET
 ============================================================ -->
-<section data-label="12 Samplesheet">
+<section data-label="16 Samplesheet">
   <div class="frame">
     <p class="eyebrow">Usage · The input</p>
     <h2 class="slide-title">Everything starts with a four-column CSV</h2>
@@ -1698,14 +1777,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>14 · Samplesheet</div>
+  <div class="pagemark"><span class="dot"></span>16 · Samplesheet</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 13: WORKED SCENARIO
 ============================================================ -->
-<section data-label="13 Worked scenario">
+<section data-label="17 Worked scenario">
   <div class="frame">
     <p class="eyebrow">Usage · End-to-end</p>
     <h2 class="slide-title">Scenario A: comprehensive STAR run</h2>
@@ -1730,38 +1809,43 @@
 
     <p class="scenario-note"><strong>Salmon variant (Scenario B):</strong> swap to <span class="chip">--aligner salmon</span> with <span class="chip">--salmon_index</span> and <span class="chip">--transcript_fasta</span>, add <span class="chip">--isoform_switch</span> and <span class="chip">--dtu</span> for transcript-level analyses. Same samplesheet, same outputs structure.</p>
   </div>
-  <div class="pagemark"><span class="dot"></span>15 · Worked scenario</div>
+  <div class="pagemark"><span class="dot"></span>17 · Worked scenario</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 16: RESULTS TO EXPECT
 ============================================================ -->
-<section data-label="16 Results to expect">
+<section data-label="18 Results to expect">
   <div class="frame">
     <p class="eyebrow">Sample output</p>
     <h2 class="slide-title">What lands in <code style="font-family:'JetBrains Mono',monospace;font-size:64px;color:var(--navy);">results/</code></h2>
-    <p class="slide-subtitle">Self-contained HTML reports plus a directory per analysis stage.</p>
+    <p class="slide-subtitle">Every stage writes its own directory. A pseudo-aligner run swaps <code>star/</code> for <code>salmon/</code> or <code>kallisto/</code> and adds <code>tximport/</code>, <code>dtu_output/</code> and <code>isoform_switch_output/</code>.</p>
     <div class="rule"></div>
 
     <div class="results-grid">
       <div class="tree">
         <div class="t-title">results/ &nbsp; (STAR run · all stages)</div>
-<pre style="margin: 0; white-space: pre;"><span class="dir">results/</span>
-├── <span class="acc">multiqc/rnaseq-flow_multiqc_report.html</span>
-├── <span class="acc">quarto_report/analysis_report.html</span>
-├── <span class="dir">fastqc/</span>           <span class="com">raw read QC</span>
-├── <span class="dir">fastp/</span>            <span class="com">trim + filter</span>
-├── <span class="dir">star/</span>             <span class="com">sorted BAMs</span>
-├── <span class="dir">rseqc/</span>            <span class="com">strandedness</span>
-├── <span class="dir">bam_to_bigwig/</span>    <span class="com">CPM tracks</span>
-├── <span class="dir">featurecounts/</span>    <span class="com">gene counts</span>
-├── <span class="dir">deseq2_output/</span>    <span class="com">DE, figures, reproduce/</span>
-├── <span class="dir">edger_output/</span>     <span class="com">DE cross-check, reproduce/</span>
-├── <span class="dir">rmats_output/</span>     <span class="com">splicing</span>
-├── <span class="dir">gsea_output/</span>      <span class="com">GSEA, reproduce/</span>
-├── <span class="dir">gprofiler_output/</span> <span class="com">over-representation</span>
-└── <span class="dir">pipeline_info/</span>    <span class="com">manifest, versions, summary</span></pre>
+<pre style="margin: 0; white-space: pre; font-size: 19px; line-height: 1.22;"><span class="dir">results/</span>
+├── <span class="dir">fastqc/</span>               <span class="com">raw read QC</span>
+├── <span class="dir">fastp/</span>                <span class="com">trim + filter</span>
+├── <span class="dir">star/</span>                 <span class="com">sorted BAMs</span>
+├── <span class="dir">rseqc/</span>                <span class="com">strandedness</span>
+├── <span class="dir">bam_to_bigwig/</span>        <span class="com">CPM tracks</span>
+├── <span class="dir">featurecounts/</span>        <span class="com">gene counts</span>
+├── <span class="dir">featurecounts_exon/</span>   <span class="com">exon counts</span>
+├── <span class="dir">deseq2_output/</span>        <span class="com">DE + figures</span>
+├── <span class="dir">edger_output/</span>         <span class="com">DE cross-check</span>
+├── <span class="dir">rmats_output/</span>         <span class="com">splicing events</span>
+├── <span class="dir">diffsplice_output/</span>    <span class="com">exon usage</span>
+├── <span class="dir">star_fusion/</span>          <span class="com">fusions</span>
+├── <span class="dir">gsea_output/</span>          <span class="com">GSEA</span>
+├── <span class="dir">gprofiler_output/</span>     <span class="com">GO/pathway ORA</span>
+├── <span class="acc">multiqc/</span>              <span class="com">QC report</span>
+├── <span class="acc">quarto_report/</span>        <span class="com">analysis report</span>
+├── <span class="dir">pipeline_info/</span>        <span class="com">manifest, versions</span>
+├── <span class="dir">.crate/</span>               <span class="com">pipeline as it ran</span>
+└── <span class="file">ro-crate-metadata.json</span> <span class="com">provenance</span></pre>
       </div>
 
       <div class="key-outputs">
@@ -1784,14 +1868,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>16 · Results</div>
+  <div class="pagemark"><span class="dot"></span>18 · Results</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 17: WHAT'S NEW IN 1.8.0
 ============================================================ -->
-<section data-label="14 What's new in 1.8.0">
+<section data-label="19 What's new in 1.8.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">What's new in 1.8.0</h2>
@@ -1841,7 +1925,7 @@
 <!-- ============================================================
   SLIDE 18: WHAT'S NEW IN 1.6.0
 ============================================================ -->
-<section data-label="15 Previously: 1.6.0">
+<section data-label="20 Previously: 1.6.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.6.0</h2>
@@ -1887,7 +1971,7 @@
 <!-- ============================================================
   SLIDE 17: WHAT'S NEW IN 1.5.0
 ============================================================ -->
-<section data-label="15 Previously: 1.5.0">
+<section data-label="21 Previously: 1.5.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.5.0</h2>
@@ -1933,7 +2017,7 @@
 <!-- ============================================================
   SLIDE 18: PREVIOUSLY 1.4.3
 ============================================================ -->
-<section data-label="15 Previously: 1.4.3">
+<section data-label="22 Previously: 1.4.3">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.4.3</h2>
@@ -1974,14 +2058,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>17 · What's new</div>
+  <div class="pagemark"><span class="dot"></span>22 · What's new</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 19: PREVIOUSLY 1.4.2
 ============================================================ -->
-<section data-label="16 Previously: 1.4.2">
+<section data-label="23 Previously: 1.4.2">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.4.2</h2>
@@ -2022,14 +2106,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>18 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>23 · Previously</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 20: PREVIOUSLY 1.4.0
 ============================================================ -->
-<section data-label="17 Previously: 1.4.0">
+<section data-label="24 Previously: 1.4.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.4.0</h2>
@@ -2058,14 +2142,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>19 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>24 · Previously</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 21: PREVIOUSLY 1.3.0
 ============================================================ -->
-<section data-label="18 Previously: 1.3.0">
+<section data-label="25 Previously: 1.3.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.3.0</h2>
@@ -2102,14 +2186,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>20 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>25 · Previously</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 22: PREVIOUS RELEASE 1.2.0
 ============================================================ -->
-<section data-label="19 Previously: 1.2.0">
+<section data-label="26 Previously: 1.2.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.2.0</h2>
@@ -2150,14 +2234,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>21 · Previously</div>
+  <div class="pagemark"><span class="dot"></span>26 · Previously</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 23: PREVIOUS RELEASE 1.1.0
 ============================================================ -->
-<section data-label="20 Previously: 1.1.0">
+<section data-label="27 Previously: 1.1.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.1.0</h2>
@@ -2194,14 +2278,14 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>22 · Previous release</div>
+  <div class="pagemark"><span class="dot"></span>27 · Previous release</div>
 </section>
 
 
 <!-- ============================================================
   SLIDE 24: QUICK START
 ============================================================ -->
-<section data-label="21 Quick start">
+<section data-label="28 Quick start">
   <div class="frame">
     <p class="eyebrow">Closing</p>
     <h2 class="slide-title">Quick start: four commands</h2>
@@ -2243,7 +2327,7 @@
       </div>
     </div>
   </div>
-  <div class="pagemark"><span class="dot"></span>23 · Quick start</div>
+  <div class="pagemark"><span class="dot"></span>28 · Quick start</div>
 </section>
 
 </deck-stage>
