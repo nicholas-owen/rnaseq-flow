@@ -318,7 +318,7 @@
          configuring a run, to reading every file the pipeline writes. One page,
          no external dependencies, works offline.</p>
       <div class="hero-meta">
-        <span>Pipeline 1.8.0</span>
+        <span>Pipeline 1.9.1</span>
         <span>Nextflow &ge; 25.10.0</span>
         <span>DSL2</span>
         <span>GPL-3.0</span>
@@ -982,7 +982,8 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
      images. Combine it with whichever executor profile you need.</p>
 
   <ul>
-    <li>The bundle is pinned to a release, and v1.8.0 is the current one. Its
+    <li>The bundle is pinned to a release. v1.8.0 is the current one and also
+        works with v1.9.0 and v1.9.1, whose containers are unchanged. Its
         <code>README.txt</code> records the exact commit it was built from if
         you need to check. Earlier bundles do not work with this release:
         v1.8.0 derives the transcriptome from the GTF and added
@@ -1459,7 +1460,7 @@ nextflow run main.nf --build_indices --aligner kallisto \
   </div>
 
   <div class="box note">
-    <span class="t">--isoform_switch moved into the DE stage after 1.8.0</span>
+    <span class="t">--isoform_switch moved into the DE stage in 1.9.0</span>
     <p>It needed full depth before that, which put a transcript-usage analysis
        after gene-set enrichment, while <code>--dtu</code> and
        <code>--diffsplice</code>, which test the same quantification, ran at
@@ -2325,7 +2326,7 @@ OUTPUT_PREFIX &lt;- <span class="str">"repro_"</span></code></pre></div>
 </section>
 
     <footer class="page">
-      rnaseq-flow 1.8.0 &middot; released under the GNU General Public License v3.0 &middot;
+      rnaseq-flow 1.9.1 &middot; released under the GNU General Public License v3.0 &middot;
       <a href="https://github.com/nicholas-owen/rnaseq-flow" target="_blank" rel="noopener">github.com/nicholas-owen/rnaseq-flow</a>
     </footer>
 

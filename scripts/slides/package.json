@@ -1,6 +1,6 @@
 {
   "name": "rnaseq-flow-slides",
-  "version": "1.8.0",
+  "version": "1.9.1",
   "private": true,
   "description": "Builds rnaseq-flow_Slides.pdf and rnaseq-flow_Slides_screens.pptx from rnaseq-flow.html, the authored deck.",
   "scripts": {

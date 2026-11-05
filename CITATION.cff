@@ -15,16 +15,19 @@ authors:
     given-names: Nicholas
     orcid: https://orcid.org/0000-0001-5598-6274
     affiliation: University College London
-version: 1.8.0
-date-released: 2026-10-24
+version: 1.9.1
+date-released: 2026-11-05
 license: GPL-3.0-only
 repository-code: https://github.com/nicholas-owen/rnaseq-flow
 url: https://github.com/nicholas-owen/rnaseq-flow
-doi: 10.5281/zenodo.21880328
+doi: 10.5281/zenodo.23990832
 identifiers:
   - type: doi
+    value: 10.5281/zenodo.23990832
+    description: Pipeline source code on Zenodo, concept DOI resolving to all versions
+  - type: doi
     value: 10.5281/zenodo.21880328
-    description: Zenodo deposit, concept DOI resolving to all versions
+    description: Offline Singularity container bundle, concept DOI resolving to all versions
   - type: doi
     value: 10.5281/zenodo.21880329
     description: >-

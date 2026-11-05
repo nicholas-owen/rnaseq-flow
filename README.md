@@ -7,6 +7,8 @@
 
 # rnaseq-flow
 
+[![DOI](https://zenodo.org/badge/1252583849.svg)](https://doi.org/10.5281/zenodo.23990832)
+
 A modular **bulk RNA-seq analysis pipeline** built with Nextflow DSL2. It takes
 raw FASTQ files all the way through quality control, alignment/quantification,
 differential expression, alternative splicing, fusion detection and functional
@@ -450,8 +452,8 @@ silently ignored.
 
 [CITATION.cff](CITATION.cff) carries the citation in machine-readable form, so
 GitHub's "Cite this repository" panel and reference managers read it directly.
-The Zenodo deposit is
-[doi.org/10.5281/zenodo.21880328](https://doi.org/10.5281/zenodo.21880328), a
+The pipeline's Zenodo deposit is
+[doi.org/10.5281/zenodo.23990832](https://doi.org/10.5281/zenodo.23990832), a
 concept DOI that resolves to all versions.
 
 For the tools the pipeline runs rather than the pipeline itself, see

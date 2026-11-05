@@ -23,7 +23,8 @@
   "Now usage. Everything starts with this four-column CSV. Sample ID, R1 path, R2 path (empty for single-end data) and condition. The pipeline auto-detects paired versus single-end from whether R2 is present. There's an important convention here: one condition is the baseline of every contrast, and it defaults to a condition literally named REF. Name your control group REF, or point reference level at whatever you called it, and positive log2 fold changes mean up in the other condition. A baseline you name has to exist in the samplesheet, or the run stops at launch. Optional batch column? Add it and the design becomes batch plus condition automatically. The samplesheet is validated before any process is scheduled, so typos and missing files surface immediately.",
   "Here's a comprehensive STAR run end-to-end. Input samplesheet, STAR aligner with its index, the GTF, stranded library (note this could be set to 'auto' to let RSeQC infer it), the CTAT library for fusion calling, opt-in diffsplice for exon-level splicing, a GMT for GSEA, the output directory, and the Docker profile. That's one invocation, end-to-end. For the Salmon route, swap aligner to salmon, point at the salmon_index and transcript fasta, and add isoform_switch and dtu for the transcript-level analyses. Same samplesheet, same output structure.",
   "When the run finishes, this is what you get. The two HTML files I keep mentioning (multiqc_report and analysis_report) are your entry points. Then there's a directory per analysis stage. Per-contrast result CSVs from DESeq2 and edgeR carry gene_name and gene_biotype annotation so you can read them without an ID-mapping step. The RSeQC strandedness file per sample is worth knowing about: it's the auto-detected verdict that feeds featureCounts. And run_summary.html under pipeline_info is written automatically at the end of every run, success or failure. It has the resource usage per process and links to everything that was produced.",
-  "What's new in 1.8.0. Two of these change your numbers, so I'll take them first. The transcriptome the pseudo-aligners quantify against is now cut from the genome with gffread instead of downloaded, so the index and the annotation describe the same transcripts by construction. That matters more than it sounds: Ensembl's cDNA file is missing about a hundred and ninety-eight thousand transcripts the GTF has, almost all lncRNA, which a poly-A library does capture. The index covers roughly forty percent more features, so rebuild your Salmon and Kallisto indices and don't compare transcript-level results across this release. Second, rMATS was always running unstranded, because no library type was ever passed to it: on a stranded library that produced a complete, plausible set of PSI values that were simply wrong. The rest: DTU and differential splicing now produce figures rather than tables alone, there is one pair of significance thresholds shared by every tool instead of the numbers being written into six files separately, and a stub-run CI job that exercises the whole graph on empty inputs. That last one is the real lesson here. Every defect in this list was in code that had never executed.",
+  "What's new in 1.9.0. One of these changes your numbers, so I'll take it first. rMATS was always running unstranded, because no library type was ever passed to it: on a stranded library that produced a complete, plausible set of PSI values that were simply wrong, so re-run rMATS on stranded data. Second, re-running with a different reference level could reuse cached results and relabel them, and that's fixed too. There is now one pair of significance thresholds shared by every tool. More is checked at launch, so some runs that used to start are now refused before any work is done. Isoform switching moved into the DE stage, and analyses that can't run now say so instead of disappearing from a green run. There's also a stub-run CI job that exercises the whole graph on empty inputs. That's the real lesson here: these defects were in code that had never executed.",
+  "Before that, 1.8.0, and this one changes your numbers too. The transcriptome the pseudo-aligners quantify against is now cut from the genome with gffread instead of downloaded, so the index and the annotation describe the same transcripts by construction. That matters more than it sounds: Ensembl's cDNA file is missing about a hundred and ninety-eight thousand transcripts the GTF has, almost all lncRNA, which a poly-A library does capture. The index covers roughly forty percent more features, so rebuild your Salmon and Kallisto indices and don't compare transcript-level results across this release. DTU and differential splicing also produce figures now rather than tables alone, and the offline bundle gained gffread.",
   "Before that, 1.6.0, and it opens with a breaking change. rMATS directories are now condition versus REF rather than REF versus condition, and IncLevelDifference changed sign with them, so a positive number means higher inclusion in the treatment, the same direction a positive fold change means in the table beside it. Splicing results from before that release point the other way and nothing in the files says which convention they follow, so don't compare across the boundary without checking. It also gave rMATS a section in the report, which it had never had despite the results being published; added reference_level, so the baseline is named once and reaches DESeq2, edgeR, rMATS, DEXSeq and diffSplice alike; added validate_only for checking a samplesheet before committing a cluster to it; and added the offline bundle, which is what makes the pipeline runnable in a TRE with no outbound network.",
   "What's new in 1.5.0. This one is about reproducibility, and it is the feature I would most want you to take away. Every figure the pipeline publishes can now be redrawn from the results directory alone. Each output folder gets a reproduce subfolder containing the R objects the plot call consumes, gzipped copies of the tables behind them, and a standalone, commented R script per figure type. Those scripts are written to be adapted, not just run: the contrast, the cutoffs, the colours, the figure dimensions are all named constants in the first twenty lines, so changing a legend does not mean reading a ggplot chain. They work from a terminal or from RStudio, and they need nothing except the files sitting beside them, so you can copy that folder to a collaborator and it still works. Objects are only saved where a plot genuinely needs one, and always the smallest that will do: the small MDS object rather than the whole DGEList, which is about twenty-eight times larger even on a small dataset. GSEA is the case that most needs it, because plotGseaTable needs the gene set membership, and that lives in the GMT, which is an input and was never published with the results. Alongside that, every figure is now written as SVG as well as PNG, and the PNG is at three hundred dpi, so you have a vector copy for publication. The analysis report is largely interactive now: PCA, MDS, the heatmap with dendrograms, volcano, MA and the enrichment plots are all plotly widgets you can hover and zoom, with the static copies still published as the fallback. There are new panels too: a shrinkage before-and-after, so you can see how much apeglm actually moved your fold changes, and dot plots for GSEA and gProfiler, which previously only appeared as tables. On the fixes: MultiQC's General Statistics table was rendering blank (our own report theme was painting over cells that MultiQC draws at negative z-index), and separately the three QC tools each named samples differently, so six samples were showing up as twenty-four mostly empty rows. That is reconciled at display time rather than by renaming the reads, deliberately, because the accession in the published filename is what ties your results back to the archive. And software versions now actually reach the report: they were being collected and then silently dropped, so you saw two tools where there are seventeen.",
   "Before that, 1.4.3. That release was about the gene sets. The headline is a bug that had been sitting there quietly: the download_gmt step asked conda for a package called r-msigdbr from the bioconda channel, and msigdbr is a CRAN package that has never existed in bioconda. So the environment could never be solved and that step could never run: it's conda-forge now. The same wrong assumption, that msigdbr was a Bioconductor package, had also produced a BiocManager install call inside the script as a fallback, which couldn't have worked either; that's gone, and the environment is the process definition's job rather than something a running container installs for itself. While fixing the channel we took the chance to upgrade from seven point five point one to twenty-six point one, so you get MSigDB twenty twenty-six point one gene sets instead of a twenty twenty-two vintage: for human that's fifty hallmark sets, seven and a half thousand curated sets, sixteen thousand ontology sets. That needed an API migration, because msigdbr version ten renamed the category argument to collection and the gs underscore subcat column to gs underscore subcollection. Two smaller fixes fell out of actually testing it: passing a scientific name like Danio rerio to the organism flag was always rejected, because the resolver lower-cased its input and then handed back the lower-cased version; and the script used to log an error per collection, then print 'Download complete' and exit zero having written nothing at all. One thing to be aware of operationally: from msigdbr twenty-four the gene sets are fetched over the network on first use rather than being bundled in the package, so this step now needs internet access wherever it runs. On a cluster whose compute nodes have no outbound route, run the download somewhere that does and pass the file in with the gmt flag afterwards.",
@@ -82,6 +83,7 @@
     font-size: var(--type-body);
     line-height: 1.35;
     overflow: hidden;
+    position: relative;
   }
 
   /* ---------- Stage sizing and printing ----------
@@ -1093,7 +1095,7 @@
       <span style="background: var(--route-salmon)"></span>
       <span style="background: var(--route-qc)"></span>
     </div>
-    <div>Version 1.8.0 &nbsp;·&nbsp; October 2026</div>
+    <div>Version 1.9.1 &nbsp;·&nbsp; November 2026</div>
   </div>
 </section>
 
@@ -1873,12 +1875,54 @@
 
 
 <!-- ============================================================
-  SLIDE 17: WHAT'S NEW IN 1.8.0
+  SLIDE 17: WHAT'S NEW IN 1.9.0
 ============================================================ -->
-<section data-label="19 What's new in 1.8.0">
+<section data-label="19 What's new in 1.9.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
-    <h2 class="slide-title">What's new in 1.8.0</h2>
+    <h2 class="slide-title">What's new in 1.9.0</h2>
+    <div class="release-head" style="margin-top: 18px;">
+      <span class="release-tag">v1.9.0</span>
+      <span class="release-date">5 November 2026</span>
+    </div>
+    <div class="rule" style="margin-top: 6px;"></div>
+
+    <div class="changes">
+      <div class="change">
+        <h4>Fixed: rMATS always ran unstranded</h4>
+        <p>No <code>--libType</code> was passed, so stranded libraries gave plausible but wrong PSI values. Re-run rMATS on stranded data. A cohort that disagrees now stops the run.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: <code>--reference_level</code> and <code>-resume</code></h4>
+        <p>Re-running with a different baseline could reuse cached results and relabel them. It is a process input now.</p>
+      </div>
+      <div class="change">
+        <h4>New: one pair of significance thresholds</h4>
+        <p><code>--padj_cutoff</code> and <code>--lfc_cutoff</code>, defaulting to 0.05 and 1, are shared by DESeq2, edgeR, gProfiler inputs, the figures and the report.</p>
+      </div>
+      <div class="change">
+        <h4>Changed: more is checked at launch</h4>
+        <p>A missing execution engine, sample values that are not valid R names and a mismatched <code>--organism</code> are refused before any work starts.</p>
+      </div>
+      <div class="change">
+        <h4>Changed: <code>--isoform_switch</code> runs at <code>DE</code></h4>
+        <p>It sits beside <code>--dtu</code> and <code>--diffsplice</code>, so <code>--stop_at DE</code> now produces <code>isoform_switch_output/</code>.</p>
+      </div>
+      <div class="change">
+        <h4>Fixed: skipped analyses now say so</h4>
+        <p>Requested analyses that could not run were dropped silently and the run still went green. Each one now gives a reason.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  SLIDE 17b: PREVIOUSLY 1.8.0
+============================================================ -->
+<section data-label="20 Previously: 1.8.0">
+  <div class="frame">
+    <p class="eyebrow">Release notes</p>
+    <h2 class="slide-title">Previously: 1.8.0</h2>
     <div class="release-head" style="margin-top: 18px;">
       <span class="release-tag">v1.8.0</span>
       <span class="release-date">24 October 2026</span>
@@ -1895,28 +1939,12 @@
         <p><code>--dtu</code> and <code>--diffsplice</code> published tables and nothing to look at. Both now draw their ten most significant genes, with a <code>reproduce/</code> folder per analysis, and both have a section in the report. <code>--isoform_switch</code> has one too.</p>
       </div>
       <div class="change">
-        <h4>New: one pair of significance thresholds</h4>
-        <p><code>--padj_cutoff</code> and <code>--lfc_cutoff</code>, defaulting to 0.05 and 1, shared by DESeq2, edgeR, the gProfiler input lists, the volcano colouring, the <code>reproduce/</code> scripts and the report. The numbers were previously written into six files separately.</p>
-      </div>
-      <div class="change">
-        <h4>Fixed: rMATS always ran unstranded</h4>
-        <p>No <code>--libType</code> was passed, so a reverse-stranded library was analysed as unstranded and produced a complete set of PSI values that looked fine. The per-sample RSeQC verdicts are now collapsed to the one library type rMATS takes, and a cohort that disagrees stops the run rather than being averaged.</p>
-      </div>
-      <div class="change">
-        <h4>Fixed: a green run with no differential expression</h4>
-        <p>A genome-aligner run without <code>--gtf</code> exited 0 with no DE results and said nothing. It now says which analyses it is skipping, and <code>--aligner star</code> without <code>--gtf</code> is refused by name, since STAR is handed the annotation as <code>--sjdbGTFfile</code>.</p>
-      </div>
-      <div class="change">
-        <h4>Fixed: a condition name DESeq2 cannot use</h4>
-        <p><code>TGF-beta</code>, <code>6h</code> and <code>Ctrl 1</code> are ordinary labels that <code>make.names()</code> rewrites, so the coefficient lookup failed after alignment and quantification had run. Condition, batch and <code>--design</code> covariate values are now checked at launch, with the replacement spelled out.</p>
-      </div>
-      <div class="change">
-        <h4>Fixed: <code>--reference_level</code> was invisible to <code>-resume</code></h4>
-        <p>It reached the analysis scripts through the <code>env</code> config scope, which the task hash does not cover, so re-running with a different baseline reused the cached results and relabelled them. It is a process input now, and the manifest and the RO-Crate record the baseline that was used rather than the one that was asked for.</p>
+        <h4>Changed: the offline bundle gains <code>gffread</code></h4>
+        <p>Earlier bundles do not work with this transcriptome change. The v1.8.0 bundle also works with v1.9.0 and v1.9.1.</p>
       </div>
       <div class="change">
         <h4>Also in 1.7.0</h4>
-        <p>Every Bioconductor package moved to release 3.22, and the <code>reproduce/</code> folders arrived for the remaining analyses. A stub-run CI job now exercises the whole channel graph on empty inputs and asserts that each result directory exists, because every defect in this list was in code that had never executed.</p>
+        <p>Every Bioconductor package moved to release 3.22, and the <code>reproduce/</code> folders arrived for the remaining analyses.</p>
       </div>
     </div>
   </div>
@@ -1925,7 +1953,7 @@
 <!-- ============================================================
   SLIDE 18: WHAT'S NEW IN 1.6.0
 ============================================================ -->
-<section data-label="20 Previously: 1.6.0">
+<section data-label="21 Previously: 1.6.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.6.0</h2>
@@ -1971,7 +1999,7 @@
 <!-- ============================================================
   SLIDE 17: WHAT'S NEW IN 1.5.0
 ============================================================ -->
-<section data-label="21 Previously: 1.5.0">
+<section data-label="22 Previously: 1.5.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.5.0</h2>
@@ -2017,7 +2045,7 @@
 <!-- ============================================================
   SLIDE 18: PREVIOUSLY 1.4.3
 ============================================================ -->
-<section data-label="22 Previously: 1.4.3">
+<section data-label="23 Previously: 1.4.3">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.4.3</h2>
@@ -2065,7 +2093,7 @@
 <!-- ============================================================
   SLIDE 19: PREVIOUSLY 1.4.2
 ============================================================ -->
-<section data-label="23 Previously: 1.4.2">
+<section data-label="24 Previously: 1.4.2">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.4.2</h2>
@@ -2113,7 +2141,7 @@
 <!-- ============================================================
   SLIDE 20: PREVIOUSLY 1.4.0
 ============================================================ -->
-<section data-label="24 Previously: 1.4.0">
+<section data-label="25 Previously: 1.4.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.4.0</h2>
@@ -2149,7 +2177,7 @@
 <!-- ============================================================
   SLIDE 21: PREVIOUSLY 1.3.0
 ============================================================ -->
-<section data-label="25 Previously: 1.3.0">
+<section data-label="26 Previously: 1.3.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.3.0</h2>
@@ -2193,7 +2221,7 @@
 <!-- ============================================================
   SLIDE 22: PREVIOUS RELEASE 1.2.0
 ============================================================ -->
-<section data-label="26 Previously: 1.2.0">
+<section data-label="27 Previously: 1.2.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.2.0</h2>
@@ -2241,7 +2269,7 @@
 <!-- ============================================================
   SLIDE 23: PREVIOUS RELEASE 1.1.0
 ============================================================ -->
-<section data-label="27 Previously: 1.1.0">
+<section data-label="28 Previously: 1.1.0">
   <div class="frame">
     <p class="eyebrow">Release notes</p>
     <h2 class="slide-title">Previously: 1.1.0</h2>
@@ -2285,7 +2313,7 @@
 <!-- ============================================================
   SLIDE 24: QUICK START
 ============================================================ -->
-<section data-label="28 Quick start">
+<section data-label="29 Quick start">
   <div class="frame">
     <p class="eyebrow">Closing</p>
     <h2 class="slide-title">Quick start: four commands</h2>

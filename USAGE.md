@@ -515,7 +515,7 @@ is applied (the pipeline logs a warning when kallisto runs with `auto`).
 | `DE` | featureCounts + DESeq2 + edgeR, and the transcript-usage analyses: `--dtu`, `--diffsplice`, `--isoform_switch` |
 | `GSEA` *(or unset)* | Everything, incl. enrichment, fusions, splicing |
 
-`--isoform_switch` moved into the `DE` stage after 1.8.0. It needed full depth
+`--isoform_switch` moved into the `DE` stage in 1.9.0. It needed full depth
 before that, which put a transcript-usage analysis after gene-set enrichment. A
 `--stop_at DE` command that asks for it now produces `isoform_switch_output/`
 where it produced nothing. Fusion calling (`--ctat_lib`) still needs full depth,
@@ -1118,7 +1118,8 @@ sha256sum -c rnaseq-flow-1.8.0-singularity.tar.sha256
 - **The bundle is pinned to a release.** Container references are resolved per
   release, so the bundle has to match the pipeline. A mismatch surfaces as a
   process failing to find its image, not as a clear version error. The v1.8.0
-  bundle is the current one, and its `README.txt` records the exact commit it
+  bundle is the current one and also works with v1.9.0 and v1.9.1, whose
+  containers are unchanged. Its `README.txt` records the exact commit it
   was built from if you need to check. Earlier bundles do not work with this
   release: v1.8.0 derives the transcriptome from the GTF and added `gffread`,
   and v1.7.0 before it moved every Bioconductor package to release 3.22, so the

@@ -17,7 +17,7 @@ Outputs, both written to the repository root and both gitignored:
 | File | What it is |
 |---|---|
 | `rnaseq-flow_Slides.pdf` | Chrome printing the deck, one 1920x1080 landscape page per slide. The deck exactly as designed, SVG diagrams included |
-| `rnaseq-flow_Slides_screens.pptx` | The same 26 slides as full-bleed 1920x1080 renders, pixel-identical to the deck, each carrying its speaker note. Nothing on it is editable |
+| `rnaseq-flow_Slides_screens.pptx` | The same 29 slides as full-bleed 1920x1080 renders, pixel-identical to the deck, each carrying its speaker note. Nothing on it is editable |
 
 ## The editable deck is not built here
 

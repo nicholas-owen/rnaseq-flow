@@ -5,9 +5,46 @@ All notable changes to **rnaseq-flow** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.9.1] - 2026-11-05
+
+Corrects the version labelling of 1.9.0. The pipeline code is the same, so
+results do not change.
+
+The `1.9.0` tag and its Zenodo record were published before the version updates
+were committed. They hold the 1.9.0 code, but `nextflow.config`, `CITATION.cff`,
+this changelog and the guides still say 1.8.0, so a run of that tag reports
+1.8.0 in its manifest and RO-Crate. Use 1.9.1 instead.
+
+### Changed
+
+- **The version, changelog and documentation** now describe this release,
+  including the 1.9.0 changes below.
+
+- **The pipeline has its own Zenodo DOI**,
+  [10.5281/zenodo.23990832](https://doi.org/10.5281/zenodo.23990832), a concept
+  DOI that resolves to all versions. It is in `CITATION.cff`, the README and
+  `manifest.doi`, so it reaches `run_manifest.json`. The DOI previously used there,
+  `10.5281/zenodo.21880328`, is the offline container bundle's.
+
+## [1.9.0] - 2026-11-05
+
+Results change for rMATS on stranded libraries, and some runs that launched
+before are now refused at launch. The containers are unchanged, so the v1.8.0
+offline bundle works with this release.
 
 ### Added
+
+- **`--padj_cutoff` and `--lfc_cutoff`**, defaulting to 0.05 and 1. They replace
+  separate copies of the thresholds and are shared by DESeq2, edgeR, the
+  gProfiler input lists, the volcano colouring, the `reproduce/` scripts and the
+  report.
+
+- **A stub-run CI job** exercises the channel graph on empty inputs, and the
+  topology validator now runs in CI.
+
+- **The HISAT2 index build mode is recorded** in
+  `hisat2_index/build_info.yml`, and reaches `run_manifest.json` and the report.
+  A splice-aware index and a reduced one otherwise look the same on disk.
 
 - **The introduction deck builds to PDF and PowerPoint from one source.**
   `scripts/slides/build_slides.js` reads `rnaseq-flow.html`, the authored deck,
@@ -44,6 +81,45 @@ and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Such a samplesheet is now refused before any process is scheduled, naming the
   value and a replacement. A samplesheet that validated before this can fail
   now: rename the values (`T6h`, `h6`) rather than working around it.
+
+- **A run with no execution engine is refused.** Without `-profile docker`,
+  `singularity` or `conda`, container directives were ignored and every tool was
+  taken from `PATH`.
+
+- **Condition and batch values must be valid R names.** `TGF-beta`, `6h` and
+  `Ctrl 1` failed in DESeq2 after alignment and quantification had run. They are
+  now refused at launch, with a suggested replacement.
+
+- **`--organism` must match the reference.** A mismatch with
+  `reference_metadata.json` beside `--gtf` is refused, because enrichment would
+  otherwise use the wrong organism's gene sets.
+
+- **`--fasta` is no longer accepted.** It was declared but never read, so it gave
+  no warning and no genome. The parameter is `--genome_fasta`.
+
+- **MA plot limits come from the data.** Clipping at plus or minus 2 hid the
+  genes with the largest changes.
+
+### Fixed
+
+- **rMATS always ran unstranded.** No `--libType` was passed, so a stranded
+  library produced plausible but wrong PSI values. Per-sample strandedness is now
+  collapsed to the one library type rMATS takes, and a cohort that disagrees
+  fails. Re-run rMATS on stranded data. rMATS also uses the CPUs it's allocated
+  rather than a fixed four.
+
+- **`--reference_level` was invisible to `-resume`.** Re-running with a different
+  baseline could reuse cached results and relabel them. It's now a process input.
+
+- **Requested analyses that cannot run now say so.** They were skipped silently
+  and the run still went green.
+
+- **A paired-end glob was read as single-end.** `/data/*_R{1,2}.fastq.gz` aligned
+  each mate as a separate sample. Read layout now comes from the files found.
+
+- **HISAT2 index memory is estimated correctly for a globbed `--gtf`.**
+
+- **MultiQC can resume.** Its inputs are now hashed by content.
 
 ## [1.8.0] - 2026-10-24
 
