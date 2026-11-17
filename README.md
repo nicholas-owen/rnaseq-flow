@@ -96,6 +96,7 @@ already be on your `PATH`, and they will not be.
 | `singularity` | Running on shared or HPC infrastructure, where Docker is normally unavailable. |
 | `conda` | No container engine at all. Slower, and environments are solved at run time, which needs network access. |
 | `sge` | Submitting to an SGE cluster (UCL Myriad / Kathleen / Young). Enables Singularity itself, so use it **alone**. |
+| `slurm` | Submitting to a Slurm cluster, any site. Point it at yours with `--slurm_partition` and, where the site bills by project, `--slurm_account`. Enables Singularity itself, so use it **alone**. |
 | `test_yeast` | Running the small *S. cerevisiae* test dataset. Caps CPU/memory to laptop scale. Combine with an engine, e.g. `-profile test_yeast,docker`. Build and run instructions for all four aligners are in [examples/yeast/README.md](examples/yeast/README.md). |
 | `tre` | No internet access: a Trusted Research Environment or air-gapped HPC. Ships with the offline container bundle, not the repository (see below). |
 
@@ -105,7 +106,8 @@ Combine them with a comma. The engine and the environment are separate choices:
 -profile docker                 # local run
 -profile test_yeast,docker      # the test dataset, locally
 -profile sge                    # UCL cluster (Singularity already enabled)
--profile tre,sge                # air-gapped cluster
+-profile slurm                  # Slurm cluster, with --slurm_partition
+-profile tre,slurm              # air-gapped Slurm cluster
 ```
 
 > **No internet access?** Several containers are provisioned at run time by
@@ -117,8 +119,9 @@ Combine them with a comma. The engine and the environment are separate choices:
 > and used with `-profile tre`. See
 > [USAGE.md](USAGE.md#running-without-internet-access-tre--air-gapped).
 
-Full details, including resource tuning and adapting `conf/sge.config` for
-another scheduler, are in [USAGE.md](USAGE.md#5-profiles--execution).
+Full details, including resource tuning and adapting `conf/sge.config` or
+`conf/slurm.config` for another scheduler, are in
+[USAGE.md](USAGE.md#5-profiles--execution).
 
 ---
 

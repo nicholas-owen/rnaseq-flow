@@ -5,6 +5,49 @@ All notable changes to **rnaseq-flow** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`--build_indices` and `--download_refs` now publish a complete RO-Crate.**
+  `CrateEnricher.enrich()` returns early when `pipeline_info/run_manifest.json`
+  is absent, and only the analysis workflow wrote one, so a helper run
+  published nf-prov's raw crate: `main.nf`, `nextflow.config`, `README.md` and
+  `nextflow_schema.json` loose at the top of the index directory instead of in
+  `.crate/`, no `sha256` on any file, no contributors, no project, and no
+  message saying any of it had been skipped. Both modes now write a manifest of
+  their own, recording the mode, the pipeline version and commit, the command
+  line, the inputs the build was given, and the same attribution and project
+  blocks an analysis run carries.
+
+  The enricher also degrades rather than giving up when a manifest is missing:
+  the checksums, the `.crate/` relocation and the input references need only
+  the crate and the parameters, so they still happen.
+
+  An index directory outlives the memory of how it was built, which is the case
+  the crate exists for, so this was the wrong place to have a gap.
+
+### Added
+
+- **`-profile slurm`**, for Slurm clusters. `conf/slurm.config` is written for
+  any Slurm site rather than one named cluster: `--slurm_partition`,
+  `--slurm_account`, `--slurm_qos` and `--slurm_bigmem_partition` point it at
+  yours, and an unset one is not emitted, so the cluster's own default applies.
+  It enables Singularity itself, like `-profile sge`, and combines with `tre`
+  for an air-gapped cluster.
+
+  Memory is requested as a job total (`--mem`), which is Slurm's own semantics,
+  so the per-core division and rounding that `conf/sge.config` does by hand do
+  not arise. `HISAT2_BUILD` keeps its exemption from `--max_memory`, since a
+  splice-aware human index needs about 204 GB and the module silently drops
+  `--ss`/`--exon` when given less; it takes `--slurm_bigmem_memory`, default
+  `256.GB`, and `--slurm_bigmem_partition` where the site has one.
+
+  The ceilings default to 16 cores, 128 GB and 24 h, which are modest on
+  purpose so a first run submits somewhere. `--max_time` has to be set at all
+  because the pipeline's own 240 h default is above almost every partition's
+  limit and would have every job rejected at submission.
+
 ## [1.9.1] - 2026-11-05
 
 Corrects the version labelling of 1.9.0. The pipeline code is the same, so

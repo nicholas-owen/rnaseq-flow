@@ -607,6 +607,7 @@ cd rnaseq-flow</code></pre></div>
       <tr><td><code>singularity</code></td><td>Shared or HPC infrastructure, where Docker is normally unavailable.</td></tr>
       <tr><td><code>conda</code></td><td>No container engine at all. Slower, and environments are solved at run time, which needs network access.</td></tr>
       <tr><td><code>sge</code></td><td>Submitting to an SGE cluster (UCL Myriad, Kathleen, Young). Enables Singularity itself, so use it <strong>alone</strong>.</td></tr>
+      <tr><td><code>slurm</code></td><td>Submitting to a Slurm cluster, any site. Point it at yours with <code>--slurm_partition</code> and, where the site bills by project, <code>--slurm_account</code>. Enables Singularity itself, so use it <strong>alone</strong>.</td></tr>
       <tr><td><code>test_yeast</code></td><td>The small <em>S. cerevisiae</em> test dataset. Caps CPU and memory to laptop scale. Combine with an engine.</td></tr>
       <tr><td><code>tre</code></td><td>No internet access: a Trusted Research Environment or air-gapped HPC. Needs the offline bundle (<a href="#offline">section 3.8</a>).</td></tr>
     </tbody>
@@ -618,7 +619,8 @@ cd rnaseq-flow</code></pre></div>
   <div class="codeblock"><pre><code>-profile docker                 <span class="cmt"># local run</span>
 -profile test_yeast,docker      <span class="cmt"># the test dataset, locally</span>
 -profile sge                    <span class="cmt"># UCL cluster (Singularity already enabled)</span>
--profile tre,sge                <span class="cmt"># air-gapped cluster</span></code></pre></div>
+-profile slurm                  <span class="cmt"># Slurm cluster, with --slurm_partition</span>
+-profile tre,slurm              <span class="cmt"># air-gapped Slurm cluster</span></code></pre></div>
 
   <h3 id="samplesheet">The samplesheet <a class="anchor" href="#samplesheet">#</a></h3>
 
@@ -1769,32 +1771,40 @@ nextflow run main.nf \
     <tbody>
       <tr><td><span class="route r-star"></span>STAR</td><td>5579</td><td>852</td><td>152</td><td>700</td></tr>
       <tr><td><span class="route r-hisat2"></span>HISAT2</td><td>5587</td><td>847</td><td>153</td><td>694</td></tr>
-      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5508</td><td>778</td><td>130</td><td>648</td></tr>
-      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5532</td><td>854</td><td>152</td><td>702</td></tr>
+      <tr><td><span class="route r-salmon"></span>Salmon</td><td>5588</td><td>780</td><td>131</td><td>649</td></tr>
+      <tr><td><span class="route r-kallisto"></span>Kallisto</td><td>5663</td><td>856</td><td>151</td><td>705</td></tr>
     </tbody>
   </table>
   </div>
 
-  <p>735 genes were called significant by all four, no pairwise overlap fell
-     below 95 percent of the smaller set, and all four reproduced the same strong
-     down-regulation bias.</p>
+  <p>738 genes were called significant by all four, no pairwise overlap fell
+     below 95 percent of the smaller set (STAR against Salmon is the closest, at
+     95.4 percent), and all four reproduced the same strong down-regulation
+     bias. <code>examples/yeast/compare_routes.py</code> regenerates this table
+     and the two paragraphs below it.</p>
 
   <p>Those are the DESeq2 calls. edgeR on the same data is consistently a little
-     more generous, having gained power in version 4.x: 924, 930, 895 and 944
-     significant for STAR, HISAT2, Salmon and Kallisto, 814 called by all four,
-     and no pairwise overlap below 91 percent. The direction of the bias is the
+     more generous, having gained power in version 4.x: 924, 930, 883 and 912
+     significant for STAR, HISAT2, Salmon and Kallisto, 794 called by all four,
+     and no pairwise overlap below 92 percent. The direction of the bias is the
      same, though less lopsided: edgeR calls roughly twice as many genes up.</p>
 
   <div class="box note">
-    <span class="t">This table was wrong twice over until 2026-10-30</span>
-    <p>HISAT2 and Kallisto ran <code>--strandedness unstranded</code> on a
-       reverse-stranded library, and the Salmon and Kallisto transcriptome
-       changed on 2026-10-24 without the table being redone. Correcting both
-       raised the genes called by all four from 668 to 735 and the worst pairwise
-       overlap from 83 to 95 percent, which is the direction a real fix should
-       move a concordance figure. STAR did not move: it was always on
-       <code>auto</code>, which infers <code>reverse</code>, and it uses no
-       transcriptome, so its row is the control for everything else here.</p>
+    <span class="t">This table has been wrong twice, the second time until 2026-11-16</span>
+    <p>The first correction, on 2026-10-30, fixed the strandedness: HISAT2 and
+       Kallisto had run <code>--strandedness unstranded</code> on a
+       reverse-stranded library. The second is the Salmon and Kallisto rows. The
+       transcriptome changed on 2026-10-24, from Ensembl's
+       <code>cdna.all.fa.gz</code> to one <code>gffread</code> cuts from the GTF,
+       but those two routes were still being measured with indices built in
+       August, so their rows described a transcriptome the pipeline had stopped
+       using. Rebuilding and re-running moved Salmon from 5508 tested to 5588 and
+       Kallisto from 5532 to 5663.</p>
+    <p>STAR and HISAT2 are the control and they reproduce exactly, down to the
+       edgeR counts. Both share every process downstream of quantification with
+       the other two routes, so a container drifting underneath, or a new DESeq2,
+       would have moved their numbers as well. It did not, which leaves the
+       transcriptome as the only cause.</p>
   </div>
 
   <div class="box note">

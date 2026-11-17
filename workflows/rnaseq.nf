@@ -592,6 +592,88 @@ def summariseSamples(samplesheet) {
     ]
 }
 
+/*
+ * The pipeline and attribution blocks of the run manifest.
+ *
+ * Factored out of buildRunManifest() so the helper workflows can write a
+ * manifest of their own without a second copy of either block drifting from
+ * this one. The content is unchanged: buildRunManifest() calls these.
+ */
+def buildPipelineBlock() {
+    return [
+        name            : workflow.manifest.name,
+        version         : workflow.manifest.version,
+        home_page       : workflow.manifest.homePage,
+        // null for a local run; set when launched with `nextflow run <repo> -r <rev>`.
+        revision        : workflow.revision,
+        commit_id       : workflow.commitId,
+        run_name        : workflow.runName,
+        session_id      : workflow.sessionId?.toString(),
+        nextflow_version: nextflow.version?.toString(),
+        started_at      : workflow.start?.toString(),
+        profile         : workflow.profile,
+        container_engine: workflow.containerEngine,
+        // The verbatim invocation. Structured fields above are what the
+        // report renders; this is the fallback that answers questions the
+        // schema did not anticipate.
+        command_line    : workflow.commandLine,
+        // Nextflow exposes no per-parameter provenance, so there is no way
+        // to record which file a contributor's details came from. The list
+        // of config files that were in play is the next best thing: a
+        // reader chasing an attribution at least knows where to look.
+        config_files    : workflow.configFiles?.collect { it.toString() },
+    ]
+}
+
+def buildAttribution() {
+    return [
+        license     : workflow.manifest.license,
+        doi         : workflow.manifest.doi,
+        authors     : (workflow.manifest.contributors ?: []).collect { c ->
+            [ name        : c?.name?.toString(),
+              affiliation : c?.affiliation?.toString(),
+              orcid       : c?.orcid?.toString(),
+              // Nextflow returns these as enum names (AUTHOR, MAINTAINER);
+              // lower-cased to match how they are written in the manifest
+              // scope and everywhere else they appear.
+              contribution: c?.contribution?.collect { it.toString().toLowerCase() } ]
+        },
+        contributors: resolveContributors(),
+    ]
+}
+
+/*
+ * The manifest for a --build_indices or --download_refs run.
+ *
+ * Shorter than the analysis manifest, because most of that describes a
+ * comparison these modes do not make. It exists for a narrower reason:
+ * CrateEnricher.enrich() returns null when there is no manifest, so without
+ * one a helper run published nf-prov's raw crate. No .crate/ folder, no
+ * sha256 on the index files, no contributors, and no sign that any of it had
+ * been skipped. An index directory is exactly the artefact that outlives the
+ * memory of how it was built, so it is worth a crate that says.
+ */
+def buildHelperManifest(String mode) {
+    def inputs = mode == 'build_indices'
+        ? [ aligner         : params.aligner,
+            genome_fasta    : params.genome_fasta?.toString(),
+            gtf             : params.gtf?.toString(),
+            transcript_fasta: params.transcript_fasta?.toString() ]
+        : [ species: params.download_species?.toString(),
+            source : params.download_source?.toString(),
+            release: params.download_release?.toString(),
+            gmt    : params.download_gmt as boolean ]
+
+    return [
+        schema_version: 2,
+        mode          : mode,
+        pipeline      : buildPipelineBlock(),
+        inputs        : inputs.findAll { k, v -> v != null },
+        attribution   : buildAttribution(),
+        project       : resolveProject(),
+    ]
+}
+
 def buildRunManifest(design, notices) {
     def from_counts = params.counts != null
 
@@ -622,29 +704,7 @@ def buildRunManifest(design, notices) {
         // 2 adds the `attribution` block. Additive, so a reader written against
         // 1 still works.
         schema_version: 2,
-        pipeline: [
-            name            : workflow.manifest.name,
-            version         : workflow.manifest.version,
-            home_page       : workflow.manifest.homePage,
-            // null for a local run; set when launched with `nextflow run <repo> -r <rev>`.
-            revision        : workflow.revision,
-            commit_id       : workflow.commitId,
-            run_name        : workflow.runName,
-            session_id      : workflow.sessionId?.toString(),
-            nextflow_version: nextflow.version?.toString(),
-            started_at      : workflow.start?.toString(),
-            profile         : workflow.profile,
-            container_engine: workflow.containerEngine,
-            // The verbatim invocation. Structured fields above are what the
-            // report renders; this is the fallback that answers questions the
-            // schema did not anticipate.
-            command_line    : workflow.commandLine,
-            // Nextflow exposes no per-parameter provenance, so there is no way
-            // to record which file a contributor's details came from. The list
-            // of config files that were in play is the next best thing: a
-            // reader chasing an attribution at least knows where to look.
-            config_files    : workflow.configFiles?.collect { it.toString() },
-        ],
+        pipeline: buildPipelineBlock(),
         // Who to credit, and under what terms. The results travel: a reader who
         // has only a results directory can otherwise tell what was run but not
         // whose it is or what they may do with it.
@@ -655,20 +715,7 @@ def buildRunManifest(design, notices) {
         // each with their CRediT roles, and each carrying `source` so a name
         // somebody declared is distinguishable from the login that happened to
         // be in use. See resolveContributors().
-        attribution: [
-            license     : workflow.manifest.license,
-            doi         : workflow.manifest.doi,
-            authors     : (workflow.manifest.contributors ?: []).collect { c ->
-                [ name        : c?.name?.toString(),
-                  affiliation : c?.affiliation?.toString(),
-                  orcid       : c?.orcid?.toString(),
-                  // Nextflow returns these as enum names (AUTHOR, MAINTAINER);
-                  // lower-cased to match how they are written in the manifest
-                  // scope and everywhere else they appear.
-                  contribution: c?.contribution?.collect { it.toString().toLowerCase() } ]
-            },
-            contributors: resolveContributors(),
-        ],
+        attribution: buildAttribution(),
         // The research activity this run belongs to, where one has been
         // declared. Null when it has not, and the report skips the group
         // rather than showing a row of blanks.

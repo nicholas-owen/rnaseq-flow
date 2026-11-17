@@ -54,11 +54,18 @@ class CrateEnricher {
      */
     static String enrich(String outdir, String manifestPath, Map params = [:]) {
         def crateFile = new File(outdir, CRATE)
-        def manifestFile = new File(manifestPath)
-        if (!crateFile.exists() || !manifestFile.exists()) return null
+        if (!crateFile.exists()) return null
 
         def doc = new JsonSlurper().parse(crateFile)
-        def manifest = new JsonSlurper().parse(manifestFile)
+        // A missing manifest costs the licence, the DOI, the contributors and
+        // the project, which all come from it. Everything structural -- the
+        // checksums, the workflow files moved into .crate/, the input
+        // references, the expanded result folders -- needs only the crate and
+        // the params, so it still happens. Returning null here instead, which
+        // is what this did until 2026-11-16, meant a run with no manifest
+        // published nf-prov's raw crate and said nothing about it.
+        def manifestFile = new File(manifestPath)
+        def manifest = manifestFile.exists() ? new JsonSlurper().parse(manifestFile) : [:]
         def graph = doc['@graph']
         def byId = [:]
         graph.each { e -> byId[e['@id']] = e }

@@ -5,7 +5,7 @@ nextflow.enable.dsl = 2
 /*
  * Import the main workflow
  */
-include { RNASEQ; resolveContributors; resolveProject } from './workflows/rnaseq'
+include { RNASEQ; resolveContributors; resolveProject; buildHelperManifest } from './workflows/rnaseq'
 include { DOWNLOAD } from './workflows/download'
 include { BUILD_INDICES } from './workflows/build_indices'
 
@@ -521,9 +521,20 @@ workflow {
 
     if (params.download_refs) {
         DOWNLOAD( params.download_species, params.download_source )
+        // Written here rather than through a channel, as the analysis workflow
+        // does, because there is no process to attach it to. The RO-Crate hook
+        // below reads it; without it the crate is published unenriched.
+        def refs_manifest = file("${params.tracedir}/run_manifest.json")
+        refs_manifest.parent.mkdirs()
+        refs_manifest.text = groovy.json.JsonOutput.prettyPrint(
+            groovy.json.JsonOutput.toJson(buildHelperManifest('download_refs')))
     }
     else if (params.build_indices) {
         BUILD_INDICES( params.aligner )
+        def index_manifest = file("${params.tracedir}/run_manifest.json")
+        index_manifest.parent.mkdirs()
+        index_manifest.text = groovy.json.JsonOutput.prettyPrint(
+            groovy.json.JsonOutput.toJson(buildHelperManifest('build_indices')))
     }
     else {
         //

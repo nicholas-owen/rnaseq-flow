@@ -263,6 +263,40 @@
         }
       }
     },
+    "slurm_execution_options": {
+      "title": "Slurm execution options",
+      "type": "object",
+      "description": "Site settings for -profile slurm (conf/slurm.config). All optional: an unset one is not emitted, so the cluster's own default applies. Ignored by every other profile.",
+      "properties": {
+        "slurm_partition": {
+          "type": "string",
+          "description": "Slurm partition (--partition) for every process. Unset uses the cluster default."
+        },
+        "slurm_bigmem_partition": {
+          "type": "string",
+          "description": "Partition for HISAT2_BUILD alone, which needs about 204 GB for a splice-aware human index. Falls back to --slurm_partition."
+        },
+        "slurm_account": {
+          "type": "string",
+          "description": "Project or account to bill (--account), where the site requires one."
+        },
+        "slurm_qos": {
+          "type": "string",
+          "description": "Quality of service (--qos), where the site uses one."
+        },
+        "slurm_tmp": {
+          "type": "string",
+          "hidden": true,
+          "description": "Minimum node-local disk per job (--tmp), e.g. 50G. Only meaningful where the site schedules on temp disk."
+        },
+        "slurm_bigmem_memory": {
+          "type": "string",
+          "default": "256.GB",
+          "hidden": true,
+          "description": "Memory ceiling for HISAT2_BUILD alone, which is exempt from --max_memory."
+        }
+      }
+    },
     "generic_options": {
       "title": "Generic options",
       "type": "object",
@@ -320,6 +354,7 @@
     { "$ref": "#/$defs/index_building_options" },
     { "$ref": "#/$defs/max_resource_options" },
     { "$ref": "#/$defs/institutional_config_options" },
-    { "$ref": "#/$defs/generic_options" }
+    { "$ref": "#/$defs/generic_options" },
+    { "$ref": "#/$defs/slurm_execution_options" }
   ]
 }

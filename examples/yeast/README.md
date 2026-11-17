@@ -323,37 +323,47 @@ wants `log2FoldChange`. That turns one strongly down-regulated gene into an
 up-regulated one, in three rows of 5579, and it is exactly how the first
 regeneration of this table got the up/down split wrong by one per route.
 
+`compare_routes.py` in this folder produces the table and the two paragraphs
+after it, so the next correction is one command rather than an edit:
+
+```bash
+python3 examples/yeast/compare_routes.py
+```
+
 | route | genes tested | significant | up | down |
 | --- | --- | --- | --- | --- |
 | STAR | 5579 | 852 | 152 | 700 |
 | HISAT2 | 5587 | 847 | 153 | 694 |
-| Salmon | 5508 | 778 | 130 | 648 |
-| Kallisto | 5532 | 854 | 152 | 702 |
+| Salmon | 5588 | 780 | 131 | 649 |
+| Kallisto | 5663 | 856 | 151 | 705 |
 
-735 genes were called significant by all four, no pairwise overlap fell below
-95% of the smaller set, and all four reproduced the same strong down-regulation
-bias.
+738 genes were called significant by all four, no pairwise overlap fell below
+95% of the smaller set (the closest pair is STAR against Salmon, at 95.4%), and
+all four reproduced the same strong down-regulation bias.
 
 These are the DESeq2 calls. edgeR on the same data is consistently a little more
-generous, having gained power in version 4.x: 924, 930, 895 and 944 significant
-for STAR, HISAT2, Salmon and Kallisto respectively, 814 called by all four, and
-no pairwise overlap below 91%. Its columns are `FDR` and `logFC` rather than
+generous, having gained power in version 4.x: 924, 930, 883 and 912 significant
+for STAR, HISAT2, Salmon and Kallisto respectively, 794 called by all four, and
+no pairwise overlap below 92%. Its columns are `FDR` and `logFC` rather than
 `padj` and `log2FoldChange`, at the same thresholds. The direction of the bias
 is the same, though less lopsided: edgeR calls roughly twice as many genes up.
 
-> **These numbers were regenerated on 2026-10-30 and the previous ones were
-> wrong twice over.** HISAT2 and Kallisto ran `--strandedness unstranded` on a
-> reverse-stranded library, and the Salmon and Kallisto transcriptome changed on
-> 2026-10-24 without the table being redone. Correcting both raised the genes
-> called by all four from 668 to 735 and the worst pairwise overlap from 83% to
-> 95%, which is the direction a real fix should move a concordance figure.
+> **This table has been wrong twice, and the second time was only caught on
+> 2026-11-16.** The first correction, on 2026-10-30, fixed the strandedness:
+> HISAT2 and Kallisto had run `--strandedness unstranded` on a reverse-stranded
+> library. The second is the Salmon and Kallisto rows. The transcriptome changed
+> on 2026-10-24, from Ensembl's `cdna.all.fa.gz` to one `gffread` cuts from the
+> GTF, but the indices those two routes were measured with had been built in
+> August and were never rebuilt, so their rows described a transcriptome the
+> pipeline had stopped using. Rebuilding both and re-running moved Salmon from
+> 5508 tested to 5588 and Kallisto from 5532 to 5663.
 >
-> STAR did not move. It was always on `auto`, which infers `reverse`, and it
-> uses no transcriptome, so its row reproduces the 2026-10-18 figures exactly:
-> 5579 tested, 852 significant, 152 up, 700 down, and 924 for edgeR. Salmon's
-> significant counts are unchanged too, because `--libType A` ignored the
-> strandedness flag; only its `tested` moved, by two genes, from the
-> transcriptome change. That is the control for everything else in the table.
+> STAR and HISAT2 are the control, and they reproduce exactly: identical tested,
+> significant, up and down counts, and identical edgeR counts. That is worth more
+> than the correction itself. Those two routes share every process downstream of
+> quantification with the other two, so if a container had drifted under them,
+> or DESeq2 had changed version, their numbers would have moved as well. They did
+> not, which leaves the transcriptome as the only cause.
 
 > **These numbers come from a subsample, so treat them as a shape to match, not
 > targets to hit.** They were produced from the fetch script's default output:

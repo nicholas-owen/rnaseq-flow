@@ -916,6 +916,7 @@ own licence, DOI and authorship, which come from the `manifest` scope in
 | `-profile singularity` | Use Singularity/Apptainer (HPC-friendly) |
 | `-profile conda` | Create per-process Conda environments |
 | `-profile sge` | Submit to an SGE cluster (UCL Myriad/Kathleen/Young), with Singularity |
+| `-profile slurm` | Submit to a Slurm cluster, any site, with Singularity ([below](#running-on-a-slurm-cluster--profile-slurm)) |
 | `-profile tre` | Air-gapped running: disables Wave, pins every image to the offline bundle ([below](#running-without-internet-access-tre--air-gapped)) |
 
 Add `-resume` to continue from cached results after an interruption or a
@@ -1025,11 +1026,94 @@ reuse it with `--hisat2_index` on every later run, or to use `--aligner star`
 > degrade to a non-splice-aware index (with a `WARN`) rather than queueing
 > against nothing.
 
-For a different scheduler, copy `conf/sge.config` as a starting point, or pass a
-minimal executor block with `-c` (SLURM example):
+### Running on a Slurm cluster (`-profile slurm`)
+
+`conf/slurm.config` is written for any Slurm site rather than one named cluster.
+Like the SGE profile it enables Singularity itself, so do **not** combine it with
+`-profile singularity`:
+
+```bash
+nextflow run main.nf -profile slurm \
+    --slurm_partition compute \
+    --slurm_account my-project \
+    --input samplesheet.csv --aligner star \
+    --star_index /path/to/star_index --gtf /path/to/genes.gtf \
+    --outdir results
+```
+
+Run it from a login node inside `screen`/`tmux`, or as a small submitted job, so
+the Nextflow head process survives your session while the work runs on compute
+nodes.
+
+Four settings point it at your site. Each is optional, and an unset one is not
+emitted at all, so the cluster's own default applies:
+
+| Parameter | Becomes | Set it when |
+|---|---|---|
+| `--slurm_partition` | `--partition` on every job | The cluster has more than one partition, which is nearly always |
+| `--slurm_account` | `--account` | The site bills by project |
+| `--slurm_qos` | `--qos` | The site uses QoS levels |
+| `--slurm_bigmem_partition` | `--partition` for `HISAT2_BUILD` only | You have a large-memory partition (see below) |
+
+Everything else comes from `conf/base.config` and is capped by `--max_cpus`,
+`--max_memory` and `--max_time`, as with any other profile.
+
+**Check these before a large run:**
+
+- **The ceilings.** The profile sets `max_cpus 16`, `max_memory 128.GB` and
+  `max_time 24.h`, which are deliberately modest so a first run submits
+  successfully somewhere. Raise them to your node size once you know it. The
+  pipeline's largest ordinary request is `process_high`: 12 cores, 48 GB, 16 h,
+  doubling to 32 h on its one retry, so a partition whose `MaxTime` is under
+  24 h needs `--max_time` lowered to match or that retry is rejected at
+  submission.
+- **`--time` is set on purpose.** The pipeline's own default is 240 h, which
+  becomes `--time=240:00:00` and is above almost every partition's limit.
+- **The generated `sbatch` line.** On the first run, read the directives
+  Nextflow produced: `grep '^#SBATCH' work/<hash>/.command.run`. That is the
+  fastest way to see whether the partition, account and memory arrived in the
+  form your site expects.
+- **`MaxMemPerCPU`.** Where a site enforces it, Slurm rejects or quietly raises
+  a request whose memory-per-core ratio is above the limit. The fix is more
+  cores or less memory in `conf/base.config`. Do not switch to `--mem-per-cpu`:
+  Slurm refuses it alongside `--mem`, which Nextflow always emits for a process
+  that declares memory.
+- **Wave** builds containers for the Conda-declared processes and needs outbound
+  HTTPS from the submit host. Without it, use `-profile tre,slurm` and the
+  offline bundle.
+
+#### Building a HISAT2 index under `-profile slurm`
+
+Same constraint as under SGE, handled differently. A splice-aware index
+(`hisat2-build --ss --exon`) needs roughly 204 GB for human and 158 GB for
+mouse, and given less the module drops `--ss`/`--exon` and builds a
+*non*-splice-aware index with only a `WARN`. So `HISAT2_BUILD` is exempt from
+`--max_memory` and takes its own ceiling, `--slurm_bigmem_memory`, which
+defaults to `256.GB`.
+
+Where SGE routes that job with a node-class selector, Slurm uses a partition:
+
+```bash
+nextflow run main.nf -profile slurm --build_indices --aligner hisat2 \
+    --slurm_partition compute --slurm_bigmem_partition highmem \
+    --genome_fasta genome.fa.gz --gtf genes.gtf.gz --outdir indices/human
+```
+
+If you have no large-memory partition, leave `--slurm_bigmem_partition` unset
+and lower `--slurm_bigmem_memory` to your largest node. The build then clamps
+and warns, which is better than queueing against a partition that cannot
+satisfy it. `hisat2_index/build_info.yml` records which kind of index you got,
+so the outcome is never a guess ([OUTPUTS.md §19](OUTPUTS.md#19-index-builds-star_index-hisat2_index-salmon_index-kallisto_index)).
+
+### Adapting either profile to another scheduler
+
+`conf/slurm.config` is the better starting point for a new site, since it is
+already written to be parameterised rather than tuned to one cluster. For a
+scheduler neither profile covers (LSF, PBS Pro, AWS Batch), the minimum is an
+executor and a queue, which can be passed with `-c` rather than a new profile:
 
 ```groovy
-process.executor = 'slurm'
+process.executor = 'lsf'
 process.queue    = 'normal'
 ```
 
@@ -1103,8 +1187,8 @@ nextflow run main.nf -c $NXF_SINGULARITY_CACHEDIR/tre.config \
 The `tre` profile disables Wave and pins the eight Conda-declared processes
 (DESeq2, edgeR/tximport, DEXSeq, IsoformSwitchAnalyzeR, GSEA, gProfiler,
 `--download_gmt`, and the Quarto report) to the images in the bundle. Combine it
-with whichever executor profile you need: `tre,sge` above, or `tre` alone for a
-local run.
+with whichever executor profile you need: `tre,sge` above, `tre,slurm` on a
+Slurm cluster, or `tre` alone for a local run.
 
 Verify the download before transferring it, since a truncated 7 GB file fails in
 confusing ways much later:
