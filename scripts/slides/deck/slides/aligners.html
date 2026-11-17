@@ -1,0 +1,15 @@
+<section id="aligners">
+<p class="eyebrow">ROUTES</p>
+<h2 class="title">Four aligners, one --aligner flag</h2>
+<div class="rule"></div>
+<table style="font-size:28px">
+<tr class="thead"><th style="width:16%">Aligner</th><th style="width:22%">Kind</th><th style="width:62%">Unlocks downstream</th></tr>
+<tr><td><b>STAR</b></td><td>genome · default</td><td>featureCounts, RSeQC, bigWig, rMATS, exon diffSplice, STAR-Fusion</td></tr>
+<tr><td><b>HISAT2</b></td><td>genome · lighter</td><td>the same, without fusion calling</td></tr>
+<tr><td><b>Salmon</b></td><td>pseudo-aligner</td><td>tximport, DEXSeq DTU, transcript diffSplice, isoform switching</td></tr>
+<tr><td><b>Kallisto</b></td><td>pseudo-aligner</td><td>tximport, DEXSeq DTU, transcript diffSplice</td></tr>
+</table>
+<p class="caption" style="margin-top:32px">Every route ends in DESeq2, edgeR, GSEA and gProfiler. HISAT2 still gives counts: featureCounts runs after either genome aligner.</p>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>You choose one aligner per run with one flag, and the downstream stages adapt to it. STAR is the default, and its sorted BAMs unlock the most: featureCounts, RSeQC, coverage tracks, rMATS, exon-level diffSplice and fusion calling. HISAT2 is the lower-memory genome route with the same downstream stack minus STAR-Fusion. Worth saying: on nf-core/rnaseq, HISAT2 gives you a BAM and no expression estimates; here featureCounts runs after either genome aligner, so HISAT2 is a lighter route to the same analysis, not a dead end. Salmon and Kallisto are the fast transcript-level routes, summarised to genes by tximport, and they unlock transcript usage; isoform switching is Salmon only. Since 1.8.0 the transcriptome they index is cut from the genome and GTF with gffread, so index and annotation describe the same transcripts by construction.</aside>
+</section>

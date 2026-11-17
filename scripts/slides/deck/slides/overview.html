@@ -1,0 +1,14 @@
+<section id="overview">
+<p class="eyebrow">OVERVIEW</p>
+<h2 class="title">One samplesheet in, a whole analysis out</h2>
+<div class="rule"></div>
+<p class="lead" style="width:1560px">A Nextflow DSL2 pipeline that takes raw reads to <span class="hl">tested, annotated, reported results</span>, and records how it got there.</p>
+<div class="row4" style="margin-top:72px">
+<div class="col rise" style="--i:0"><div class="seg raspberry"></div><p class="eyebrow" style="margin:8px 0 0 0">INPUT</p><h3>A four-column CSV</h3><p class="caption mono">FASTQ · or a count matrix</p></div>
+<div class="col rise" style="--i:1"><div class="seg violet"></div><p class="eyebrow" style="margin:8px 0 0 0">ENGINE</p><h3>Nextflow, containerised</h3><p class="caption mono">docker · singularity · conda</p></div>
+<div class="col rise" style="--i:2"><div class="seg blue"></div><p class="eyebrow" style="margin:8px 0 0 0">OUTPUT</p><h3>Results and two reports</h3><p class="caption mono">MultiQC · Quarto</p></div>
+<div class="col rise" style="--i:3"><div class="seg amber"></div><p class="eyebrow" style="margin:8px 0 0 0">RECORD</p><h3>A folder that explains itself</h3><p class="caption mono">manifest · RO-Crate · reproduce/</p></div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>In one sentence: one samplesheet in, a whole analysis out. The input is a four-column CSV: sample, read 1, read 2 and condition. If you already have counts, from GEO or a collaborator, a count matrix can enter instead and skip straight to differential expression. Every tool runs in its own container, so the only things to install are Nextflow, Java and a container engine. What comes out is a results folder, a MultiQC report for QC and a Quarto report for the analysis, and a record: a run manifest, a Workflow Run RO-Crate, and a reproduce folder beside every analysis that draws figures. It is the downstream sibling of refdata-flow: same Nextflow style, same SGE profile.</aside>
+</section>

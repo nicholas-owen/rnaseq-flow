@@ -1,0 +1,26 @@
+<section id="status">
+<p class="eyebrow">STATUS</p>
+<h2 class="title">Where it stands</h2>
+<div class="rule"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:64px">
+<div class="card" style="gap:16px">
+<p class="tag">RELEASED · v1.9.1 · ZENODO DOI</p>
+<ul style="font-size:32px;line-height:1.45;margin:8px 0 0 0;padding-left:40px">
+<li>Four aligners, three run modes, count-matrix entry</li>
+<li>DESeq2 and edgeR, splicing, DTU, isoforms, fusions</li>
+<li>GSEA and gProfiler on MSigDB 2026.1</li>
+<li>MultiQC, Quarto and <span class="mono">reproduce/</span></li>
+<li>Run RO-Crate with ORCID and CRediT</li>
+<li>Static checks and a stub run in CI</li>
+</ul>
+</div>
+<div class="pts" style="gap:0">
+<div style="display:flex;gap:32px;align-items:center;padding:24px 0;border-bottom:1px solid #e2e8f0"><div class="seg raspberry" style="width:64px;flex-shrink:0"></div><p class="eyebrow" style="margin:0;width:120px">NEXT</p><p style="flex:1">Per-process tests where an answer can be silently wrong</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:24px 0;border-bottom:1px solid #e2e8f0"><div class="seg violet" style="width:64px;flex-shrink:0"></div><p class="eyebrow" style="margin:0;width:120px">THEN</p><p style="flex:1">UMI handling and rRNA removal</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:24px 0;border-bottom:1px solid #e2e8f0"><div class="seg blue" style="width:64px;flex-shrink:0"></div><p class="eyebrow" style="margin:0;width:120px">THEN</p><p style="flex:1">Merging re-sequenced libraries</p></div>
+<div style="display:flex;gap:32px;align-items:center;padding:24px 0"><div class="seg amber" style="width:64px;flex-shrink:0"></div><p class="eyebrow" style="margin:0;width:120px">LATER</p><p style="flex:1">Duplicate marking and deeper QC</p></div>
+</div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>Where are we? Everything on the left is released, as 1.9.1, with a concept DOI on Zenodo that resolves to every version. The checks that run in CI today are static: channel topology and process arity, the report's R code and the modules, plus a stub run that exercises both the genome and the pseudo-aligner routes and each of the launch refusals. What that doesn't prove is that a process produces what the next one expects, and that's where the last round of review found its problems. So next is per-process tests with nf-test, starting with the processes where a wrong answer is silent: rMATS, DESeq2, edgeR, tximport and featureCounts. Then the protocol gaps against nf-core, UMI handling and rRNA removal, because a UMI library processed without UMI handling gives wrong numbers. Then merging re-sequenced libraries, and later duplicate marking and deeper QC.</aside>
+</section>

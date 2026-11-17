@@ -1,0 +1,24 @@
+<section id="checks">
+<p class="eyebrow">BENEFIT 1 · CORRECTNESS</p>
+<h2 class="title">Refused at launch, not after alignment</h2>
+<div class="rule"></div>
+<div style="display:grid;grid-template-columns:1fr 760px;gap:64px">
+<div class="pts">
+<div class="pt rise" style="--i:0"><h3>A baseline that exists</h3><p>A <span class="mono">--reference_level</span> missing from the samplesheet stops the run, so no fold change silently inverts.</p></div>
+<div class="pt rise" style="--i:1"><h3>Names R can use</h3><p>Values such as <span class="mono">TGF-beta</span> or <span class="mono">6h</span> are refused with a replacement, before hours of alignment.</p></div>
+<div class="pt rise" style="--i:2"><h3>Skipped work says so</h3><p>An analysis asked for that cannot run gives a reason, rather than a green run without it.</p></div>
+</div>
+<div class="col" style="align-self:start;gap:16px">
+<div class="code">
+<p class="cl cm"># every check a real run makes,</p>
+<p class="cl cm"># then exit before any job</p>
+<p class="cl">nextflow run main.nf \</p>
+<p class="cl">&#160;&#160;--input samplesheet.csv \</p>
+<p class="cl">&#160;&#160;<span class="ck">--validate_only</span></p>
+</div>
+<p class="caption">Non-zero on failure, so it gates a submission script.</p>
+</div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>First, correctness. A schema can check that a column exists; it can't check what the values mean. So before any process is scheduled the pipeline checks the things that otherwise fail after alignment and quantification have already run, or don't fail at all. The baseline condition decides which way every result points, so a reference level that isn't in the samplesheet stops the run rather than falling back to alphabetical order. Condition, batch and design covariate values have to be valid R names, because DESeq2 builds its coefficient names from them. It also needs two conditions with at least two replicates each, a container engine, and an organism that matches the reference. And since 1.9.0, an analysis you asked for that couldn't run is listed in the report with the reason. The validate-only flag runs all of this and exits, so it can sit in front of any job submission.</aside>
+</section>

@@ -1,0 +1,14 @@
+<section id="problem">
+<p class="eyebrow">THE PROBLEM</p>
+<h2 class="title">Most RNA-seq runs stop at a count matrix</h2>
+<div class="rule"></div>
+<p class="lead" style="width:1500px">The data arrives as FASTQ. The question is biological.</p>
+<div class="row4" style="margin-top:56px">
+<div class="card rise" style="--i:0"><div class="seg raspberry"></div><p>A matrix and a QC report, with the biology still to do.</p></div>
+<div class="card rise" style="--i:1"><div class="seg violet"></div><p>Expression, splicing and fusions as separate runs and samplesheets.</p></div>
+<div class="card rise" style="--i:2"><div class="seg blue"></div><p>A stranded library read as unstranded: plausible, and wrong.</p></div>
+<div class="card rise" style="--i:3"><div class="seg amber"></div><p>An analysis reaches a paper with nobody named for it.</p></div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>Most RNA-seq processing ends at a count matrix and a QC report, and that is not the question anyone asked. The widely used community pipeline, nf-core/rnaseq, says so itself: it produces a matrix and QC and does not assign significance. Differential expression, splicing and fusions are each a separate pipeline, with their own samplesheet and their own references, and every boundary is a chance for the annotation, the baseline or the sample labels to disagree. Some mistakes don't fail at all. A stranded library processed as unstranded gives splicing values that look entirely plausible and are wrong; rnaseq-flow itself had exactly that bug in rMATS until 1.9.0. And the analyst, often core facility staff, does the work that ends up in a paper without an author line or any machine-readable record.</aside>
+</section>

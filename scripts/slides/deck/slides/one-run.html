@@ -1,0 +1,17 @@
+<section id="one-run">
+<p class="eyebrow">WHAT ONE RUN ANSWERS</p>
+<h2 class="title">One run, from reads to the biology</h2>
+<div class="rule"></div>
+<table style="font-size:28px">
+<tr class="thead"><th style="width:46%">The question you asked</th><th style="width:32%">nf-core route</th><th style="width:22%">rnaseq-flow</th></tr>
+<tr><td>How good are the reads and alignments</td><td>rnaseq</td><td class="hl">same run</td></tr>
+<tr><td>Which genes changed, with an FDR</td><td>differentialabundance</td><td class="hl">same run</td></tr>
+<tr><td>Which pathways moved</td><td>differentialabundance</td><td class="hl">same run</td></tr>
+<tr><td>Which exons or isoforms changed</td><td>rnasplice</td><td class="hl">same run</td></tr>
+<tr><td>Which fusions are present</td><td>rnafusion</td><td class="hl">same run</td></tr>
+<tr><td>Who ran it, against what</td><td>not recorded per run</td><td class="hl">same run</td></tr>
+</table>
+<p class="caption" style="margin-top:32px">nf-core/rnaseq 3.27.0 is the stronger front half: more preprocessing, QC and testing. Compared from its documentation, 1 November 2026.</p>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>This is the honest comparison with nf-core, which most people here will know. nf-core gives you four excellent specialist pipelines: rnaseq for QC and counts, differentialabundance for statistics and pathways, rnasplice and rnafusion. That means four runs, separate samplesheets, a contrasts file, and references to keep consistent between them. rnaseq-flow answers all of it in one run, from one samplesheet, with every analysis oriented against the same baseline. To be fair in the other direction: nf-core/rnaseq is the better front half. It has UMI handling, rRNA and contaminant removal, more QC tools and far more testing. Some of that is on my roadmap, and I'll come back to it. This comparison is from nf-core's own documentation; I haven't run it side by side.</aside>
+</section>

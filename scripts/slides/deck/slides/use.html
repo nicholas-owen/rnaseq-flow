@@ -1,0 +1,25 @@
+<section id="use">
+<p class="eyebrow">GETTING STARTED</p>
+<h2 class="title">Three commands from nothing to results</h2>
+<div class="rule"></div>
+<div style="display:grid;grid-template-columns:1040px 1fr;gap:64px">
+<div class="code">
+<p class="cl cm"># 1 · references from Ensembl, pinned</p>
+<p class="cl">nextflow run main.nf <span class="ck">--download_refs</span> \</p>
+<p class="cl">&#160;&#160;--download_species homo_sapiens ...</p>
+<p class="cl cm"># 2 · the index for one aligner</p>
+<p class="cl">nextflow run main.nf <span class="ck">--build_indices</span> \</p>
+<p class="cl">&#160;&#160;--aligner star --genome_fasta ... --gtf ...</p>
+<p class="cl cm"># 3 · the analysis</p>
+<p class="cl">nextflow run main.nf <span class="ck">--input</span> samplesheet.csv \</p>
+<p class="cl">&#160;&#160;--aligner star --star_index ... --gtf ... \</p>
+<p class="cl">&#160;&#160;-profile docker</p>
+</div>
+<div class="pts">
+<div class="pt rise" style="--i:0"><h3>Try it on yeast first</h3><p>Six samples and a 12 Mb genome: all four aligners on a laptop.</p></div>
+<div class="pt rise" style="--i:1"><h3>Or bring refdata-flow</h3><p>Pass the paths <span class="mono">refgenie seek</span> prints to <span class="mono">--genome_fasta</span> and <span class="mono">--gtf</span>.</p></div>
+</div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>Getting started is three invocations of the same entry point. The first fetches a genome, annotation and gene sets from Ensembl, pinned to a release, with a metadata file recording where they came from. The second builds the index for your aligner, or all four at once. The third runs the analysis. If you've never used it, start with the yeast example: it fetches a six-sample dataset and walks through all four aligners, and a 12 megabase genome indexes in about two gigabytes, so it runs on a laptop with the test_yeast profile. And if you're already using refdata-flow, the two fit together: the genome and annotation are just paths, so you pass in what refgenie seek prints. One caveat there: the organism check reads a metadata file only rnaseq-flow's own download writes, so set the organism yourself.</aside>
+</section>

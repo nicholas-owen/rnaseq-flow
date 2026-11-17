@@ -1,0 +1,24 @@
+<section id="tre" class="alt">
+<p class="eyebrow">SENSITIVE DATA</p>
+<h2 class="title">Runs where there is no network</h2>
+<div class="rule"></div>
+<div style="display:grid;grid-template-columns:1fr 860px;gap:64px">
+<div class="pts">
+<div class="pt rise" style="--i:0"><h3>Every container, in one bundle</h3><p>27 Singularity images, about 7 GB, with the provenance plugin and a <span class="mono">tre.config</span>.</p></div>
+<div class="pt rise" style="--i:1"><h3>Published, with a DOI</h3><p>On Zenodo, so a TRE can take a citable, fixed copy through its own transfer route.</p></div>
+<div class="pt rise" style="--i:2"><h3>Same results, offline</h3><p>Nothing is fetched at run time, and the RO-Crate is still written.</p></div>
+</div>
+<div class="col" style="align-self:start;gap:16px">
+<div class="code">
+<p class="cl cm"># inside a TRE or air-gapped cluster</p>
+<p class="cl">export NXF_OFFLINE=true</p>
+<p class="cl">nextflow run main.nf \</p>
+<p class="cl">&#160;&#160;-c $NXF_SINGULARITY_CACHEDIR/tre.config \</p>
+<p class="cl">&#160;&#160;<span class="ck">-profile tre,sge</span> ...</p>
+</div>
+<p class="caption mono">doi.org/10.5281/zenodo.21880328</p>
+</div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>A lot of our RNA-seq is on human samples, and some of it has to live in a Trusted Research Environment. As configured, the pipeline can't run there: several containers are provisioned at run time by Nextflow's Wave service, which needs the internet. So there is a complete offline bundle on Zenodo: 27 Singularity images, about seven gigabytes, the nf-prov plugin that writes the RO-Crate, and a tre config that switches Wave off and pins every image locally. You download it outside, bring it in by whatever route your environment allows, and run with the tre profile, alone or with SGE. The bundle has its own DOI, separate from the pipeline's, and the v1.8.0 bundle is the one that works with the current release. References and gene sets need fetching outside first.</aside>
+</section>

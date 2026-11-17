@@ -1,0 +1,25 @@
+<section id="reproduce">
+<p class="eyebrow">BENEFIT 2 · REPRODUCIBILITY</p>
+<h2 class="title">Every figure redraws from the results</h2>
+<div class="rule"></div>
+<div style="display:grid;grid-template-columns:1fr 760px;gap:64px">
+<div class="pts">
+<div class="pt rise" style="--i:0"><h3>A script per figure</h3><p>Each analysis folder carries <span class="mono">reproduce/</span>: a commented R script, its tables, and only the objects it needs.</p></div>
+<div class="pt rise" style="--i:1"><h3>Settings at the top</h3><p>Contrast, cutoffs, colours and size are named constants in the first lines. No ggplot chain to read.</p></div>
+<div class="pt rise" style="--i:2"><h3>No cluster required</h3><p>A collaborator redraws months later without the pipeline, the references or the compute.</p></div>
+</div>
+<div class="col" style="align-self:start;gap:16px">
+<div class="code">
+<p class="cl cm"># in deseq2_output/reproduce/</p>
+<p class="cl">Rscript volcano.R</p>
+<p class="cl">&#160;</p>
+<p class="cl cm"># writes repro_* figures, each</p>
+<p class="cl cm"># with an .info.txt of the</p>
+<p class="cl cm"># settings that made it</p>
+</div>
+<p class="caption">SVG and PNG at 300 dpi; one pair of cutoffs, <span class="mono">--padj_cutoff</span> and <span class="mono">--lfc_cutoff</span>, shared by every table and figure.</p>
+</div>
+</div>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>Second, reproducibility at the level people actually need it: the figure. A published figure that can't be adjusted is just a picture. Every analysis that draws something carries a reproduce folder with a standalone, commented R script per figure type, gzipped copies of the tables it reads, and the R objects a plot genuinely needs, always the smallest that will do. The settings worth changing are named constants in the first lines. It runs from a terminal or RStudio, and redrawn figures are prefixed repro and carry a note of the settings and environment. GSEA needs this most: its table plot reads gene-set membership from the GMT, which is never published with results, so without the folder that figure couldn't be redrawn at all. And since 1.9.0 one pair of significance thresholds is shared by DESeq2, edgeR, the gProfiler lists, the figures and the report, so they can't disagree.</aside>
+</section>

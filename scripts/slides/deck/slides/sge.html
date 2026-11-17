@@ -1,0 +1,17 @@
+<section id="sge">
+<p class="eyebrow">RUNS ANYWHERE</p>
+<h2 class="title">One pipeline, any machine</h2>
+<div class="rule"></div>
+<table style="font-size:28px">
+<tr class="thead"><th style="width:18%">Profile</th><th style="width:34%">Where</th><th style="width:48%">What it does</th></tr>
+<tr><td class="mono">docker</td><td>laptop or desktop</td><td>each tool in its own container</td></tr>
+<tr><td class="mono">singularity</td><td>shared servers and HPC</td><td>containers without a Docker daemon</td></tr>
+<tr><td class="mono">conda</td><td>no container engine</td><td>environments solved at run time</td></tr>
+<tr><td class="mono">sge</td><td>SGE clusters</td><td>memory per core, local scratch, high-memory routing</td></tr>
+<tr><td class="mono">slurm</td><td>Slurm clusters</td><td>any site, set by partition and account</td></tr>
+<tr><td class="mono">tre</td><td>TREs and air-gapped systems</td><td>every image from the offline bundle</td></tr>
+</table>
+<p class="caption" style="margin-top:32px">Other schedulers and cloud batch services are Nextflow executors: copy <span class="mono">conf/sge.config</span> or pass a small <span class="mono">-c</span> config. Profiles combine, such as <span class="mono">-profile test_yeast,docker</span>.</p>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>The same pipeline runs on a laptop, a desktop, a shared server, a cluster or the cloud; what changes is one profile. Docker is the usual choice on a laptop or workstation. Singularity or Apptainer is for shared infrastructure where Docker isn't available. Conda works with no container engine at all, slower, and it needs network access to solve environments. The SGE profile is tuned for SGE clusters: it requests memory per core the way SGE expects, rounded up, uses node-local scratch, and routes the one job that needs a high-memory node, a splice-aware HISAT2 index for human or mouse, to those nodes automatically. The TRE profile runs from the offline bundle, which is the next slide. For SLURM or another scheduler, or for a cloud batch service, Nextflow supplies the executor: copy the SGE config as a starting point or pass a few lines with -c. No cloud profile ships with the pipeline yet.</aside>
+</section>

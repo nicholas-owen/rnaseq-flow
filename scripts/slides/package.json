@@ -2,14 +2,13 @@
   "name": "rnaseq-flow-slides",
   "version": "1.9.1",
   "private": true,
-  "description": "Builds rnaseq-flow_Slides.pdf and rnaseq-flow_Slides_screens.pptx from rnaseq-flow.html, the authored deck.",
+  "description": "Builds rnaseq-flow_slide_deck.html and its two PowerPoint decks from deck/.",
   "scripts": {
-    "build": "node build_slides.js",
-    "pdf": "node build_slides.js --pdf",
-    "screens": "node build_slides.js --screens"
+    "deck": "node build_deck.js"
   },
   "dependencies": {
-    "cheerio": "^1.0.0",
+    "jszip": "3.10.1",
+    "playwright-core": "^1.63.0",
     "pptxgenjs": "^3.12.0"
   },
   "overrides": {

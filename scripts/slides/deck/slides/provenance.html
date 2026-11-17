@@ -1,0 +1,13 @@
+<section id="provenance">
+<p class="eyebrow">BENEFIT 3 · PROVENANCE AND CREDIT</p>
+<h2 class="title">A results folder that explains itself</h2>
+<div class="rule"></div>
+<div class="row3">
+<div class="card rise" style="--i:0"><div class="seg raspberry"></div><h3 class="mono" style="font-weight:500">run_manifest.json</h3><p>Version and commit, command line, aligner, baseline, thresholds, design and reference release.</p></div>
+<div class="card rise" style="--i:1"><div class="seg violet"></div><h3 class="mono" style="font-weight:500">RO-Crate</h3><p>One action per task, a SHA-256 per published file, and the pipeline as it ran.</p></div>
+<div class="card rise" style="--i:2"><div class="seg blue"></div><h3 class="mono" style="font-weight:500">run_contributors</h3><p>Each analyst as a Person with an ORCID, behind CRediT roles, with the project's RAiD.</p></div>
+</div>
+<p class="lead" style="margin-top:56px;width:1500px">Core facility staff run analyses that reach papers without an author line. The crate names them.</p>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>Third, provenance, and this is the part I care most about as a data steward. It is on by default, because provenance that has to be remembered isn't provenance. The run manifest records how the run was configured: version and commit, the command line, the aligner, the baseline, the thresholds, the design, the samples per condition, and the reference set with its Ensembl release. The Workflow Run RO-Crate says the same in standard JSON-LD that WorkflowHub and other tools can read: one action per task with its inputs and outputs, a checksum for every published file, and the pipeline itself as it ran. And it records people. Each contributor is a Person with an ORCID behind CRediT roles as resolvable URIs, it says whether a role was stated or inferred from who launched the run, and the project carries a RAiD, funder, grant and rights holder. Identifiers are checked at launch. nf-core ships a crate describing its code; this one describes your run.</aside>
+</section>

@@ -1,0 +1,21 @@
+<section id="stages">
+<p class="eyebrow">HOW IT WORKS</p>
+<h2 class="title">Four stages, one command</h2>
+<div class="rule"></div>
+<div class="row4" style="gap:48px;margin-top:16px">
+<h3 style="font-weight:500">01 · Clean</h3>
+<h3 style="font-weight:500">02 · Align or quantify</h3>
+<h3 style="font-weight:500">03 · Count and test</h3>
+<h3 style="font-weight:500">04 · Look further</h3>
+</div>
+<svg aria-label="Stage map: one route through four stations" width="1664" height="40" viewBox="0 0 1664 40" style="margin-top:16px"><line x1="13" y1="20" x2="1651" y2="20" stroke="#1f4e79" stroke-width="14" stroke-linecap="round"/><circle cx="13" cy="20" r="11" fill="#ffffff" stroke="#1f4e79" stroke-width="5"/><circle cx="441" cy="20" r="11" fill="#ffffff" stroke="#1f4e79" stroke-width="5"/><circle cx="869" cy="20" r="11" fill="#ffffff" stroke="#1f4e79" stroke-width="5"/><circle cx="1297" cy="20" r="11" fill="#ffffff" stroke="#1f4e79" stroke-width="5"/></svg>
+<div class="row4" style="gap:48px;margin-top:32px">
+<div class="col rise" style="--i:0"><p>Raw reads are profiled, then trimmed of adapters and low-quality bases.</p><p class="caption mono">FastQC · fastp</p></div>
+<div class="col rise" style="--i:1"><p>One of four aligners, chosen by one flag. Strandedness is inferred per sample.</p><p class="caption mono">STAR · HISAT2 · Salmon · Kallisto</p></div>
+<div class="col rise" style="--i:2"><p>One gene count matrix, tested by two independent callers in parallel.</p><p class="caption mono">featureCounts · tximport · DESeq2 · edgeR</p></div>
+<div class="col rise" style="--i:3"><p>Splicing, transcript usage, fusions and pathways, then one report over it all.</p><p class="caption mono">rMATS · DEXSeq · fgsea · Quarto</p></div>
+</div>
+<p class="caption" style="margin-top:48px">Stop early with <span class="mono">--stop_at preQC | postQC | DE | GSEA</span>; start late with <span class="mono">--counts</span>.</p>
+<div class="foot"><p class="fl">rnaseq-flow · UCL ARC</p><p class="pg"></p></div>
+<aside>Under the hood, four stages. FastQC profiles the raw reads and fastp trims them. Then one of four aligners: two genome aligners, STAR and HISAT2, or two pseudo-aligners, Salmon and Kallisto. On the genome routes RSeQC works out the strandedness of each sample and feeds it straight into featureCounts. Third, one gene count matrix, from featureCounts or from tximport, tested by DESeq2 with apeglm shrinkage and by edgeR's quasi-likelihood test, in parallel and independently, so genes both call are your most robust hits. Finally the analyses gene-level counts can't see: rMATS splicing events, edgeR diffSplice, DEXSeq transcript usage, isoform switching, STAR-Fusion, then GSEA and gProfiler, and one Quarto report over all of it. You can stop early for a quick QC pass, or start late from a count matrix.</aside>
+</section>
